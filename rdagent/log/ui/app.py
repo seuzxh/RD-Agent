@@ -24,14 +24,11 @@ from rdagent.core.scenario import Scenario
 from rdagent.log.base import Message
 from rdagent.log.storage import FileStorage
 from rdagent.log.ui.qlib_report_figure import report_figure
-from rdagent.scenarios.general_model.scenario import GeneralModelScenario
-from rdagent.scenarios.kaggle.experiment.scenario import KGScenario
 from rdagent.scenarios.qlib.experiment.factor_experiment import QlibFactorScenario
 from rdagent.scenarios.qlib.experiment.factor_from_report_experiment import (
     QlibFactorFromReportScenario,
 )
 from rdagent.scenarios.qlib.experiment.model_experiment import (
-    QlibModelExperiment,
     QlibModelScenario,
 )
 from rdagent.scenarios.qlib.experiment.quant_experiment import QlibQuantScenario
@@ -65,7 +62,6 @@ SIMILAR_SCENARIOS = (
     QlibFactorScenario,
     QlibFactorFromReportScenario,
     QlibQuantScenario,
-    KGScenario,
 )
 
 
@@ -468,35 +464,6 @@ def summary_window():
                     else:
                         metrics_window(df, 1, 4, height=300, colors=["red", "blue", "orange", "green"])
 
-    elif isinstance(state.scenario, GeneralModelScenario):
-        with st.container(border=True):
-            st.subheader("Summary📊", divider="rainbow", anchor="_summary")
-            if len(state.msgs[state.lround]["evolving code"]) > 0:
-                # pass
-                ws: list[FactorFBWorkspace | ModelFBWorkspace] = state.msgs[state.lround]["evolving code"][-1].content
-                # All Tasks
-
-                tab_names = [
-                    w.target_task.factor_name if isinstance(w.target_task, FactorTask) else w.target_task.name
-                    for w in ws
-                ]
-                for j in range(len(ws)):
-                    if state.msgs[state.lround]["evolving feedback"][-1].content[j].final_decision:
-                        tab_names[j] += "✔️"
-                    else:
-                        tab_names[j] += "❌"
-
-                wtabs = st.tabs(tab_names)
-                for j, w in enumerate(ws):
-                    with wtabs[j]:
-                        # Evolving Code
-                        for k, v in w.file_dict.items():
-                            with st.expander(f":green[`{k}`]", expanded=False):
-                                st.code(v, language="python")
-
-                        # Evolving Feedback
-                        evolving_feedback_window(state.msgs[state.lround]["evolving feedback"][-1].content[j])
-
 
 def tabs_hint():
     st.markdown(
@@ -568,20 +535,6 @@ def research_window():
             if eg := state.msgs[round]["experiment generation"]:
                 tasks_window(eg[0].content)
 
-        elif isinstance(state.scenario, GeneralModelScenario):
-            # pdf image
-            c1, c2 = st.columns([2, 3])
-            with c1:
-                if pim := state.msgs[0]["pdf_image"]:
-                    for i in range(len(pim)):
-                        st.image(pim[i].content, use_container_width=True)
-
-            # loaded model exp
-            with c2:
-                if mem := state.msgs[0]["load_experiment"]:
-                    me: QlibModelExperiment = mem[0].content
-                    tasks_window(me.sub_tasks)
-
 
 def feedback_window():
     # st.write(round)
@@ -623,7 +576,7 @@ def feedback_window():
 
             if state.lround > 0 and isinstance(
                 state.scenario,
-                (QlibModelScenario, QlibFactorScenario, QlibFactorFromReportScenario, QlibQuantScenario, KGScenario),
+                (QlibModelScenario, QlibFactorScenario, QlibFactorFromReportScenario, QlibQuantScenario),
             ):
                 if fbr := state.msgs[round]["runner result"]:
                     try:
@@ -648,23 +601,6 @@ def feedback_window():
 - **New Hypothesis**: {h.new_hypothesis}
 - **Decision**: {h.decision}
 - **Reason**: {h.reason}""")
-
-            if isinstance(state.scenario, KGScenario):
-                if fbe := state.msgs[round]["runner result"]:
-                    submission_path = fbe[0].content.experiment_workspace.workspace_path / "submission.csv"
-                    st.markdown(
-                        f":green[**Exp Workspace**]: {str(fbe[0].content.experiment_workspace.workspace_path.absolute())}"
-                    )
-                    try:
-                        data = submission_path.read_bytes()
-                        st.download_button(
-                            label="**Download** submission.csv",
-                            data=data,
-                            file_name="submission.csv",
-                            mime="text/csv",
-                        )
-                    except Exception as e:
-                        st.markdown(f":red[**Download Button Error**]: {e}")
 
 
 def evolving_window():
@@ -734,13 +670,6 @@ toc = """
 - [**Research🔍**](#_research)
 - [**Development🛠️**](#_development)
 - [**Feedback📝**](#_feedback)
-"""
-if isinstance(state.scenario, GeneralModelScenario):
-    toc = """
-## [Scenario Description📖](#_scenario)
-### [Summary📊](#_summary)
-### [Research🔍](#_research)
-### [Development🛠️](#_development)
 """
 # Config Sidebar
 with st.sidebar:
@@ -1108,11 +1037,6 @@ if state.scenario is not None:
             round = 1
 
         rf_c, d_c = st.columns([2, 2])
-    elif isinstance(state.scenario, GeneralModelScenario):
-
-        rf_c = st.container()
-        d_c = st.container()
-        round = 0
     else:
         st.error("Unknown Scenario!")
         st.stop()

@@ -606,7 +606,6 @@ class LocalEnv(Env[ASpecificLocalConf]):
                 volumes[lp] = rp["bind"] if isinstance(rp, dict) else rp
             cache_path = "/tmp/sample" if "/sample/" in "".join(self.conf.extra_volumes.keys()) else "/tmp/full"
             Path(cache_path).mkdir(parents=True, exist_ok=True)
-            volumes[cache_path] = T("scenarios.data_science.share:scen.cache_path").r()
         for lp, rp in running_extra_volume.items():
             volumes[lp] = rp
 
@@ -759,10 +758,6 @@ class CondaConf(LocalConf):
         self.bin_path = conda_path_result.stdout.strip().split("=")[1] if conda_path_result.returncode == 0 else ""
 
 
-class MLECondaConf(CondaConf):
-    enable_cache: bool = False  # aligning with the docker settings.
-
-
 ## Docker Environment -----
 class DockerConf(EnvConf):
     build_from_dockerfile: bool = False
@@ -864,148 +859,6 @@ class QlibCondaEnv(LocalEnv[QlibCondaConf]):
             print(f"[red]Failed to prepare conda env: {e}[/red]")
 
 
-# ========== Conda Environment Configuration Loader ==========
-# Config files location: rdagent/scenarios/finetune/env/conda/
-
-FT_CONDA_CONFIG_DIR = Path(__file__).parent.parent / "scenarios" / "finetune" / "env" / "conda"
-
-# Track which conda environments have been prepared in this process
-# This avoids redundant pip install checks that produce verbose output
-_CONDA_ENV_PREPARED: set[str] = set()
-
-
-def _sync_conda_cache_with_real_envs() -> None:
-    """Ensure the prepared cache includes environments that already exist on disk."""
-    try:
-        result = subprocess.run(
-            "conda env list",
-            capture_output=True,
-            text=True,
-            shell=True,
-            check=False,
-        )
-    except Exception as exc:  # pragma: no cover - best-effort helper
-        logger.warning(f"Failed to inspect conda env list: {exc}")
-        return
-
-    env_names: set[str] = set()
-    for line in result.stdout.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        # Lines look like: "base                  *  /opt/conda"
-        first_column = line.split()[0]
-        name = first_column.replace("*", "").strip()
-        if name:
-            env_names.add(name)
-
-    _CONDA_ENV_PREPARED.update(env_names)
-
-
-def _prepare_conda_env(env_name: str, requirements_file: Path, python_version: str = "3.10") -> None:
-    """Prepare conda environment with dependencies from requirements.txt.
-
-    Creates the env if it doesn't exist, then installs dependencies.
-    Uses a process-level cache to avoid redundant preparation in the same run.
-
-    Args:
-        env_name: Conda environment name
-        requirements_file: Path to requirements.txt file
-        python_version: Python version for the environment
-    """
-    # 1. Create conda environment if not exists
-    result = subprocess.run(f"conda env list | grep -q '^{env_name} '", shell=True)
-    if result.returncode != 0:
-        print(f"[yellow]Creating conda env '{env_name}' (Python {python_version})...[/yellow]")
-        subprocess.check_call(f"conda create -y -n {env_name} python={python_version}", shell=True)
-        subprocess.check_call(f"conda run -n {env_name} pip install --upgrade pip", shell=True)
-
-    print(f"[yellow]Installing dependencies from {requirements_file.name}...[/yellow]")
-    subprocess.check_call(f"conda run -n {env_name} pip install -r {requirements_file}", shell=True)
-    print(f"[green]Conda env '{env_name}' ready[/green]")
-
-    _CONDA_ENV_PREPARED.add(env_name)
-
-
-# ========== FT (LLaMA Factory) Conda Environment ==========
-class FTCondaConf(CondaConf):
-    """Conda configuration for LLM fine-tuning environment."""
-
-    model_config = SettingsConfigDict(env_prefix="FT_CONDA_")
-
-    conda_env_name: str = "llm_finetune"
-    default_entry: str = "llamafactory-cli version"
-    enable_cache: bool = False
-
-
-class FTCondaEnv(LocalEnv[FTCondaConf]):
-    """LLaMA Factory Conda Environment with auto-dependency installation.
-
-    Requirements: rdagent/scenarios/finetune/conda/llm_finetune_requirements.txt
-    Docker equivalent: rdagent/scenarios/finetune/docker/llm_finetune_docker/Dockerfile
-    """
-
-    def prepare(self) -> None:
-        try:
-            # Skip if already prepared
-            _sync_conda_cache_with_real_envs()
-            if self.conf.conda_env_name in _CONDA_ENV_PREPARED:
-                return
-
-            # Step 1: Install base dependencies (torch, llamafactory, etc.)
-            req_file = FT_CONDA_CONFIG_DIR / "llm_finetune_requirements.txt"
-            _prepare_conda_env(self.conf.conda_env_name, req_file)
-
-            # Step 2: Install flash-attn (requires torch first, uses --no-build-isolation)
-            # --no-cache-dir: avoid cross-filesystem hardlink error when /tmp and ~/.cache/pip are on different mounts
-            # Note: flash-attn>=2.8 is required for B200 (sm_100) support
-            print("[yellow]Installing flash-attn (compiling, may take a few minutes)...[/yellow]")
-            subprocess.check_call(
-                f"conda run -n {self.conf.conda_env_name} pip install 'flash-attn>=2.8' --no-build-isolation --no-cache-dir",
-                shell=True,
-            )
-
-            # Re-update bin_path after prepare() in case the conda env was just created
-            if not self.conf.bin_path:
-                self.conf._update_bin_path()
-        except Exception as e:
-            print(f"[red]Failed to prepare LLaMA Factory conda env: {e}[/red]")
-
-
-# ========== Benchmark (OpenCompass) Conda Environment ==========
-class BenchmarkCondaConf(CondaConf):
-    """Conda configuration for OpenCompass benchmark evaluation."""
-
-    model_config = SettingsConfigDict(env_prefix="BENCHMARK_CONDA_")
-
-    conda_env_name: str = "opencompass"
-    default_entry: str = "opencompass --help"
-    enable_cache: bool = False
-    env_dict: dict = {"COMPASS_DATA_CACHE": "/benchmarks/opencompass_data"}
-
-
-class BenchmarkCondaEnv(LocalEnv[BenchmarkCondaConf]):
-    """OpenCompass Conda Environment with auto-dependency installation.
-
-    Requirements: rdagent/scenarios/finetune/conda/opencompass_requirements.txt
-    Docker equivalent: rdagent/scenarios/finetune/docker/opencompass/Dockerfile
-    """
-
-    def prepare(self) -> None:
-        try:
-            # Skip if already prepared
-            _sync_conda_cache_with_real_envs()
-            if self.conf.conda_env_name in _CONDA_ENV_PREPARED:
-                return
-            req_file = FT_CONDA_CONFIG_DIR / "opencompass_requirements.txt"
-            _prepare_conda_env(self.conf.conda_env_name, req_file)
-            # Re-update bin_path after prepare() in case the conda env was just created
-            if not self.conf.bin_path:
-                self.conf._update_bin_path()
-        except Exception as e:
-            print(f"[red]Failed to prepare OpenCompass conda env: {e}[/red]")
-
-
 class QlibDockerConf(DockerConf):
     model_config = SettingsConfigDict(
         env_prefix="QLIB_DOCKER_",
@@ -1027,132 +880,6 @@ class QlibDockerConf(DockerConf):
     enable_gpu: bool = True
     enable_cache: bool = False
     save_logs_to_file: bool = True  # Explicitly inherit from DockerConf for compatibility
-
-
-class KGDockerConf(DockerConf):
-    model_config = SettingsConfigDict(env_prefix="KG_DOCKER_")
-
-    build_from_dockerfile: bool = True
-    dockerfile_folder_path: Path = Path(__file__).parent.parent / "scenarios" / "kaggle" / "docker" / "kaggle_docker"
-    image: str = "local_kg:latest"
-    # image: str = "gcr.io/kaggle-gpu-images/python:latest"
-    mount_path: str = "/workspace/kg_workspace/"
-    default_entry: str = "python train.py"
-    # extra_volumes: dict = {
-    #     # TODO connect to the place where the data is stored
-    #     Path("git_ignore_folder/data").resolve(): "/root/.data/"
-    # }
-
-    running_timeout_period: int | None = 600
-    mem_limit: str | None = (
-        "48g"  # Add memory limit attribute # new-york-city-taxi-fare-prediction may need more memory
-    )
-
-
-class DSDockerConf(DockerConf):
-    model_config = SettingsConfigDict(env_prefix="DS_DOCKER_")
-
-    build_from_dockerfile: bool = True
-    dockerfile_folder_path: Path = Path(__file__).parent.parent / "scenarios" / "kaggle" / "docker" / "DS_docker"
-    image: str = "local_ds:latest"
-    mount_path: str = "/kaggle/workspace"
-    default_entry: str = "python main.py"
-
-    running_timeout_period: int | None = 600
-    mem_limit: str | None = (
-        "48g"  # Add memory limit attribute # new-york-city-taxi-fare-prediction may need more memory
-    )
-
-    # Declarative configuration: automatically loads from scenarios/data_science/share.yaml
-    _scenario_name: str = "data_science"
-    _exclude_path_keys: list[str] = ["input_path", "cache_path"]
-
-
-class MLEBDockerConf(DockerConf):
-    model_config = SettingsConfigDict(env_prefix="MLEB_DOCKER_")
-
-    build_from_dockerfile: bool = True
-    dockerfile_folder_path: Path = Path(__file__).parent.parent / "scenarios" / "kaggle" / "docker" / "mle_bench_docker"
-    image: str = "local_mle:latest"
-    # image: str = "gcr.io/kaggle-gpu-images/python:latest"
-    mount_path: str = "/workspace/data_folder/"
-    default_entry: str = "mlebench prepare --all"
-    # extra_volumes: dict = {
-    #     # TODO connect to the place where the data is stored
-    #     Path("git_ignore_folder/data").resolve(): "/root/.data/"
-    # }
-    mem_limit: str | None = (
-        "48g"  # Add memory limit attribute # new-york-city-taxi-fare-prediction may need more memory
-    )
-    enable_cache: bool = False
-
-
-class FTDockerConf(DockerConf):
-    model_config = SettingsConfigDict(env_prefix="FT_DOCKER_")
-
-    build_from_dockerfile: bool = True
-    dockerfile_folder_path: Path = (
-        Path(__file__).parent.parent / "scenarios" / "finetune" / "env" / "docker" / "llm_finetune"
-    )
-    image: str = "local_llm_finetune:latest"
-    mount_path: str = "/workspace/"
-    default_entry: str = "llamafactory-cli version"
-
-    running_timeout_period: int | None = 36000  # 10 hours for training
-    mem_limit: str | None = "48g"  # Large memory for LLM training
-    shm_size: str | None = "16g"  # Shared memory for multi-GPU training
-    enable_gpu: bool = True  # Enable GPU for LLM training
-    enable_cache: bool = False  # Disable cache to avoid conflicts during training, True for debug
-
-    # Override log output control for FT training
-    save_logs_to_file: bool = True
-    terminal_tail_lines: int = 20
-
-    # Declarative configuration: automatically loads from scenarios/finetune/share.yaml
-    _scenario_name: str = "finetune"
-    _exclude_path_keys: list[str] = ["assets_path"]
-
-    network: str | None = "host"  # Use host network for finetune access to litellm proxy
-
-    def get_workspace_content_for_hash(self, local_path: str | Path) -> list[list[str]]:
-        """Include dataset_info.json in cache key calculation."""
-        content = super().get_workspace_content_for_hash(local_path)
-        local_path = Path(local_path)
-        # Add dataset_info.json if it exists
-        # NOTE: data.json is excluded because it is a generated file
-        for path in local_path.rglob("dataset_info.json"):
-            content.append([str(path.relative_to(local_path)), path.read_text()])
-
-        # Sort again to ensure deterministic order (though super is sorted, appended one might not be)
-        content.sort(key=lambda x: x[0])
-        return content
-
-
-class BenchmarkDockerConf(DockerConf):
-    """Docker configuration for OpenCompass benchmark evaluation."""
-
-    model_config = SettingsConfigDict(env_prefix="BENCHMARK_DOCKER_")
-
-    build_from_dockerfile: bool = True
-    dockerfile_folder_path: Path = (
-        Path(__file__).parent.parent / "scenarios" / "finetune" / "env" / "docker" / "opencompass"
-    )
-    image: str = "rdagent-opencompass:latest"
-    mount_path: str = "/workspace/"
-    default_entry: str = "opencompass --help"
-
-    running_timeout_period: int | None = 3600  # 1 hour default for benchmarks
-    mem_limit: str | None = "32g"  # Moderate memory for inference
-    shm_size: str | None = "8g"  # Shared memory for model loading
-    enable_gpu: bool = True  # Enable GPU for fast inference
-    enable_cache: bool = False  # Disable cache for reproducibility
-
-    # Benchmark-specific log settings
-    save_logs_to_file: bool = True
-    terminal_tail_lines: int = 50  # Show more lines for benchmark progress
-
-    network: str | None = "host"  # Use host network for benchmark access to litellm proxy
-    env_dict: dict = {"COMPASS_DATA_CACHE": "/benchmarks/opencompass_data"}
 
 
 # physionet.org/files/mimic-eicu-fiddle-feature/1.0.0/FIDDLE_mimic3
@@ -1432,12 +1159,6 @@ class DockerEnv(Env[DockerConf]):
         if self.conf.extra_volumes is not None:
             for lp, rp in self.conf.extra_volumes.items():
                 volumes[lp] = rp if isinstance(rp, dict) else {"bind": rp, "mode": self.conf.extra_volume_mode}
-            cache_path = "/tmp/sample" if "/sample/" in "".join(self.conf.extra_volumes.keys()) else "/tmp/full"
-            Path(cache_path).mkdir(parents=True, exist_ok=True)
-            volumes[cache_path] = {
-                "bind": T("scenarios.data_science.share:scen.cache_path").r(),
-                "mode": "rw",
-            }
         for lp, rp in running_extra_volume.items():
             volumes[lp] = rp if isinstance(rp, dict) else {"bind": rp, "mode": self.conf.extra_volume_mode}
 
@@ -1526,52 +1247,3 @@ class QTDockerEnv(DockerEnv):
             self.check_output(entry=cmd)
         else:
             logger.info("Data already exists. Download skipped.")
-
-
-class KGDockerEnv(DockerEnv):
-    """Kaggle Competition Docker"""
-
-    def __init__(self, competition: str | None = None, conf: DockerConf = KGDockerConf()):
-        super().__init__(conf)
-
-
-class MLEBDockerEnv(DockerEnv):
-    """MLEBench Docker"""
-
-    def __init__(self, conf: DockerConf = MLEBDockerConf()):
-        super().__init__(conf)
-
-
-class FTDockerEnv(DockerEnv):
-    """
-    LLM Fine-tuning Docker Environment with improved log output control.
-
-    FTDockerConf enables:
-    - save_logs_to_file: True (saves full logs to workspace/docker_execution.log)
-    - terminal_tail_lines: 20 (only shows last 20 lines in terminal)
-
-    To customize, set environment variables:
-        export FT_DOCKER_terminal_tail_lines=50  # show last 50 lines
-        export FT_DOCKER_save_logs_to_file=false # disable log file
-    """
-
-    def __init__(self, conf: DockerConf = FTDockerConf()):
-        super().__init__(conf)
-
-
-class BenchmarkDockerEnv(DockerEnv):
-    """
-    OpenCompass Benchmark Docker Environment.
-
-    Uses BenchmarkDockerConf for evaluation-specific settings:
-    - Moderate memory/GPU allocation for inference
-    - Longer terminal output (50 lines) to track benchmark progress
-    - Automatic Dockerfile building from scenarios/finetune/docker/opencompass
-
-    To customize, set environment variables:
-        export BENCHMARK_DOCKER_running_timeout_period=7200  # 2 hours
-        export BENCHMARK_DOCKER_terminal_tail_lines=100  # show last 100 lines
-    """
-
-    def __init__(self, conf: DockerConf = BenchmarkDockerConf()):
-        super().__init__(conf)

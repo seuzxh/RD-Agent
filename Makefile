@@ -69,7 +69,6 @@ init-qlib-env:
 dev:
 	$(PIPRUN) pip install -U pip setuptools wheel
 	$(PIPRUN) pip install -e .[docs,lint,package,test] -c $(CONSTRAINTS_FILE)
-	$(PIPRUN) pip install -U kaggle
 	if [ "$(CI)" != "true" ] && command -v pre-commit > /dev/null 2>&1; then pre-commit install --hook-type pre-push; fi
 
 # Generate constraints for current Python version.

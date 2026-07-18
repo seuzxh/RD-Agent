@@ -46,7 +46,7 @@ def _configure_app_logger() -> None:
 _configure_app_logger()
 
 
-_TARGETS_WITHOUT_USER_INTERACTION = {"general_model", "fin_factor_report"}
+_TARGETS_WITHOUT_USER_INTERACTION = {"fin_factor_report"}
 
 
 class RDAgentTask:
@@ -134,17 +134,7 @@ class RDAgentTask:
                             (self.user_request_q, self.user_response_q),
                         )
 
-                    if self.target_name == "data_science":
-                        from rdagent.app.data_science.loop import main as data_science
-
-                        data_science(**self.kwargs)
-                    elif self.target_name == "general_model":
-                        from rdagent.app.general_model.general_model import (
-                            extract_models_and_implement as general_model,
-                        )
-
-                        general_model(**self.kwargs)
-                    elif self.target_name == "fin_factor":
+                    if self.target_name == "fin_factor":
                         from rdagent.app.qlib_rd_loop.factor import main as fin_factor
 
                         fin_factor(**self.kwargs)
@@ -448,16 +438,6 @@ def upload_file():
     if scenario == "Finance Data Building (Reports)":
         target_name = "fin_factor_report"
         kwargs = {"report_folder": str(trace_files_path), "all_duration": all_duration_val}
-    if scenario == "General Model Implementation":
-        if len(files) == 0:  # files is one link
-            rfp = request.form.get("files")[0]
-        else:  # one file is uploaded
-            rfp = str(trace_files_path / files[0].filename)
-        target_name = "general_model"
-        kwargs = {"report_file_path": rfp}
-    if scenario == "Data Science":
-        target_name = "data_science"
-        kwargs = {"competition": competition, "loop_n": loop_n_val, "timeout": all_duration_val}
 
     if target_name is None:
         return jsonify({"error": "Unknown scenario"}), 400
