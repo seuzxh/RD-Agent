@@ -870,14 +870,10 @@ class QlibDockerConf(DockerConf):
     image: str = "local_qlib:latest"
     mount_path: str = "/workspace/qlib_workspace/"
     default_entry: str = "qrun conf.yaml"
-    # 直接挂载 Qlib 真实数据源到容器内代码硬编码读取路径 /root/.qlib/qlib_data/cn_data。
-    # 不挂 ~/.qlib（含宿主软链 cn_data -> /home/zxh/qlib_data），否则会与 Dockerfile 内
-    # 软链 /home/zxh/qlib_data -> /root/.qlib/qlib_data/cn_data 叠加形成符号链接死循环
-    # （详见 multialphaV/CLAUDE.md §6.1 Qlib 数据软链）。
     extra_volumes: dict = {
-        str(Path("/home/zxh/qlib_data").resolve()): {
-            "bind": "/root/.qlib/qlib_data/cn_data",
-            "mode": "ro",
+        str(Path("~/.qlib/").expanduser().resolve().absolute()): {
+            "bind": "/root/.qlib/",
+            "mode": "rw",
         }
     }
     shm_size: str | None = "16g"
@@ -1244,10 +1240,8 @@ class QTDockerEnv(DockerEnv):
         Download image & data if it doesn't exist
         """
         super().prepare()
-        # extra_volumes 现在挂载的是 qlib 数据根（/home/zxh/qlib_data），其下直接是
-        # calendars/instruments/features。检查 calendars 存在即可判定数据就绪。
         qlib_data_path = next(iter(self.conf.extra_volumes.keys()))
-        if not (Path(qlib_data_path) / "calendars").exists():
+        if not (Path(qlib_data_path) / "qlib_data" / "cn_data").exists():
             logger.info("We are downloading!")
             cmd = "python -m qlib.run.get_data qlib_data --target_dir ~/.qlib/qlib_data/cn_data --region cn --interval 1d --delete_old False"
             self.check_output(entry=cmd)
