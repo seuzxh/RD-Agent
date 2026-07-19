@@ -59,13 +59,15 @@ QLIB_DOCKER_BUILD_FROM_DOCKERFILE=False
 
 ## 数据挂载
 
-容器启动时会通过 `QlibDockerConf.extra_volumes` 将宿主 `/home/zxh/qlib_data` 只读挂载到容器的 `/root/.qlib/qlib_data/cn_data`。镜像内同时创建了软链：
+容器启动时通过 `QlibDockerConf.extra_volumes`（见 `rdagent/utils/env.py`）将宿主 `/home/zxh/qlib_data` 只读挂载到容器的 `/root/.qlib/qlib_data/cn_data`：
 
 ```
-/home/zxh/qlib_data -> /root/.qlib/qlib_data/cn_data
+/home/zxh/qlib_data  →  /root/.qlib/qlib_data/cn_data  (ro)
 ```
 
-这保证了 `conf.yaml` 里写 `provider_uri: "/home/zxh/qlib_data"` 时，在容器内也能解析到真实数据。
+`/root/.qlib/qlib_data/cn_data` 是代码里所有 `provider_uri: "~/.qlib/qlib_data/cn_data"` 在容器内的解析路径。直接挂载真实数据源到此路径，避免软链叠加。
+
+> **历史**：原 0.8 项目在 Dockerfile 内建 `/home/zxh/qlib_data -> /root/.qlib/qlib_data/cn_data` 软链，并挂载 `~/.qlib -> /root/.qlib/`。当宿主也有软链 `~/.qlib/qlib_data/cn_data -> /home/zxh/qlib_data` 时，三者叠加会形成符号链接死循环。现已改为直接挂载数据源，删除 Dockerfile 内冗余软链。
 
 ## 何时需要重新构建？
 

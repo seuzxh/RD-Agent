@@ -35,10 +35,10 @@ WORKDIR /workspace/qlib
 ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_PYQLIB=0.9.7
 RUN python -m pip install --no-deps -e .
 
-# 让容器内 /home/zxh/qlib_data 软链到运行时挂载的 qlib 数据目录。
-# QlibDockerConf.extra_volumes 把宿主 /home/zxh/qlib_data 只读挂载到
-# /root/.qlib/qlib_data/cn_data；此处建 symlink 使 conf.yaml 里的
-# provider_uri: "/home/zxh/qlib_data" 在容器内也能解析到真实数据，
-# 与 conda 模式（宿主真实路径）及数据路径约定保持一致。
-# (dangling symlink: build 时目标不存在，运行时挂载后自动生效)
-RUN mkdir -p /home/zxh && ln -s /root/.qlib/qlib_data/cn_data /home/zxh/qlib_data
+# 注：原 0.8 项目此处有 `ln -s /root/.qlib/qlib_data/cn_data /home/zxh/qlib_data` 软链，
+# 意图让 conf.yaml 里 provider_uri: /home/zxh/qlib_data 在容器内能解析。但实际所有
+# provider_uri 都是 ~/.qlib/qlib_data/cn_data（容器内 /root/.qlib/qlib_data/cn_data），
+# 从不读 /home/zxh/qlib_data，该软链是冗余的。且当宿主也有软链 ~/.qlib/qlib_data/cn_data
+# -> /home/zxh/qlib_data 时，三者叠加会形成符号链接死循环，故删除。
+# 数据挂载改由 QlibDockerConf.extra_volumes 直接把宿主 /home/zxh/qlib_data 挂到
+# 容器 /root/.qlib/qlib_data/cn_data（见 rdagent/utils/env.py QlibDockerConf）。
