@@ -92,6 +92,16 @@ class FactorBasePropSetting(BasePropSetting):
     test_end: Optional[str] = "2020-08-01"
     """End date of the test / backtest segment"""
 
+    model_selector: str = "lgbm"
+    """Model for factor validation.
+- 'lgbm'    : LightGBM (default, current behavior)
+- 'linear'  : LinearModel (closed-form OLS, fastest)
+- 'xgboost' : XGBModel (gradient boosting tree)
+- 'catboost': CatBoostModel (gradient boosting tree, auto GPU/CPU)
+Set via env var QLIB_FACTOR_MODEL_SELECTOR. Note: also affects Quant scenario
+because QlibFactorRunner is shared (reads FactorBasePropSetting).
+"""
+
 
 class FactorFromReportPropSetting(FactorBasePropSetting):
     # 1) override the scen attribute

@@ -12,6 +12,7 @@ from rdagent.app.qlib_rd_loop.conf import FactorBasePropSetting
 from rdagent.components.runner import CachedRunner
 from rdagent.core.exception import FactorEmptyError
 from rdagent.log import rdagent_logger as logger
+from rdagent.oai.llm_utils import md5_hash
 from rdagent.scenarios.qlib.developer.utils import process_factor_data
 from rdagent.scenarios.qlib.experiment.factor_experiment import QlibFactorExperiment
 from rdagent.scenarios.qlib.experiment.model_experiment import QlibModelExperiment
@@ -60,7 +61,20 @@ class QlibFactorRunner(CachedRunner[QlibFactorExperiment]):
         IC_max = IC_max.unstack().max(axis=0)
         return new_feature.iloc[:, IC_max[IC_max < 0.99].index]
 
-    @cache_with_pickle(CachedRunner.get_cache_key, CachedRunner.assign_cached_result)
+    def _develop_cache_key(self, exp: QlibFactorExperiment) -> str:
+        """Cache key that also incorporates model_selector, so that the same
+        factors evaluated with different model selectors don't hit the same cache.
+
+        Note: we cannot simply override CachedRunner.get_cache_key because the
+        @cache_with_pickle decorator on develop() binds the base-class function
+        reference at class-definition time. Instead we compose the base key with
+        the selector here and use this method as the decorator's hash_func.
+        """
+        base_key = CachedRunner.get_cache_key(self, exp)
+        selector = FactorBasePropSetting().model_selector
+        return md5_hash(f"{base_key}\nmodel_selector={selector}")
+
+    @cache_with_pickle(_develop_cache_key, CachedRunner.assign_cached_result)
     def develop(self, exp: QlibFactorExperiment) -> QlibFactorExperiment:
         """
         Generate the experiment by processing and combining factor data,
@@ -80,6 +94,10 @@ class QlibFactorRunner(CachedRunner[QlibFactorExperiment]):
             "test_start": fbps.test_start,
             "feature_names": str(list(exp.base_features.keys())),
             "feature_expressions": str(list(exp.base_features.values())),
+            # model_selector drives the {% if model_selector == ... %} branching in
+            # conf_baseline.yaml / conf_combined_factors.yaml (rendered by qrun inside
+            # the qlib container). Defaults to "lgbm" -> unchanged behavior.
+            "model_selector": fbps.model_selector,
         }
         if fbps.test_end is not None:
             env_to_use.update({"test_end": fbps.test_end})
