@@ -445,6 +445,18 @@ def upload_file():
     if target_name is None:
         return jsonify({"error": "Unknown scenario"}), 400
 
+    # model_selector: let the webUI pick the factor-validation model per task.
+    # FactorBasePropSetting reads QLIB_FACTOR_MODEL_SELECTOR at import time
+    # (module-level singleton). The child process is forked from this server,
+    # so setting os.environ here makes the child inherit the chosen value.
+    # Only fin_factor/fin_model/fin_quant honor it (fin_factor_report ignores).
+    model_selector = request.form.get("model_selector")
+    if model_selector:
+        os.environ["QLIB_FACTOR_MODEL_SELECTOR"] = model_selector
+    elif "QLIB_FACTOR_MODEL_SELECTOR" in os.environ:
+        # Reset to default so a previous task's override doesn't leak
+        os.environ.pop("QLIB_FACTOR_MODEL_SELECTOR", None)
+
     app.logger.info(f"Started process for {log_trace_path} with target: {target_name}, kwargs: {kwargs}")
     task = RDAgentTask(
         target_name=target_name,

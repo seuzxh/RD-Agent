@@ -120,11 +120,12 @@ export function useMultiAlpha() {
     currentTraceId.value = ''; messages.value = []; selectedLoop.value = null; loading.value = false
   }
 
-  async function createTask(payload: { method: TaskMethod; description: string; scenario: string; loops: number; files: File[] }) {
+  async function createTask(payload: { method: TaskMethod; description: string; scenario: string; loops: number; modelSelector?: string; files: File[] }) {
     const data = new FormData()
     const scenario = payload.method === 'pdf' ? 'Finance Data Building (Reports)' : payload.method === 'optimize' ? 'Finance Data Building' : payload.scenario
     data.append('scenario', scenario); data.append('loops', String(payload.loops))
     if (payload.description) data.append('description', payload.description)
+    if (payload.modelSelector && payload.modelSelector !== 'lgbm') data.append('model_selector', payload.modelSelector)
     payload.files.forEach(file => data.append('files', file))
     const result = await uploadTask(data)
     if (!result.id) throw new Error(result.error || '任务启动失败')
