@@ -12,46 +12,29 @@
     <div class="modal">
       <div class="des">
         <p>
-          R&D-Agent is your dedicated data scientist powered by an LLM. It
-          automatically researches your unique data-mining tasks, learns domain
-          knowledge to evolve from practice, develops the most tailored datasets
-          and models for your data sources, and delivers solutions with
-          significant industrial value.
+          R&D-Agent 是由大语言模型（LLM）驱动的专属数据科学家。它能自动探索您独特的数据挖掘任务，从实践中学习领域知识并持续进化，为您的数据源量身打造最合适的数据集与模型，并交付具有重大产业价值的解决方案。
         </p>
       </div>
       <div class="content-2">
-        <h2>AI Drives Data-Driven AI</h2>
+        <h2>AI 驱动数据驱动的 AI</h2>
         <img src="@/assets/images/Data-Driven.png" alt="R&D-Agent" />
         <p>
-          In modern industry, research and development (R&D) is crucial for the
-          enhancement of industrial productivity, especially in the AI era,
-          where the core aspects of R&D are mainly focused on data and models.
-          We are committed to automate these high-value generic R&D processes
-          through our open source R&D automation tool R&D-Agent, which let AI
-          drive data-driven AI.   R&D-Agent harnesses the strengths of LLMs to
-          create an integrated, automated system for data-driven R&D, ensuring
-          that innovation and development proceed hand in hand, driven by the
-          powerful capabilities of modern AI. 
+          在现代工业中，研究与开发（R&D）对于提升产业生产力至关重要，尤其是在 AI 时代，R&D 的核心聚焦于数据与模型。我们致力于通过开源 R&D 自动化工具 R&D-Agent 将这些高价值的通用 R&D 流程自动化，让 AI 驱动数据驱动的 AI。R&D-Agent 充分发挥大语言模型（LLM）的优势，构建了一套完整的数据驱动 R&D 自动化系统，确保创新与开发相辅相成，由现代 AI 的强大能力持续驱动。
         </p>
-        <h2 class="h2">The Framework of R&D-Agent</h2>
+        <h2 class="h2">R&D-Agent 框架</h2>
         <img
           src="@/assets/images/Framework.png"
           alt="R&D-Agent"
           style="margin: 3em 0 2em"
         />
         <p>
-          Methodologically, we propose an autonomous agent framework consisting
-          of two key parts: (R)esearch and (D)evelopment. Research involves
-          actively exploring by proposing new ideas, while Development focuses
-          on realizing these ideas. The effectiveness of these two components is
-          continually refined through practice, with both research and
-          development capabilities learning and growing over time. 
+          在方法论层面，我们提出了一个由两个核心部分组成的自主 Agent 框架：研究（Research）与开发（Development）。研究侧重于主动提出新想法进行探索，开发则专注于将这些想法付诸实现。两者的有效性在实践中持续磨砺，研究与开发能力随时间不断学习与成长。
         </p>
         <div class="content-2-bg"></div>
       </div>
       <div class="content-3">
-        <h2>Ready to experiment?</h2>
-        <p>Dive into our Playground and set your creativity free!</p>
+        <h2>准备好一试了吗？</h2>
+        <p>前往 Playground，尽情释放您的创造力！</p>
         <div class="btn-box">
           <button class="playground" @click="tryNow">Playground</button>
             <button class="contact" @click="goToGitHub">GitHub</button>
@@ -98,7 +81,7 @@ const goToGitHub = () => {
       font-weight: 700;
     }
     .h2 {
-      font-family: "Microsoft YaHei";
+      font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
       span {
         background: linear-gradient(
           90deg,

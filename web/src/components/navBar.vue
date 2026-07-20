@@ -8,7 +8,7 @@
       </router-link>
       <ul>
         <li>
-          <router-link to="/">Homepage</router-link>
+          <router-link to="/">Home</router-link>
         </li>
         <li>
           <router-link to="/Playground">Playground</router-link>

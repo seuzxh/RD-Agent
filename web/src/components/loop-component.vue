@@ -4,11 +4,11 @@
       <div
         class="trace-name-text"
         v-if="traceName"
-        :title="`Trace name: ${traceName}`"
+        :title="`轨迹名称：${traceName}`"
       >
         <span class="trace-name-value">{{ traceName }}</span>
       </div>
-      <span class="loop-title">Loops</span>
+      <span class="loop-title">循环</span>
     </div>
     <div class="loop-box-list" ref="loops">
       <div class="loop-length">
@@ -21,14 +21,14 @@
             <div class="loop-item-icon">
               <img
                 src="@/assets/playground-images/loop-loading.gif"
-                alt="loading"
+                alt="加载中"
               />
             </div>
             <div
               class="loop-item-label"
               :class="{ active: currentIndex == index }"
             >
-              <span>{{ index < 10 ? "0" + index : index }}</span> Loop
+              <span>{{ index < 10 ? "0" + index : index }}</span> 轮
             </div>
           </div>
           <div
@@ -40,19 +40,19 @@
               <img
                 v-if="statusList[index - 1]"
                 src="@/assets/playground-images/loop-Sucess.svg"
-                alt="loading"
+                alt="加载中"
               />
               <img
                 v-else
                 src="@/assets/playground-images/loop-error.svg"
-                alt="loading"
+                alt="加载中"
               />
             </div>
             <div
               class="loop-item-label"
               :class="{ active: currentIndex == index }"
             >
-              <span>{{ index < 10 ? "0" + index : index }}</span> Loop
+              <span>{{ index < 10 ? "0" + index : index }}</span> 轮
             </div>
           </div>
           <div
@@ -62,14 +62,14 @@
             <div class="loop-item-icon">
               <img
                 src="@/assets/playground-images/loop-default.svg"
-                alt="loading"
+                alt="加载中"
               />
             </div>
             <div
               class="loop-item-label"
               :class="{ active: currentIndex == index }"
             >
-              <span>{{ index < 10 ? "0" + index : index }}</span> Loop
+              <span>{{ index < 10 ? "0" + index : index }}</span> 轮
             </div>
           </div>
         </div>
@@ -86,11 +86,11 @@
         :disabled="stopFlag || isDone"
         @click="stopClick"
       >
-        Stop
+        停止
       </button>
       <div class="auto-skip-toggle" v-if="editLoop">
         <label class="toggle-label">
-          <span class="toggle-text">Auto Skip Interaction</span>
+          <span class="toggle-text">自动跳过交互</span>
           <span class="toggle-switch">
             <input type="checkbox" v-model="autoSkip" @change="emitAutoSkip" />
             <span class="toggle-slider"></span>
@@ -395,7 +395,7 @@ onMounted(() => {
       border: none;
       color: var(--text-color);
       text-align: center;
-      font-family: "Microsoft YaHei";
+      font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
       font-size: 1.125em;
       font-size: 1.0125em;
       text-transform: capitalize;

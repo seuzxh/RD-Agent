@@ -6,11 +6,11 @@
     >
       <div v-show="!fullScreenFlag">
         <h2>
-          Evolving process
+          演进过程
           <img
             v-if="allData && allData.length == 0 && !updateEnd"
             src="@/assets/playground-images/loading-tab.gif"
-            alt="loading"
+            alt="加载中"
           />
         </h2>
         <div class="process">
@@ -27,10 +27,9 @@
                 :class="{ active: currentLoop == index }"
                 @click="updateLoop(index, 0)"
               >
-                <span style="margin-right: 1.5em"
-                  >Round
-                  {{ String(allData.length - index).padStart(2, "0") }}</span
-                >
+                <span style="margin-right: 1.5em">
+                  第 {{ String(allData.length - index).padStart(2, "0") }} 轮
+                </span>
                 <span
                   v-for="(child, n) in item"
                   :key="'c_' + n"
@@ -62,7 +61,7 @@
         </div>
       </div>
       <div v-if="scenarioChecked" style="width: 100%">
-        <h2 style="margin: 1em 0 0; font-size: 1.125em">Implementation</h2>
+        <h2 style="margin: 1em 0 0; font-size: 1.125em">实现</h2>
         <div>
           <el-tabs
             v-model="activeName"
@@ -87,7 +86,7 @@
       </div>
     </div>
     <div class="content-box sm-3-size" v-show="!fullScreenFlag">
-      <h2 style="font-size: 1.25em; margin-bottom: 0.8em">Tasks</h2>
+      <h2 style="font-size: 1.25em; margin-bottom: 0.8em">任务</h2>
       <el-tooltip
         effect="dark"
         raw-content
@@ -105,7 +104,7 @@
           @scenarioCheckedItem="scenarioCheckedItem"
         ></selectComponent>
       </el-tooltip>
-      <h2 style="margin: 1.2em 0 0; font-size: 1.125em">Feedback</h2>
+      <h2 style="margin: 1.2em 0 0; font-size: 1.125em">反馈</h2>
       <div
         class="code-nav"
         :style="{
@@ -145,7 +144,7 @@
     </div>
   </div>
   <div class="research-component" v-else-if="updateEnd">
-    <p>No code generated due to some errors happened in previous steps.</p>
+    <p>由于前置步骤发生错误，未生成代码。</p>
   </div>
 </template>
 <script setup>
@@ -200,18 +199,18 @@ const getLoopdata = (codes, feedbacks) => {
           decision: feedbacks[i].content[j].final_decision,
           feedback: [
             {
-              name: "Execution Feedback🖥️",
-              abridgeName: "Execution",
+              name: "执行反馈🖥️",
+              abridgeName: "执行",
               content: feedbacks[i].content[j].execution,
             },
             {
-              name: "Code Feedback📄",
-              abridgeName: "Code",
+              name: "代码反馈📄",
+              abridgeName: "代码",
               content: feedbacks[i].content[j].code,
             },
             {
-              name: "Return Checking",
-              abridgeName: "Return Checking",
+              name: "返回检查",
+              abridgeName: "返回检查",
               content: feedbacks[i].content[j].return_checking,
             },
           ],
@@ -224,18 +223,18 @@ const getLoopdata = (codes, feedbacks) => {
             decision: feedbacks[i].content[j].final_decision,
             feedback: [
               {
-                name: "Execution Feedback🖥️",
-                abridgeName: "Execution",
+                name: "执行反馈🖥️",
+                abridgeName: "执行",
                 content: feedbacks[i].content[j].execution,
               },
               {
-                name: "Code Feedback📄",
-                abridgeName: "Code",
+                name: "代码反馈📄",
+                abridgeName: "代码",
                 content: feedbacks[i].content[j].code,
               },
               {
-                name: "Return Checking",
-                abridgeName: "Return Checking",
+                name: "返回检查",
+                abridgeName: "返回检查",
                 content: feedbacks[i].content[j].return_checking,
               },
             ],
@@ -495,7 +494,7 @@ onMounted(() => {
           }
         }
         p {
-          font-family: "Microsoft YaHei";
+          font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
           font-size: 0.9em;
           line-height: 180%;
         }

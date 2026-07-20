@@ -1,39 +1,39 @@
 <template>
   <div class="research-component">
     <div class="content-box hypothesis-box">
-      <h2>For Hypothesis</h2>
+      <h2>假设反馈</h2>
       <div class="deduction">
         <div class="deduction-content" v-if="feedbackHypothesis">
           <div v-if="feedbackHypothesis.observations">
-            <h3>Observations</h3>
+            <h3>观察</h3>
             <p>
               {{ feedbackHypothesis.observations }}
             </p>
           </div>
           <div v-if="feedbackHypothesis.hypothesis_evaluation">
-            <h3>Hypothesis Evaluation</h3>
+            <h3>假设评估</h3>
             <p>
               {{ feedbackHypothesis.hypothesis_evaluation }}
             </p>
           </div>
           <div v-if="feedbackHypothesis.new_hypothesis">
-            <h3>New Hypothesis</h3>
+            <h3>新假设</h3>
             <p>
               {{ feedbackHypothesis.new_hypothesis }}
             </p>
           </div>
           <div v-if="feedbackHypothesis.exception">
-            <h3>Exception</h3>
+            <h3>异常</h3>
             <p>{{ feedbackHypothesis.exception }}</p>
           </div>
           <div>
-            <h3>Decision</h3>
+            <h3>决策</h3>
             <p>
               {{ feedbackHypothesis.decision }}
             </p>
           </div>
           <div v-if="feedbackHypothesis.reason">
-            <h3>Reason</h3>
+            <h3>原因</h3>
             <p>
               {{ feedbackHypothesis.reason }}
             </p>
@@ -41,36 +41,36 @@
         </div>
         <div class="deduction-content" v-else>
           <p>
-            No feedback generated due to some errors happened in previous steps.
+            由于前置步骤发生错误，未生成反馈。
           </p>
         </div>
       </div>
     </div>
     <div class="content-box returns-box">
-      <h2>For Returns</h2>
+      <h2>回报反馈</h2>
       <div class="deduction" style="margin-top: 0.5em">
         <div class="deduction-chart" v-if="feedbackCharts">
           <div class="chart-toolbar">
             <button class="chart-enlarge-btn" @click="openChartModal">
-              Enlarge
+              放大
             </button>
           </div>
           <div v-if="!chartModalVisible" v-html="feedbackCharts.chart_html"></div>
         </div>
         <div class="deduction-chart" v-else>
           <p style="padding-left: 1.875em">
-            No feedback generated due to some errors happened in previous steps.
+            由于前置步骤发生错误，未生成反馈。
           </p>
         </div>
       </div>
       <div class="config-section">
-        <h2 style="margin-top: 1em">Configuration</h2>
+        <h2 style="margin-top: 1em">配置</h2>
         <div v-if="feedbackConfig && feedbackConfig.config">
           <markdownToHtml :markdown="feedbackConfig.config"></markdownToHtml>
         </div>
         <div v-else>
           <p style="padding-left: 1.875em">
-            No feedback generated due to some errors happened in previous steps.
+            由于前置步骤发生错误，未生成反馈。
           </p>
         </div>
       </div>
@@ -78,9 +78,9 @@
     <div class="chart-modal" v-if="chartModalVisible">
       <div class="chart-modal-content gradient-border">
         <div class="chart-modal-header">
-          <h3>Returns Chart</h3>
+          <h3>回报图表</h3>
           <button class="chart-modal-close" @click="closeChartModal">
-            Close
+            关闭
           </button>
         </div>
         <div class="chart-modal-body" v-if="feedbackCharts">
@@ -209,7 +209,7 @@ onMounted(() => {
           }
         }
         p {
-          font-family: "Microsoft YaHei";
+          font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
           font-size: 0.9em;
           line-height: 180%;
           margin-bottom: 0.9em;

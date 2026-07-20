@@ -17,7 +17,7 @@
         :class="{
           active: !showPlayground && (showPanel == 2 || showPanel == 3),
         }"
-        >Pick a scenario</span
+        >选择场景</span
       >
       <span class="nav-separator">></span>
       <span class="nav-highlight-name" v-if="showPlayground && currentTraceName">
@@ -26,7 +26,7 @@
       <span
         class="nav-summary"
         :class="{ active: showPlayground, 'with-trace': showPlayground && currentTraceName }"
-        >Summary</span
+        >摘要</span
       >
     </div>
     <div class="setup-content" v-show="!showPlayground">
@@ -34,8 +34,8 @@
         <h1>Let’s Get Started: Select Your Action</h1>
         <div class="card-box">
           <div class="card-item gradient-big-border" @click="changePanel">
-            <h2>First time?</h2>
-            <p>Select a scenario for your analysis</p>
+            <h2>初次体验？</h2>
+            <p>为您的分析选择一个场景</p>
             <img
               class="img1"
               src="@/assets/images/first-time-img.png"
@@ -43,8 +43,8 @@
             />
           </div>
           <div class="card-item gradient-big-border" @click="openHistoryPanel">
-            <h2>View previous traces?</h2>
-            <p>Open a trace ID from an earlier run to review its history.</p>
+            <h2>查看历史追踪？</h2>
+            <p>打开早期运行的 Trace ID 以查看其执行历史。</p>
             <img
               class="img2"
               src="@/assets/images/continue-img.png"
@@ -70,10 +70,10 @@
               (scenarioChecked && !scenarioChecked.upload)
             "
           >
-            <p>Select a scenario for your analysis</p>
+            <p>为您的分析选择一个场景</p>
           </h1>
           <h1 class="h1" v-show="scenarioChecked && scenarioChecked.upload">
-            Upload materials you want to analyze
+            上传您希望分析的材料
           </h1>
           <div class="nav-content">
             <nav>
@@ -83,10 +83,10 @@
                     effect="dark"
                     :offset="8"
                     raw-content
-                    content="<div style='width: 500px;font-size: 14px;padding: 0.5em 0.5em 0.7em;line-height:160%; '>R&D-Agent autonomously generates, implements, and tests ideas in iterative loops for continuous improvement and optimal performance.</div>"
+            content="<div style='width: 500px;font-size: 14px;padding: 0.5em 0.5em 0.7em;line-height:160%; '>R&D-Agent 自主地在迭代循环中生成、实现并测试想法，以持续改进并达到最优性能。</div>"
                     placement="bottom"
                   >
-                    <span @click="tabChange(0)">Continuous Exploration</span>
+                    <span @click="tabChange(0)">持续探索</span>
                   </el-tooltip>
                 </li>
                 <li :class="{ active: tabIndex == 1 }">
@@ -94,10 +94,10 @@
                     effect="dark"
                     :offset="8"
                     raw-content
-                    content="<div style='width: 500px;font-size: 14px;padding: 0.5em 0.5em 0.7em;line-height:160%; '>R&D-Agent executes and tests user-provided ideas in limited loops, with the number of loops depending on the provided input for targeted outcomes.</div>"
+            content="<div style='width: 500px;font-size: 14px;padding: 0.5em 0.5em 0.7em;line-height:160%; '>R&D-Agent 按照用户提供的想法在有限的循环中执行并测试，循环次数取决于提供的输入以实现针对性目标。</div>"
                     placement="bottom"
                   >
-                    <span @click="tabChange(1)">Guided Implementation</span>
+                    <span @click="tabChange(1)">引导式实现</span>
                   </el-tooltip>
                 </li>
                 <div class="nav-line" ref="line"></div>
@@ -106,7 +106,7 @@
           </div>
           <div class="main-panel">
             <div class="title small-config-title">
-              Scenario
+              场景
             </div>
             <selectComponent
               :scenarioList="scenarioList"
@@ -115,11 +115,11 @@
             ></selectComponent>
             <div v-if="scenarioChecked && scenarioChecked.upload">
               <div class="title with-tip">
-                Material
+                材料
                 <el-tooltip
                   effect="dark"
                   :offset="8"
-                  content="Research reports, academic or conference papers, etc."
+                  content="研究报告、学术或会议论文等。"
                   placement="top"
                 >
                   <span class="tip-icon">?</span>
@@ -138,8 +138,8 @@
                 <div class="upload-box">
                   <div class="upload-box-bg">
                     <span class="upload-small"></span>
-                    <h3>research reports, papers, etc.</h3>
-                    <p>(Supported format: .pdf)</p>
+                    <h3>研究报告、论文等</h3>
+                    <p>（支持格式：.pdf）</p>
                   </div>
                 </div>
               </el-upload>
@@ -157,11 +157,11 @@
               v-if="scenarioChecked && !scenarioChecked.upload"
             >
               <div class="title with-tip small-config-title">
-                Material (Optional)
+                材料（可选）
                 <el-tooltip
                   effect="dark"
                   :offset="8"
-                  content="Upload references or related files for this run."
+                  content="上传本次运行的参考文件或相关文件。"
                   placement="top"
                 >
                   <span class="tip-icon">?</span>
@@ -181,7 +181,7 @@
                 <div class="upload-box">
                   <div class="upload-box-bg">
                     <span class="upload-small"></span>
-                    <h3>Upload base factors</h3>
+                    <h3>上传基础因子</h3>
                     <p>base_factors.json and &lt;factor_name&gt;.py</p>
                   </div>
                 </div>
@@ -196,11 +196,11 @@
               </div>
               <div class="compact-setting-row">
                 <div class="title with-tip compact-setting-title">
-                  Loop count
+                  循环次数
                   <el-tooltip
                     effect="dark"
                     :offset="8"
-                    content="Choose the number of R&D loops: 5, 10, 20, or customize."
+                    content="选择 R&D 循环次数：3、5、10 或自定义。"
                     placement="top"
                   >
                     <span class="tip-icon">?</span>
@@ -212,9 +212,9 @@
                     v-model="loopRadio"
                     @change="radioChange"
                   >
-                    <el-radio value="3">3 Loops</el-radio>
-                    <el-radio value="5">5 Loops</el-radio>
-                    <el-radio value="10">10 Loops</el-radio>
+                    <el-radio value="3">3 轮</el-radio>
+                    <el-radio value="5">5 轮</el-radio>
+                    <el-radio value="10">10 轮</el-radio>
                     <el-radio value="-1"
                       ><el-input-number
                         class="number-input"
@@ -224,18 +224,18 @@
                         :max="100"
                         @change="handleChange"
                       />
-                      Loops</el-radio
+                      轮</el-radio
                     >
                   </el-radio-group>
                 </div>
               </div>
               <div class="compact-setting-row is-second">
                 <div class="title with-tip compact-setting-title">
-                  Loop duration
+                  运行时长
                   <el-tooltip
                     effect="dark"
                     :offset="8"
-                    content="Choose how many hours you want to run R&D-Agent: 6, 12, 24, or customize."
+                    content="选择运行 R&D-Agent 的时长（小时）：6、2、6 或自定义。"
                     placement="top"
                   >
                     <span class="tip-icon">?</span>
@@ -247,9 +247,9 @@
                     v-model="hourRadio"
                     @change="hourRadioChange"
                   >
-                    <el-radio value="6">6 hours</el-radio>
-                    <el-radio value="12">12 hours</el-radio>
-                    <el-radio value="24">24 hours</el-radio>
+                    <el-radio value="6">6 小时</el-radio>
+                    <el-radio value="12">12 小时</el-radio>
+                    <el-radio value="24">24 小时</el-radio>
                     <el-radio value="-1"
                       ><el-input-number
                         class="number-input"
@@ -259,7 +259,7 @@
                         :max="48"
                         @change="handleChange1"
                       />
-                      hours</el-radio
+                      小时</el-radio
                     >
                   </el-radio-group>
                 </div>
@@ -272,7 +272,7 @@
                   scenarioChecked && scenarioChecked.upload ? '3.5em' : '2em',
               }"
             >
-              <button class="gradient-border back" @click="Back">BACK</button>
+              <button class="gradient-border back" @click="Back">返回</button>
               <button
                 class="disable"
                 v-if="!loading"
@@ -288,7 +288,7 @@
                       selectedFiles.length === 0),
                 }"
               >
-                generate
+                生成
               </button>
               <button class="active" v-if="loading">
                 <loadingSvg></loadingSvg>
@@ -308,30 +308,29 @@
       </div>
       <div class="main-content" v-show="showPanel == 3">
         <h1 class="h1">
-          View traces from previous runs <br />
-          and inspect their execution history.
+          查看历史运行的追踪记录，并检查其执行历史。
         </h1>
         <div class="main-panel history-panel">
-          <div class="title">Trace ID List</div>
+          <div class="title">Trace ID 列表</div>
           <div class="desc">
-            <p>Pick a scenario first, then choose one of its trace names</p>
+            <p>请先选择场景，再选择对应的 Trace 名称</p>
           </div>
           <div class="history-select-row">
             <div class="history-select-item">
-              <div class="title small-config-title">Scenario</div>
+              <div class="title small-config-title">场景</div>
               <smSelectComponent
                 :scenarioList="historyScenarioList"
                 :scenarioIndex="historyScenarioCheckedIndex"
-                placeholder="Select a scenario"
+                placeholder="请选择场景"
                 @scenarioCheckedItem="historyScenarioCheckedItem"
               ></smSelectComponent>
             </div>
             <div class="history-select-item">
-              <div class="title small-config-title">Trace name</div>
+              <div class="title small-config-title">Trace 名称</div>
               <smSelectComponent
                 :scenarioList="historyTraceList"
                 :scenarioIndex="historyTraceCheckedIndex"
-                placeholder="Select a trace name"
+                placeholder="请选择 Trace 名称"
                 @scenarioCheckedItem="historyTraceCheckedItem"
               ></smSelectComponent>
             </div>
@@ -352,7 +351,7 @@
               }"
               @click="viewTracePage"
             >
-              view trace
+              查看追踪
             </button>
           </div>
         </div>
@@ -488,15 +487,15 @@ const continuousScenarioList = [
     loopRadio: "3",
     loopNumber: 3,
     introduce: {
-      Introduction: `Applying R&D-Agent on finance Data Agent to automate the iterative process of evolving and trading financial factors by proposing, developing, evaluating, and refining them. The scenario is built on Qlib. `,
-      "Data Description": `The dataset is includes daily stock data from the CSI300 index, with training data from 2008-2014, validation data from 2015-2016, and test data from 2017-2020. `,
-      "Evaluation Method": `The performance of new financial factors is assessed through quantitative backtesting using Qlib. This process evaluates both the prediction accuracy and the final profit. `,
-      "Scenario Breakdown": `... Round♾️ N:
-  	→ [🔍Research to generate hypothesis] → (hypothesis)
-  	→ [🔍Design Experiment] → (Experiment Tasks)
-  	→ [🛠️Experiment Implementation] → (Iterative Implementation in workspace)
-  	→ [📝Evaluation and Analysis] → (Feedbacks)
-  → ...Next Round♾️... `,
+      "简介": `基于 R&D-Agent 自动化金融因子的迭代流程，包括提出、开发、评估与优化金融因子以提升交易策略。场景基于 Qlib 构建。`,
+      "数据说明": `数据集包含 CSI300 指数日线股票数据，训练集为 2008–2014 年，验证集为 2015–2016 年，测试集为 2017–2020 年。`,
+      "评估方法": `新金融因子的表现通过 Qlib 量化回测进行评估，同时衡量预测精度与最终收益。`,
+      "场景分解": `... 第♾️ N 轮：
+  	→ [🔍研究以生成假设] → (假设)
+  	→ [🔍设计实验] → (实验任务)
+  	→ [🛠️实验实现] → (工作区迭代实现)
+  	→ [📝评估与分析] → (反馈)
+  → ...下一轮♾️... `,
     },
   },
   {
@@ -511,15 +510,15 @@ const continuousScenarioList = [
     loopRadio: "3",
     loopNumber: 3,
     introduce: {
-      Introduction: `Applying R&D-Agent on finance data to automate iterative model evolution and quantitative trading by generating, implementing, and refining financial models for optimal performance. The scenario is built on Qlib. `,
-      "Data Description": `The dataset includes daily stock data from the CSI300 index, with training data from 2008-2014, validation data from 2015-2016, and test data from 2017-2020. `,
-      "Evaluation Method": `The performance of new developed models is assessed through quantitative backtesting using Qlib. This process evaluates both the prediction accuracy and the final profit. `,
-      "Scenario Breakdown": `... Round♾️ N:
-  	→ [🔍Research to generate hypothesis] → (hypothesis)
-  	→ [🔍Design Experiment] → (Experiment Tasks)
-  	→ [🛠️Experiment Implementation] → (Iterative Implementation in workspace)
-  	→ [📝Evaluation and Analysis] → (Feedbacks)
-  → ...Next Round♾️... `,
+      "简介": `基于 R&D-Agent 自动化金融模型的迭代演进与量化交易，通过生成、实现与优化金融模型以达到最优性能。场景基于 Qlib 构建。`,
+      "数据说明": `数据集包含 CSI300 指数日线股票数据，训练集为 2008–2014 年，验证集为 2015–2016 年，测试集为 2017–2020 年。`,
+      "评估方法": `新开发模型的表现通过 Qlib 量化回测进行评估，同时衡量预测精度与最终收益。`,
+      "场景分解": `... 第♾️ N 轮：
+  	→ [🔍研究以生成假设] → (假设)
+  	→ [🔍设计实验] → (实验任务)
+  	→ [🛠️实验实现] → (工作区迭代实现)
+  	→ [📝评估与分析] → (反馈)
+  → ...下一轮♾️... `,
     },
   },
   {
@@ -534,16 +533,16 @@ const continuousScenarioList = [
     loopRadio: "3",
     loopNumber: 3,
     introduce: {
-      Introduction: `R&D-Agent runs a full finance pipeline on Qlib, combining Finance Data Building and Finance Model Implementation. In each loop, the LLM decides whether to focus on factor engineering or model implementation based on current feedback.`,
-      "Data Description": `Daily CSI300 stock data is used (train: 2008-2014, valid: 2015-2016, test: 2017-2020). Each round may work on factors or models, depending on what the LLM judges as most beneficial.`,
-      "Evaluation Method": `Each loop is validated by quantitative backtesting in Qlib. Backtesting results are fed back to the LLM, which then chooses the next focus (factor or model) to improve prediction and trading performance.`,
-      "Scenario Breakdown": `... Round♾️ N:
-  	→ [🔍Research + Planning] → (LLM chooses factor or model focus)
-  	→ [🔍Design Experiment] → (Tasks for the selected focus)
-  	→ [🛠️Experiment Implementation] → (Iterative implementation in workspace)
-  	→ [📝Evaluation and Analysis] → (Backtesting feedback)
-  	→ [🔁Next Round] → (LLM re-decides factor or model)
-  → ...Next Round♾️... `,
+      "简介": `R&D-Agent 在 Qlib 上运行完整金融流水线，联合金融数据构建与金融模型实现。每轮循环中， LLM 根据当前反馈决定关注因子工程还是模型实现。`,
+      "数据说明": `使用 CSI300 日线股票数据（训练：2008–2014，验证：2015–2016，测试：2017–2020）。每轮可能关注因子或模型，取决于 LLM 判断哪种方向收益最大。`,
+      "评估方法": `每轮循环通过 Qlib 量化回测验证。回测结果反馈给 LLM， LLM 再决定下一步关注点（因子或模型）以改善预测与交易性能。`,
+      "场景分解": `... 第♾️ N 轮：
+  	→ [🔍研究 + 规划] → (LLM 选择因子或模型方向)
+  	→ [🔍设计实验] → (所选方向的任务)
+  	→ [🛠️实验实现] → (工作区迭代实现)
+  	→ [📝评估与分析] → (回测反馈)
+  	→ [🔁下一轮] → (LLM 重新决定因子或模型)
+  → ...下一轮♾️... `,
     },
   },
   {
@@ -558,17 +557,17 @@ const continuousScenarioList = [
     hourRadio: "24",
     hourNumber: 24,
     introduce: {
-      Introduction: `R&D-Agent automates Kaggle feature engineering, model tuning, and iterative development to help participants improve their performance in data science competitions.`,
-      "Data Description": `R&D-Agent works with various datasets from Kaggle competitions, focusing on tasks such as regression, classification, and others using structured and unstructured data.
-  In this scenario, it involves predicting forest cover type using cartographic variables determined from USFS and US Geological Survey data.`,
-      "Evaluation Method": `The models and features are evaluated based on their performance on a test set or Kaggle Leaderboard, with the aim of achieving the highest possible leaderboard score.
-  In this scenario, the solution should enhance the accuracy of forest cover type identification.`,
-      "Scenario Breakdown": `... Round♾️ N:
-  	→ [🔍Research to generate hypothesis] → (hypothesis)
-  	→ [🔍Design Experiment, e.g. feature engineering, model tuning] → (Experiment Tasks)
-  	→ [🛠️Experiment Implementation] → (Iterative implementation in workspace)
-  	→ [📝Evaluation and Analysis] → (Feedback)
-  → ...Next Round♾️...`,
+      "简介": `R&D-Agent 自动化 Kaggle 特征工程、模型调优与迭代开发，帮助参赛者提升数据科学竞赛中的表现。`,
+      "数据说明": `R&D-Agent 适用于 Kaggle 竞赛中的各种数据集，支持回归、分类等任务，包含结构化与非结构化数据。
+  在此场景中，具体任务为利用 USFS 和美国地质调查局的地形变量预测森林覆盖类型。`,
+      "评估方法": `模型与特征基于测试集或 Kaggle 排行榜上的表现进行评估，目标是获得尽可能高的排行榜得分。
+  在此场景中，解决方案需提升森林覆盖类型识别的准确率。`,
+      "场景分解": `... 第♾️ N 轮：
+  	→ [🔍研究以生成假设] → (假设)
+  	→ [🔍设计实验，如特征工程、模型调优] → (实验任务)
+  	→ [🛠️实验实现] → (工作区迭代实现)
+  	→ [📝评估与分析] → (反馈)
+  → ...下一轮♾️...`,
     },
     child: kaggleCompetitions,
   },
@@ -592,14 +591,14 @@ const guidedScenarioList = [
     hourRadio: "24",
     hourNumber: 24,
     introduce: {
-      Introduction: `Applying R&D-Agent on finance data like a copilot to automatically extract knowledge from research reports on well-known financial factors, then implements and evaluates them to improve quantitative trading strategies. The scenario is built on Qlib.`,
-      "Data Description": `The dataset includes daily stock data from the CSI300 index, with training data from 2008-2014, validation data from 2015-2016, and test data from 2017-2020. `,
-      "Evaluation Method": `The performance of new financial factors is assessed through quantitative backtesting using Qlib. This process evaluates both the prediction accuracy and the final profit. `,
-      "Scenario Breakdown": `... Round♾️ N:
-	→ [🔍Research to extract well-known financial factors] → (Experiment Tasks) 
-	→ [🛠️Experiment Implementation] → (Iterative Implementation in workspace) 
-	→ [📝Evaluation and Analysis] → (Feedback) 
-→ ...Next Round♾️... `,
+      "简介": `使用 R&D-Agent 作为 Copilot，自动从研究报告中提取已知金融因子的知识，再实现并评估以改善量化交易策略。场景基于 Qlib 构建。`,
+      "数据说明": `数据集包含 CSI300 指数日线股票数据，训练集为 2008–2014 年，验证集为 2015–2016 年，测试集为 2017–2020 年。`,
+      "评估方法": `新金融因子的表现通过 Qlib 量化回测进行评估，同时衡量预测精度与最终收益。`,
+      "场景分解": `... 第♾️ N 轮：
+	→ [🔍提取已知金融因子] → (实验任务)
+	→ [🛠️实验实现] → (工作区迭代实现)
+	→ [📝评估与分析] → (反馈)
+→ ...下一轮♾️... `,
     },
   },
   {
@@ -615,16 +614,16 @@ const guidedScenarioList = [
     hourRadio: "24",
     hourNumber: 24,
     introduce: {
-      Introduction: `Apply R&D-Agent as a copilot to automate the extraction, implementation, and iterative refinement of models from academic papers, enabling the efficient reproduction of state-of-the-art AI techniques.`,
-      "Example PDF reports": `- [2210.09789](https://arxiv.org/pdf/2210.09789)
+      "简介": `使用 R&D-Agent 作为 Copilot，自动从学术论文中提取、实现并迭代优化模型，高效复现最先进的 AI 技术。`,
+      "示例 PDF 报告": `- [2210.09789](https://arxiv.org/pdf/2210.09789)
 - [2305.10498](https://arxiv.org/pdf/2305.10498)
 - [2110.14446](https://arxiv.org/pdf/2110.14446)
 - [2205.12454](https://arxiv.org/pdf/2205.12454)
 - [2210.16518](https://arxiv.org/pdf/2210.16518)`,
-      "Data Description": `The system supports various data types including tabular, time-series, and graph data, facilitating diverse applications across AI research. `,
-      "Evaluation Method": `The extracted models are validated through back-testing and iterative refinement to ensure functionality, correctness, and alignment with source material specifications. `,
-      "Scenario Breakdown": `[🔍Paper Reader] → (Experiment Tasks containing model structure)  
-→ [🛠️Experiment Implementation] → (Iterative implementation in PyTorch code) `,
+      "数据说明": `系统支持表格、时间序列、图结构等多种数据类型，适用于 AI 研究的各种应用场景。`,
+      "评估方法": `提取的模型通过回测与迭代优化进行验证，确保功能性、正确性与原文说明一致。`,
+      "场景分解": `[🔍论文解析] → (包含模型结构的实验任务)
+→ [🛠️实验实现] → (PyTorch 代码迭代实现) `,
     },
   },
 ];

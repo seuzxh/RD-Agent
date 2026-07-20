@@ -4,10 +4,9 @@
       <Step :activeIndex="0" />
     </div>
     <div class="intro">
-      <h2>Welcome to our intelligent model analysis platform.</h2>
+      <h2>欢迎使用智能模型分析平台。</h2>
       <p>
-        New here? Choose a scenario to input info or upload a file. Returning?
-        Upload your code file to continue.
+        初次使用？选择场景并输入信息或上传文件。回访用户？上传您的代码文件以继续。
       </p>
     </div>
     <div class="content">
@@ -15,11 +14,10 @@
         <div class="scenario-item-text">
           <p class="p1">
             <SvgIcon class="edit-icon" name="edit" color="#2B2B2B"></SvgIcon
-            >First Time? Start Your Analysis
+            >初次体验？开始您的分析
           </p>
           <p class="p2">
-            Select a scenario and input the information you want, or upload a
-            related file to generate real-time analysis.
+            选择场景并输入您希望分析的信息，或上传相关文件以生成实时分析。
           </p>
         </div>
         <SvgIcon class="step-icon" name="arrows-mark" color="#4895EF"></SvgIcon>
@@ -32,11 +30,10 @@
               name="prime_upload"
               color="#2B2B2B"
             ></SvgIcon
-            >Upload Your Code File
+            >上传您的代码文件
           </p>
           <p class="p2">
-            Already used our service? Upload your previously exported code file
-            to continue your analysis.
+            已使用过我们的服务？上传之前导出的代码文件以继续分析。
           </p>
         </div>
         <SvgIcon class="step-icon" name="arrows-mark" color="#4895EF"></SvgIcon>
@@ -66,7 +63,7 @@ import Step from "../components/step-component.vue";
     p {
       margin-top: 1.875em;
       color: var(---intro-text-color);
-      font-family: "Microsoft YaHei";
+      font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
       font-size: 1.125em;
       line-height: 200%;
     }

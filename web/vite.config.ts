@@ -14,7 +14,14 @@ const pathResolve = (pathStr: string) => {
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: "./",
+  build: {
+    rollupOptions: {
+      input: {
+        main: pathResolve('./index.html'),
+        multialpha: pathResolve('./multialpha.html'),
+      },
+    },
+  },
   plugins: [
     vue(),
     createSvgIconsPlugin({
@@ -34,10 +41,18 @@ export default defineConfig({
   server: {
     host: true,
     port: 8080, // 使用的端口号
-    open: true, // 是否自动打开浏览器
+    open: 'multialpha.html', // 是否自动打开浏览器
     watch: {
       usePolling: true, // 实时监听
       interval: 1000 // 监听的间隔时间(ms)
+    },
+    proxy: {
+      '/traces': 'http://115.190.106.124:19899',
+      '/trace': 'http://115.190.106.124:19899',
+      '/upload': 'http://115.190.106.124:19899',
+      '/control': 'http://115.190.106.124:19899',
+      '/logs': 'http://115.190.106.124:19899',
+      '/stdout': 'http://115.190.106.124:19899',
     },
   },
   resolve: {
@@ -46,4 +61,3 @@ export default defineConfig({
     }
   }
 })
-

@@ -12,11 +12,22 @@ npm install
 npm run dev
 ```
 
+The Vite project exposes two independent MPA entries:
+
+- `http://localhost:8080/` — existing R&D-Agent application
+- `http://localhost:8080/multialpha.html` — MultiAlpha quant terminal
+
+During local development, MultiAlpha API requests are proxied to
+`http://115.190.106.124:19899`. Production builds use same-origin API paths.
+
 ### Compiles and minifies for production
 
 ```
 npm run build
 ```
+
+The default build writes both HTML entries to `dist/`. Use `npm run build:flask`
+to write both entries to `../git_ignore_folder/static` for Flask serving.
 
 ### API URL behavior after build
 

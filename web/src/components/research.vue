@@ -2,11 +2,11 @@
   <div class="research-component">
     <div class="content-box">
       <h2>
-        Hypothesis
+        假设
         <img
           v-if="isWaitingForHypothesis"
           src="@/assets/playground-images/loading-tab.gif"
-          alt="loading"
+          alt="加载中"
         />
       </h2>
       <div class="deduction">
@@ -24,15 +24,15 @@
           >
             <img
               :src="researchPdfImage"
-              alt="pdf image"
+              alt="PDF 图片"
               :class="{ 'pdf-image--full': isPdfOnlyHypothesis }"
             />
             <div class="pdf-full" @click="zoom">
-              <span class="fullscreen"></span> Full Screen
+              <span class="fullscreen"></span> 全屏查看
             </div>
           </div>
           <div v-if="researchHypothesis">
-            <h3>Hypothesis</h3>
+            <h3>假设</h3>
             <div>
               <p v-if="researchHypothesis.hypothesis">
                 {{ researchHypothesis.hypothesis }}
@@ -41,9 +41,9 @@
                 {{ researchHypothesis.name_map["no_hypothesis"] }}
               </p>
             </div>
-            <h3>Component</h3>
+            <h3>组件</h3>
             <p>{{ researchHypothesis.component }}</p>
-            <h3>Reason</h3>
+            <h3>原因</h3>
             <div>
               <p v-if="researchHypothesis.reason">
                 {{ researchHypothesis.reason }}
@@ -52,8 +52,7 @@
           </div>
           <div v-if="!isWaitingForHypothesis && !researchHypothesis && !researchPdfImage">
             <p style="padding-left: 1em">
-              No hypothesis generated due to some errors happened in previous
-              steps.
+              由于前置步骤发生错误，未生成假设。
             </p>
           </div>
         </div>
@@ -61,10 +60,10 @@
     </div>
     <div class="content-box">
       <h2>
-        Tasks<img
+        任务<img
           v-if="!researcTasks && !updateEnd"
           src="@/assets/playground-images/loading-tab.gif"
-          alt="loading"
+          alt="加载中"
         />
       </h2>
       <div v-if="researcTasks">
@@ -95,8 +94,8 @@
                 <table class="task-table">
                   <thead>
                     <tr>
-                      <th>Variable</th>
-                      <th>Value</th>
+                      <th>变量</th>
+                      <th>值</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -535,7 +534,7 @@ onMounted(() => {
           }
         }
         p {
-          font-family: "Microsoft YaHei";
+          font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
           font-size: 0.9em;
           line-height: 180%;
         }

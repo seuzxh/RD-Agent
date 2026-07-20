@@ -1,0 +1,2 @@
+<template><section v-if="total||calls" class="token-dashboard"><div><small>总 TOKEN</small><strong>{{ format(total) }}</strong></div><div><small>输入</small><strong>{{ format(prompt) }}</strong></div><div><small>输出</small><strong>{{ format(completion) }}</strong></div><div><small>调用次数</small><strong>{{ calls }}</strong></div></section></template>
+<script setup lang="ts">defineProps<{total:number;prompt:number;completion:number;calls:number}>(); const format=(value:number)=>value>999?`${(value/1000).toFixed(1)}K`:String(value)</script>

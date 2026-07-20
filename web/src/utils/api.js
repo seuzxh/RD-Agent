@@ -1,64 +1,15 @@
-import request from './request';
+import { controlTask, fetchTrace, fetchTraceIds, stdoutUrl, uploadTask } from '../services/rdagent-api'
 
-export const url = typeof window !== 'undefined' ? `${window.location.origin}/` : '/';
+export const url = typeof window !== 'undefined' ? `${window.location.origin}/` : '/'
+export const uploadFile = (data, config = {}) => uploadTask(data, config.signal)
+export const trace = data => fetchTrace(data)
+export const getHistoryTraceIds = () => fetchTraceIds()
+export const control = data => controlTask(data.id, data.action)
 
-export function uploadFile(data, config = {}) {
-    return request({
-        url: url + "upload",
-        method: 'post',
-        headers: {
-            'Content-Type': 'multipart/form-data',
-        },
-        // onUploadProgress: progressEvent => {
-        //     //   this.uploadPercentage = parseInt(Math.round((progressEvent.loaded / progressEvent.total) * 100));
-        //     console.log(progressEvent)
-        // },
-        data: data,
-        ...config
-    })
+export async function submitUserInteraction(data) {
+  const response = await fetch('/user_interaction/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  if (!response.ok) throw new Error(`请求失败 (${response.status})`)
+  return response.json()
 }
 
-export function trace(data) {
-    return request({
-        url: url + "trace",
-        method: 'post',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        data: data
-    })
-}
-
-export function getHistoryTraceIds() {
-    return request({
-        url: url + "traces",
-        method: 'get'
-    })
-}
-
-export function control(data) {
-    return request({
-        url: url + "control",
-        method: 'post',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        data: data
-    })
-}
-
-export function submitUserInteraction(data) {
-    return request({
-        url: url + "user_interaction/submit",
-        method: 'post',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        data: data
-    })
-}
-
-export function getStdoutDownloadUrl(traceId) {
-    const query = new URLSearchParams({ id: traceId });
-    return url + "stdout?" + query.toString();
-}
+export const getStdoutDownloadUrl = traceId => stdoutUrl(traceId)

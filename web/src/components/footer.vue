@@ -2,35 +2,33 @@
   <footer>
     <div class="footer" :style="{ background: color }">
       <p>
-        <a target="_blank" aria-label="Contact us" href="#">Contact us</a>
+        <a target="_blank" aria-label="联系我们" href="#">联系我们</a>
         <span class="line">|</span>
         <a
           target="_blank"
-          aria-label="Privacy & Cookies"
-          href="https://go.microsoft.com/fwlink/?LinkId=521839"
-          >Privacy &amp; Cookies</a
+          aria-label="隐私与 Cookie"
+          href="#"
+          >隐私与 Cookie</a
         >
         <span class="line">|</span>
         <a
           target="_blank"
-          aria-label="Terms of Use"
-          href="https://go.microsoft.com/fwlink/?LinkID=206977"
-          >Terms of Use</a
+          aria-label="使用条款"
+          href="#"
+          >使用条款</a
         >
         <span class="line">|</span>
         <a
           target="_blank"
-          aria-label="Trademarks"
-          href="https://www.microsoft.com/trademarks"
-          >Trademarks</a
+          aria-label="商标"
+          href="#"
+          >商标</a
         >
         <span class="line">|</span>
-        <span style="">© Microsoft 2024</span>
+        <span style="">© crsec 2026</span>
         <span class="line">|</span>
         <span
-          >This content is AI-generated and may not be fully accurate or
-          up-to-date; please verify with a professional for critical
-          matters.</span
+          >本内容由 AI 生成，可能并非完全准确或最新；涉及重要事项时，请向专业人士核实。</span
         >
       </p>
     </div>

@@ -226,7 +226,7 @@ watch(
 
 <style scoped>
 .markdown-body {
-  font-family: "Microsoft YaHei";
+  font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
   font-size: 1em;
   line-height: 180%;
   background-color: #fff;

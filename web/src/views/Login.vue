@@ -5,12 +5,12 @@
         <input
           type="password"
           @keydown.enter="login"
-          placeholder="Please enter password"
+          placeholder="请输入密码"
           v-model.trim="token"
         />
       </div>
       <div>
-        <button @click="login">Enter</button>
+        <button @click="login">登录</button>
       </div>
     </div>
   </div>

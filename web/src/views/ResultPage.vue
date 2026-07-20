@@ -7,25 +7,25 @@
           @change="switchChange"
           style="--el-switch-on-color: #8749ff; --el-switch-off-color: #c9d0fc"
         />
-        <span>Successful Hypotheses</span>
+        <span>成功的假设</span>
       </div>
       <div class="download-btn-item" @click="downloadLogs">
         <span class="download-icon"></span>
-        <span>Log</span>
+        <span>日志</span>
       </div>
       <div class="download-btn-item" @click="downloadAllLoops">
         <span class="download-icon"></span>
-        <span>All loop files</span>
+        <span>全部循环文件</span>
       </div>
     </div>
     <div class="bg-content">
       <div class="result-content">
-        <h2>Metrics</h2>
+        <h2>指标</h2>
         <div>
           <chartBox :metricData="metricData"></chartBox>
         </div>
         <div class="section-title-row">
-          <h2>Summary</h2>
+          <h2>摘要</h2>
           <div class="trace-name-chip" v-if="traceName">{{ traceName }}</div>
         </div>
         <div class="table-box">
@@ -45,46 +45,46 @@
             </el-table-column>
 
             <el-table-column
-              label="Component"
+              label="组件"
               width="200"
               prop="component"
               v-if="scenarioName == 'Data Science'"
             >
               <template #header="scope">
-                <span class="text-color-blue">Component</span>
+                <span class="text-color-blue">组件</span>
               </template>
             </el-table-column>
-            <el-table-column label="Status" width="140">
+            <el-table-column label="状态" width="140">
               <template #header="scope">
-                <span class="text-color-blue">Status</span>
+                <span class="text-color-blue">状态</span>
               </template>
               <template #default="scope">
-                <span v-if="scope.row.decision" class="success">Success</span>
-                <span v-if="!scope.row.decision" class="fail">Failed</span>
+                <span v-if="scope.row.decision" class="success">成功</span>
+                <span v-if="!scope.row.decision" class="fail">失败</span>
               </template>
             </el-table-column>
-            <el-table-column label="Hypothesis" prop="hypothesis">
+            <el-table-column label="假设" prop="hypothesis">
               <template #header="scope">
-                <span class="text-color-blue">Hypothesis</span>
+                <span class="text-color-blue">假设</span>
               </template>
               <template #default="scope">
-                {{ scope.row.hypothesis || "Component initializing" }}
+                {{ scope.row.hypothesis || "组件初始化中" }}
               </template>
             </el-table-column>
-            <el-table-column label="Feedback" prop="concise_knowledge">
+            <el-table-column label="反馈" prop="concise_knowledge">
               <template #header="scope">
-                <span class="text-color-purple">Feedback</span>
+                <span class="text-color-purple">反馈</span>
               </template>
               <template #default="scope">
                 {{
                   scope.row.reason ||
-                  "No reason generated due to some errors happened in previous steps"
+                  "由于前置步骤发生错误，未生成原因"
                 }}
               </template>
             </el-table-column>
-            <el-table-column label="Files" width="200">
+            <el-table-column label="文件" width="200">
               <template #header="scope">
-                <span class="text-color-blue">Files</span>
+                <span class="text-color-blue">文件</span>
               </template>
               <template #default="scope">
                 <div class="download-file-list" v-if="scope.row.downloadFiles.length">
@@ -93,7 +93,7 @@
                     type="button"
                     @click="downloadRowAllFiles(scope.row)"
                   >
-                    download_all
+                    全部下载
                   </button>
                   <button
                     :class="[
@@ -118,16 +118,16 @@
                   <li>
                     <div class="title">
                       <span class="Hypothesis-icon icon"></span>
-                      <span class="name">Hypothesis</span>
+                      <span class="name">假设</span>
                     </div>
                     <div class="text">
-                      {{ props.row.hypothesis || "Component initializing" }}
+                      {{ props.row.hypothesis || "组件初始化中" }}
                     </div>
                   </li>
                   <li>
                     <div class="title">
                       <span class="Reason-icon icon"></span>
-                      <span class="name">Reason</span>
+                      <span class="name">原因</span>
                     </div>
                     <div class="text">
                       {{ props.row.reason || "" }}
@@ -136,7 +136,7 @@
                   <li>
                     <div class="title">
                       <span class="Observation-icon icon"></span>
-                      <span class="name">Observation</span>
+                      <span class="name">观察</span>
                     </div>
                     <div class="text">
                       {{ props.row.observations || "" }}
@@ -145,14 +145,14 @@
                   <li>
                     <div class="title">
                       <span class="Conclusion-icon icon"></span>
-                      <span class="name">Status</span>
+                      <span class="name">状态</span>
                     </div>
                     <div class="text">
                       <span v-if="props.row.decision" class="success"
-                        >Success</span
+                        >成功</span
                       >
                       <span v-if="!props.row.decision" class="fail"
-                        >Failed</span
+                        >失败</span
                       >
                     </div>
                   </li>

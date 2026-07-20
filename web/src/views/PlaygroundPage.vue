@@ -28,7 +28,7 @@
                   name="pg-process"
                   :color="tabIndex == 0 ? '#fff' : '#2B2B2B'"
                 ></SvgIcon>
-                PROCESS
+                流程
               </span>
               <SvgIcon
                 class="arrow-right-icon"
@@ -48,7 +48,7 @@
                   name="pg-result"
                   :color="tabIndex == 1 ? '#fff' : '#2B2B2B'"
                 ></SvgIcon>
-                RESULT
+                结果
               </span>
               <SvgIcon
                 class="arrow-right-icon"
@@ -63,11 +63,11 @@
                   name="pg-result"
                   :color="tabIndex == 1 ? '#fff' : '#2B2B2B'"
                 ></SvgIcon>
-                RESULT
+                结果
               </span>
               <img
                 src="@/assets/playground-images/loading-tab.gif"
-                alt="loading"
+                alt="加载中"
               />
             </div>
           </div>
@@ -91,7 +91,7 @@
                   }"
                 >
                   <div class="tab-bg">
-                    <span @click="tabChange(0)">Research</span>
+                    <span @click="tabChange(0)">研究</span>
                   </div>
                 </li>
                 <li
@@ -115,7 +115,7 @@
                             currentData.evolvingFeedbacks.length !== 0)) &&
                           tabChange(1)
                       "
-                      >Development</span
+                      >开发</span
                     >
                     <img
                       v-if="
@@ -123,7 +123,7 @@
                         (!currentData || currentData.evolvingFeedbacks.length === 0)
                       "
                       src="@/assets/playground-images/loading-tab.gif"
-                      alt="loading"
+                      alt="加载中"
                     />
                   </div>
                 </li>
@@ -146,7 +146,7 @@
                           (currentData && currentData.feedbackHypothesis)) &&
                           tabChange(2)
                       "
-                      >Feedback</span
+                      >反馈</span
                     >
                     <img
                       v-if="
@@ -154,7 +154,7 @@
                         (!currentData || !currentData.feedbackHypothesis)
                       "
                       src="@/assets/playground-images/loading-tab.gif"
-                      alt="loading"
+                      alt="加载中"
                     />
                   </div>
                 </li>
@@ -183,7 +183,7 @@
                   }"
                 >
                   <div class="tab-bg">
-                    <span @click="tabChange(0)">Research</span>
+                    <span @click="tabChange(0)">研究</span>
                   </div>
                 </li>
                 <li
@@ -206,7 +206,7 @@
                             currentData.evolvingFeedbacks.length !== 0)) &&
                           tabChange(1)
                       "
-                      >Development</span
+                      >开发</span
                     >
                     <img
                       v-if="
@@ -214,7 +214,7 @@
                         (!currentData || currentData.evolvingFeedbacks.length === 0)
                       "
                       src="@/assets/playground-images/loading-tab.gif"
-                      alt="loading"
+                      alt="加载中"
                     />
                   </div>
                 </li>
@@ -270,19 +270,19 @@
         :class="{ 'user-interaction-dialog--wide': isFeatureInteraction }"
       >
         <div class="dialog-header">
-          <h1>User Interaction Required</h1>
+          <h1>需要用户交互</h1>
           <button
             class="dialog-minimize"
             type="button"
             @click="minimizeUserInteraction"
           >
-            Minimize
+            最小化
           </button>
         </div>
         <template v-if="userInteractionWaitingHypothesis && !updateEnd">
           <div class="interaction-waiting">
             <span class="interaction-waiting-spinner" aria-hidden="true"></span>
-            <span>R&amp;D-Agent is generating hypothesis</span>
+            <span>R&amp;D-Agent 正在生成假设</span>
           </div>
           <div class="interaction-form read-only">
             <div
@@ -312,16 +312,16 @@
         </template>
         <template v-else>
           <p v-if="isFeatureInteraction">
-            Update base features, then submit to continue.
+            更新基础特征后提交以继续。
           </p>
           <p v-else-if="isUserInstructionInteraction">
-            Please update the overall instruction, then submit to continue.
+            请更新总体指令后提交以继续。
           </p>
           <p v-else-if="isFeedbackInteraction">
-            You can edit the system-generated decision and reason, then submit to continue.
+            您可以编辑系统生成的决策与原因，然后提交以继续。
           </p>
           <p v-else>
-            You can edit the system-generated hypothesis and reason, then submit to continue.
+            您可以编辑系统生成的假设与原因，然后提交以继续。
           </p>
           <div
             class="feature-validation-msg"
@@ -333,7 +333,7 @@
             <div v-if="isFeatureInteraction" class="feature-table">
               <div class="feature-layout">
                 <div class="feature-pool-block" v-if="availableFeatureTags.length">
-                  <div class="feature-pool-title">Base features (Alpha158)</div>
+                  <div class="feature-pool-title">基础特征 (Alpha158)</div>
                   <div class="feature-pool">
                     <div class="feature-pool-tags">
                     <button
@@ -354,11 +354,11 @@
                 <div class="feature-editor">
                   <div class="feature-sticky-head">
                     <div class="feature-editor-meta">
-                      Configured features: {{ configuredFeatureCount }}
+                      已配置特征：{{ configuredFeatureCount }}
                     </div>
                     <div class="feature-header">
-                      <span>Feature name</span>
-                      <span>Feature expression</span>
+                      <span>特征名称</span>
+                      <span>特征表达式</span>
                     </div>
                   </div>
                   <div
@@ -393,7 +393,7 @@
                     type="button"
                     @click="addFeatureRow"
                   >
-                    + Add feature
+                    + 添加特征
                   </button>
                 </div>
               </div>
@@ -414,7 +414,7 @@
                 v-else
                 class="interaction-key interaction-key--highlight"
               >
-                Your overall instruction
+                您的总体指令
               </div>
               <select
                 v-if="entry.key === 'decision'"
@@ -441,14 +441,14 @@
               @click="submitOriginalUserInteraction"
               :disabled="userInteractionSubmitting"
             >
-              SKIP
+              跳过
             </button>
             <button
               class="add-loops active"
               @click="submitUserInteractionForm"
               :disabled="userInteractionSubmitting"
             >
-              SUBMIT
+              提交
             </button>
           </div>
         </template>
@@ -461,7 +461,7 @@
     >
       <div class="dialog-minimized-content">
         <span class="dialog-waiting-spinner" aria-hidden="true"></span>
-        <span>User interaction pending</span>
+        <span>等待用户交互</span>
       </div>
     </div>
     <teleport to="body">
@@ -930,7 +930,7 @@ const getEndTraceId = (content) => {
 const getEndMessage = (content) => {
   const errorMsg = content?.error_msg == null ? "" : String(content.error_msg).trim();
   const traceId = getEndTraceId(content);
-  const baseMessage = errorMsg || "RD-Agent process has completed.";
+  const baseMessage = errorMsg || "Agent process has completed.";
 
   return traceId ? `${baseMessage} [${traceId}]` : baseMessage;
 };
