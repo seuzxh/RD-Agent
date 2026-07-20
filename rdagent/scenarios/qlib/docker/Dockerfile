@@ -42,3 +42,6 @@ RUN python -m pip install --no-deps -e .
 # 与 conda 模式（宿主真实路径）及数据路径约定保持一致。
 # (dangling symlink: build 时目标不存在，运行时挂载后自动生效)
 RUN mkdir -p /home/zxh && ln -s /root/.qlib/qlib_data/cn_data /home/zxh/qlib_data
+
+# 允许 mlflow 使用本地 file store（rdagent 在容器内运行实验时会用到）
+ENV MLFLOW_ALLOW_FILE_STORE=true

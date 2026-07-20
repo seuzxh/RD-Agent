@@ -189,5 +189,5 @@ AGENTS.md
 !rdagent/**/AGENTS.md
 
 scripts/
-# Local qlib source tarball used by Dockerfile (download separately)
-rdagent/scenarios/qlib/docker/qlib-src.tar.gz
+# Qlib docker 镜像导出 tar(大文件,不入库,外部分发);qlib-src.tar.gz 是构建依赖,需入库(见下)
+rdagent/scenarios/qlib/docker/local_qlib*.tar.gz
