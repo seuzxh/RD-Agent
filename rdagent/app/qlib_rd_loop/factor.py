@@ -35,6 +35,7 @@ def main(
     checkout: bool = True,
     checkout_path: Optional[str] = None,
     base_features_path: Optional[str] = None,
+    description: Optional[str] = None,
     **kwargs,
 ):
     """
@@ -56,7 +57,12 @@ def main(
         factor_loop = FactorRDLoop.load(path, checkout=checkout)
 
     factor_loop._init_base_features(base_features_path)
-    if "user_interaction_queues" in kwargs and kwargs["user_interaction_queues"] is not None:
+    if description:
+        # User provided a description via the webUI -> use the framework's native
+        # user_instruction channel (LLMHypothesisGen.gen reads plan["user_instruction"])
+        # and skip the interactive initial-params flow.
+        factor_loop.plan["user_instruction"] = description
+    elif "user_interaction_queues" in kwargs and kwargs["user_interaction_queues"] is not None:
         factor_loop._set_interactor(*kwargs["user_interaction_queues"])
         factor_loop._interact_init_params()
     asyncio.run(factor_loop.run(step_n=step_n, loop_n=loop_n, all_duration=all_duration))

@@ -420,6 +420,7 @@ def upload_file():
             "loop_n": loop_n_val,
             "all_duration": all_duration_val,
             "base_features_path": str(trace_files_path),
+            "description": request.form.get("description"),
         }
     if scenario == "Finance Model Implementation":
         target_name = "fin_model"
@@ -427,6 +428,7 @@ def upload_file():
             "loop_n": loop_n_val,
             "all_duration": all_duration_val,
             "base_features_path": str(trace_files_path),
+            "description": request.form.get("description"),
         }
     if scenario == "Finance Whole Pipeline":
         target_name = "fin_quant"
@@ -434,6 +436,7 @@ def upload_file():
             "loop_n": loop_n_val,
             "all_duration": all_duration_val,
             "base_features_path": str(trace_files_path),
+            "description": request.form.get("description"),
         }
     if scenario == "Finance Data Building (Reports)":
         target_name = "fin_factor_report"

@@ -129,12 +129,13 @@ class QuantRDLoop(RDLoop):
 
 
 def main(
-    path=None,
-    step_n: int | None = None,
-    loop_n: int | None = None,
-    all_duration: str | None = None,
+    path: Optional[str] = None,
+    step_n: Optional[int] = None,
+    loop_n: Optional[int] = None,
+    all_duration: Optional[str] = None,
     checkout: bool = True,
-    base_features_path: str | None = None,
+    base_features_path: Optional[str] = None,
+    description: Optional[str] = None,
     **kwargs,
 ):
     """
@@ -148,7 +149,12 @@ def main(
     else:
         quant_loop = QuantRDLoop.load(path, checkout=checkout)
     quant_loop._init_base_features(base_features_path)
-    if "user_interaction_queues" in kwargs and kwargs["user_interaction_queues"] is not None:
+    if description:
+        # User provided a description via the webUI -> use the framework's native
+        # user_instruction channel (LLMHypothesisGen.gen reads plan["user_instruction"])
+        # and skip the interactive initial-params flow.
+        quant_loop.plan["user_instruction"] = description
+    elif "user_interaction_queues" in kwargs and kwargs["user_interaction_queues"] is not None:
         quant_loop._set_interactor(*kwargs["user_interaction_queues"])
         quant_loop._interact_init_params()
 
