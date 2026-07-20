@@ -33,6 +33,7 @@ RUN mkdir -p /workspace && \
 
 WORKDIR /workspace/qlib
 ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_PYQLIB=0.9.7
+ENV MLFLOW_ALLOW_FILE_STORE=true
 RUN python -m pip install --no-deps -e .
 
 # 让容器内 /home/zxh/qlib_data 软链到运行时挂载的 qlib 数据目录。

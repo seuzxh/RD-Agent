@@ -45,13 +45,26 @@ docker build -t local_qlib:v2.0 \
   /path/to/RD-Agent/rdagent/scenarios/qlib/docker
 ```
 
+### 派生镜像 `local_qlib:v2.1`（mlflow file-store 修复）
+
+mlflow 3.14.0 默认禁用 `./mlruns` filesystem tracking backend（进入 maintenance mode），导致 qrun 训练时报 `MlflowException`。Dockerfile 已加 `ENV MLFLOW_ALLOW_FILE_STORE=true` 修复。
+
+无需完整重建——可基于 v2.0 秒级派生：
+
+```bash
+echo 'FROM local_qlib:v2.0
+ENV MLFLOW_ALLOW_FILE_STORE=true' | docker build -t local_qlib:v2.1 -
+```
+
+然后在 `.env` 把 `QLIB_DOCKER_IMAGE` 改为 `local_qlib:v2.1`。
+
 ## 如何使用（最快方式）
 
 RD-Agent 默认会尝试从 Dockerfile 重新构建镜像。为提升启动速度，在 `.env` 中显式指定使用已有镜像并禁用重建：
 
 ```ini
 MODEL_CoSTEER_ENV_TYPE=docker
-QLIB_DOCKER_IMAGE=local_qlib:v2.0
+QLIB_DOCKER_IMAGE=local_qlib:v2.1
 QLIB_DOCKER_BUILD_FROM_DOCKERFILE=False
 ```
 
