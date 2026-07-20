@@ -38,6 +38,8 @@ const BUFFER_ROWS = 15
 const FLUSH_INTERVAL = 100
 const SEARCH_DELAY = 250
 const POLL_INTERVAL = 2000
+const POLL_MAX_INTERVAL = 8000
+const POLL_IDLE_THRESHOLD = 3
 
 const props = defineProps<{ traceId: string; status: TraceStatus }>()
 const expanded = ref(false)
@@ -110,6 +112,7 @@ function scheduleFlush() {
 function connect() {
   if (!props.traceId || pollTimer) return
   state.value = 'idle'
+  let idleCount = 0
 
   const poll = async () => {
     pollAbort = new AbortController()
@@ -118,7 +121,7 @@ function connect() {
       pollAbort = null
       offset = result.nextOffset
       if (result.text) {
-        // Drop the trailing partial line if the slice doesn't end with \n (it'll come on the next poll)
+        idleCount = 0
         const fetched = result.text
         const lastNewline = fetched.lastIndexOf('\n')
         const complete = lastNewline === -1 ? '' : fetched.slice(0, lastNewline)
@@ -127,16 +130,22 @@ function connect() {
           scheduleFlush()
         }
         if (state.value === 'idle') state.value = 'live'
+      } else {
+        idleCount++
       }
     } catch (err) {
       pollAbort = null
-      if (err instanceof Error && err.name === 'AbortError') return // closed by close()
+      if (err instanceof Error && err.name === 'AbortError') return
       flushPending()
       state.value = 'error'
       close()
       return
     }
-    pollTimer = setTimeout(poll, POLL_INTERVAL)
+    // Backoff: after N consecutive idle polls, increase interval up to POLL_MAX_INTERVAL
+    const interval = idleCount >= POLL_IDLE_THRESHOLD
+      ? Math.min(POLL_INTERVAL * (1 + (idleCount - POLL_IDLE_THRESHOLD + 1)), POLL_MAX_INTERVAL)
+      : POLL_INTERVAL
+    pollTimer = setTimeout(poll, interval)
   }
 
   void poll()
