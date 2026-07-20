@@ -28,6 +28,7 @@ export const fetchTraceIds = (signal?: AbortSignal) => fetch('/traces', { signal
 export const fetchTrace = (data: TraceRequest, signal?: AbortSignal) => fetch('/trace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal }).then(response => parseResponse<TraceMessage[]>(response))
 export const uploadTask = (data: FormData, signal?: AbortSignal) => fetch('/upload', { method: 'POST', body: data, signal }).then(response => parseResponse<{ id?: string; error?: string }>(response))
 export const controlTask = (id: string, action: string, signal?: AbortSignal) => fetch('/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action }), signal }).then(response => parseResponse<unknown>(response))
+export const submitUserInteraction = (data: { id: string; payload: unknown }, signal?: AbortSignal) => fetch('/user_interaction/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal }).then(response => parseResponse<unknown>(response))
 export const stdoutUrl = (id: string) => `/stdout?${new URLSearchParams({ id }).toString()}`
 export const logStreamUrl = (id: string) => `/logs/sse?${new URLSearchParams({ trace: id }).toString()}`
 
