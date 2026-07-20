@@ -275,5 +275,19 @@ class WebStorage(Storage):
                         "content": content,
                     },
                 }
+        elif "token_cost" in tag:
+            # litellm emits {model, prompt_tokens, completion_tokens, cost, accumulated_cost}
+            # per LLM call (rdagent/oai/backend/litellm.py). Forward as-is; the frontend
+            # (trace-model.ts) has fallbacks for both single-call and accumulated fields.
+            token_obj = obj if isinstance(obj, dict) else {}
+            data = {
+                "id": id,
+                "msg": {
+                    "tag": "token_cost",
+                    "timestamp": timestamp,
+                    "loop_id": li,
+                    "content": token_obj,
+                },
+            }
 
         return data
