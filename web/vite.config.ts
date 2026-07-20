@@ -17,7 +17,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        main: pathResolve('./index.html'),
+        // main: pathResolve('./index.html'),
         multialpha: pathResolve('./multialpha.html'),
       },
     },
