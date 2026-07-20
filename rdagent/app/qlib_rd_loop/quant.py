@@ -3,7 +3,7 @@ Quant (Factor & Model) workflow with session control
 """
 
 import asyncio
-from typing import Any
+from typing import Any, Optional
 
 import fire
 
