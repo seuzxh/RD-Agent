@@ -222,19 +222,105 @@ def _resolve_stdout_path(trace_id: str) -> Path | None:
     if not normalized_trace_id:
         return None
 
+    # Strategy 1: running task (in-memory) — exact path stored at upload time
     task = rdagent_processes.get(str(log_folder_path / normalized_trace_id))
-    if task is None or not task.stdout_path:
-        return None
+    if task is not None and task.stdout_path:
+        stdout_path = Path(task.stdout_path).resolve()
+        try:
+            if os.path.commonpath([str(stdout_path), str(log_folder_path)]) != str(log_folder_path):
+                return None
+        except ValueError:
+            return None
+        return stdout_path
 
-    stdout_path = Path(task.stdout_path).resolve()
-
+    # Strategy 2: historical task — derive path from trace_id
+    # trace_id format: "<scenario>/<trace_name>", stdout at <trace_root>/<scenario>/<trace_name>.log
+    stdout_path = (log_folder_path / normalized_trace_id)
+    # Replace the trailing trace_name with trace_name.log
+    stdout_path = stdout_path.parent / f"{stdout_path.name}.log"
+    stdout_path = stdout_path.resolve()
     try:
         if os.path.commonpath([str(stdout_path), str(log_folder_path)]) != str(log_folder_path):
             return None
     except ValueError:
         return None
-
+    if not stdout_path.exists() or not stdout_path.is_file():
+        return None
     return stdout_path
+
+
+def _sota_from_messages(messages: list[dict]) -> dict:
+    """Extract SOTA info from the webUI message stream (task.messages).
+
+    Fallback for webUI-launched tasks where no __session__/ exists but the
+    message stream contains research.hypothesis / evolving.codes / feedback.* tags.
+    """
+    import json as _json
+
+    # Find the last accepted feedback (decision=True)
+    sota_loop = None
+    sota_hypothesis = None
+    sota_feedback = None
+    sota_metrics = {}
+    sota_factors = []
+    sota_codes = []
+
+    for msg in messages:
+        tag = msg.get("tag", "")
+        content = msg.get("content", {})
+        loop_id = msg.get("loop_id")
+
+        if tag == "research.hypothesis" and isinstance(content, dict):
+            sota_hypothesis = content
+            sota_loop = loop_id
+        elif tag == "research.tasks" and isinstance(content, list):
+            sota_factors = content if isinstance(content, list) else []
+        elif tag == "evolving.codes" and isinstance(content, list):
+            sota_codes = content
+        elif tag == "feedback.metric" and isinstance(content, dict):
+            result_str = content.get("result", "")
+            if isinstance(result_str, str):
+                try:
+                    sota_metrics = _json.loads(result_str)
+                except Exception:
+                    pass
+            sota_loop = loop_id
+        elif tag == "feedback.hypothesis_feedback" and isinstance(content, dict):
+            sota_feedback = content
+
+    if not sota_hypothesis and not sota_metrics:
+        return {"error": "No SOTA data", "detail": "Message stream has no hypothesis or metric messages"}
+
+    # Build factor list with code
+    factors_out = []
+    for i, f in enumerate(sota_factors):
+        if not isinstance(f, dict):
+            continue
+        name = f.get("name", f.get("factor_name", f"factor_{i}"))
+        code = ""
+        for c in sota_codes:
+            if isinstance(c, dict) and c.get("target_task_name") == name:
+                ws = c.get("workspace", {})
+                if isinstance(ws, dict):
+                    code = next(iter(ws.values()), "")
+                break
+        factors_out.append({
+            "name": name,
+            "description": f.get("description", ""),
+            "formulation": f.get("formulation", ""),
+            "code": code,
+        })
+
+    return {
+        "sota_loop_id": sota_loop,
+        "total_experiments": len(set(m.get("loop_id") for m in messages if m.get("loop_id") is not None)),
+        "sota_hypothesis": sota_hypothesis or {},
+        "sota_feedback": sota_feedback or {},
+        "sota_metrics": sota_metrics,
+        "sota_factors": factors_out,
+        "sota_model": {},
+        "source": "message_stream",
+    }
 
 
 def read_trace(log_path: Path, id: str = "") -> None:
@@ -591,17 +677,35 @@ def get_sota(trace_name: str):
             log_path = str(candidate)
         else:
             resolved = find_session_by_trace_name(trace_name)
-            if resolved is None:
-                return jsonify({
-                    "error": "Trace not found",
-                    "detail": f"No session matching '{trace_name}' in log/",
-                    "hint": "Try GET /traces to list available trace ids, or pass ?log_path=<path>",
-                }), 404
-            log_path = str(resolved)
+            if resolved is not None:
+                log_path = str(resolved)
 
-    result = query_sota(log_path)
-    status_code = 404 if "error" in result else 200
-    return jsonify(result), status_code
+    if log_path is not None:
+        result = query_sota(log_path)
+        status_code = 404 if "error" in result else 200
+        return jsonify(result), status_code
+
+    # Fallback: extract SOTA from the webUI message stream (task.messages)
+    # This handles webUI-launched tasks where FileStorage pickles are under
+    # <trace_root>/<scenario>/<name>/ but no __session__/ exists.
+    trace_id = trace_name.replace("%20", " ")
+    task = rdagent_processes.get(str(log_folder_path / trace_id))
+    if task is None:
+        # Historical task: load from FileStorage via read_trace
+        trace_dir = log_folder_path / trace_id
+        if trace_dir.is_dir():
+            read_trace(trace_dir, id=str(trace_dir))
+            task = rdagent_processes.get(str(trace_dir))
+    if task is not None and task.messages:
+        result = _sota_from_messages(task.messages)
+        status_code = 404 if "error" in result else 200
+        return jsonify(result), status_code
+
+    return jsonify({
+        "error": "Trace not found",
+        "detail": f"No session or message stream matching '{trace_name}'",
+        "hint": "Try GET /traces to list available trace ids, or pass ?log_path=<path>",
+    }), 404
 
 
 @app.route("/", methods=["GET"])
