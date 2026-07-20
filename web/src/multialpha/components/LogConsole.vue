@@ -29,7 +29,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
-import { logStreamUrl, stdoutUrl } from '../api'
+import { fetchStdoutRange, stdoutUrl } from '../api'
 import type { TraceStatus } from '../types'
 
 const MAX_LINES = 5000
@@ -37,6 +37,7 @@ const LINE_HEIGHT = 20
 const BUFFER_ROWS = 15
 const FLUSH_INTERVAL = 100
 const SEARCH_DELAY = 250
+const POLL_INTERVAL = 2000
 
 const props = defineProps<{ traceId: string; status: TraceStatus }>()
 const expanded = ref(false)
@@ -49,15 +50,17 @@ const viewport = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const viewportHeight = ref(248)
 
-let source: EventSource | null = null
+let pollTimer: ReturnType<typeof setTimeout> | undefined
+let pollAbort: AbortController | null = null
+let offset = 0
 let pendingLines: string[] = []
 let flushTimer: ReturnType<typeof setTimeout> | undefined
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let stickToBottom = true
 
 function close() {
-  source?.close()
-  source = null
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = undefined }
+  if (pollAbort) { pollAbort.abort(); pollAbort = null }
 }
 
 function clearTimers() {
@@ -71,6 +74,7 @@ function reset() {
   close()
   clearTimers()
   pendingLines = []
+  offset = 0
   expanded.value = false
   lines.value = []
   keyword.value = ''
@@ -104,26 +108,45 @@ function scheduleFlush() {
 }
 
 function connect() {
-  if (!props.traceId || source) return
+  if (!props.traceId || pollTimer) return
   state.value = 'idle'
-  source = new EventSource(logStreamUrl(props.traceId))
-  source.onopen = () => { state.value = 'live' }
-  source.onmessage = (event) => {
-    pendingLines.push(...String(event.data).split(/\r?\n/))
-    scheduleFlush()
+
+  const poll = async () => {
+    pollAbort = new AbortController()
+    try {
+      const result = await fetchStdoutRange(props.traceId, offset, pollAbort.signal)
+      pollAbort = null
+      offset = result.nextOffset
+      if (result.text) {
+        // Drop the trailing partial line if the slice doesn't end with \n (it'll come on the next poll)
+        const fetched = result.text
+        const lastNewline = fetched.lastIndexOf('\n')
+        const complete = lastNewline === -1 ? '' : fetched.slice(0, lastNewline)
+        if (complete) {
+          pendingLines.push(...complete.split(/\r?\n/).filter((line) => line.length > 0))
+          scheduleFlush()
+        }
+        if (state.value === 'idle') state.value = 'live'
+      }
+    } catch (err) {
+      pollAbort = null
+      if (err instanceof Error && err.name === 'AbortError') return // closed by close()
+      flushPending()
+      state.value = 'error'
+      close()
+      return
+    }
+    pollTimer = setTimeout(poll, POLL_INTERVAL)
   }
-  source.onerror = () => {
-    flushPending()
-    state.value = 'error'
-    close()
-  }
+
+  void poll()
 }
 
 function toggle() {
   expanded.value = !expanded.value
   if (!expanded.value) return
 
-  if (!source && props.status !== 'running' && !lines.value.length) connect()
+  if (!pollTimer && props.status !== 'running' && !lines.value.length) connect()
   void nextTick(() => {
     if (!viewport.value) return
     viewportHeight.value = viewport.value.clientHeight
