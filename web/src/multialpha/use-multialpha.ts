@@ -4,7 +4,7 @@ import { controlTask, fetchTrace, fetchTraceIds, uploadTask } from './api'
 import { buildTraceView, deriveTraceStatus } from './trace-model'
 import type { TaskMethod, TraceMessage, TraceStatus, TraceTask } from './types'
 
-const CACHE_LIMIT = 2
+const CACHE_LIMIT = 5
 
 export function useMultiAlpha() {
   const traceIds = ref<string[]>([])
@@ -55,10 +55,10 @@ export function useMultiAlpha() {
     pollBusy = true
     pollController = new AbortController()
     try {
-      const updates = await fetchTrace({ id, all: false, reset: false }, pollController.signal)
+      const updates = await fetchTrace({ id, all: false, reset: false, cursor: messages.value.length }, pollController.signal)
       if (currentTraceId.value !== id) return
       if (updates.length) {
-        messages.value = [...messages.value, ...updates]
+        messages.value.push(...updates)
         if (selectedLoop.value == null) {
           const loops = messages.value.map(message => Number(message.loop_id)).filter(Number.isFinite)
           if (loops.length) selectedLoop.value = Math.max(...loops)

@@ -389,8 +389,7 @@ def update_trace():
     trace_id = data.get("id")
     return_all = data.get("all")
     reset = data.get("reset")
-    msg_num = random.randint(1, 10)
-    app.logger.info(data)
+    cursor = data.get("cursor")  # frontend-managed cursor (message index)
     log_folder_path = Path(UI_SETTING.trace_folder).absolute()
     if not trace_id:
         return jsonify({"error": "Trace ID is required"}), 400
@@ -415,20 +414,30 @@ def update_trace():
             )
             app.logger.warning(f"Process for {trace_id} has ended.")
 
-    user_ip = request.remote_addr
+    total = len(task.messages)
 
-    if reset:
-        task.pointers[user_ip] = 0
+    # Cursor-based: frontend sends its current message count as cursor.
+    # Returns all messages from cursor to end (no random batching).
+    # Falls back to legacy pointer mode if cursor not provided.
+    if cursor is not None:
+        start = max(0, int(cursor))
+    else:
+        # Legacy pointer mode (backward compat for older frontends)
+        user_ip = request.remote_addr
+        if reset:
+            task.pointers[user_ip] = 0
+        start = task.pointers[user_ip]
 
-    start_pointer = task.pointers[user_ip]
-    end_pointer = start_pointer + msg_num
-    if end_pointer > len(task.messages) or return_all:
-        end_pointer = len(task.messages)
+    if return_all:
+        start = 0
 
-    returned_msgs = task.messages[start_pointer:end_pointer]
-    task.pointers[user_ip] = end_pointer
-    if returned_msgs:
-        app.logger.info([msg["tag"] for msg in returned_msgs])
+    returned_msgs = task.messages[start:total]
+
+    # Update legacy pointer for backward compat
+    if cursor is None:
+        user_ip = request.remote_addr
+        task.pointers[user_ip] = total
+
     return jsonify(returned_msgs), 200
 
 

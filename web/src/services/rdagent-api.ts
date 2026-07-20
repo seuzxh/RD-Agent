@@ -5,7 +5,7 @@ export interface TraceMessage {
   content: unknown
 }
 
-export interface TraceRequest { id: string; all: boolean; reset: boolean }
+export interface TraceRequest { id: string; all: boolean; reset: boolean; cursor?: number }
 
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number, public readonly payload?: unknown) {
