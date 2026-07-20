@@ -586,6 +586,94 @@ def receive_msgs():
     return jsonify({"status": "success"}), 200
 
 
+@app.route("/health", methods=["GET"])
+def health_check():
+    """Lightweight health check for pre-task validation.
+
+    Checks LLM config, Docker daemon, Qlib data, and port availability.
+    Returns structured JSON (does NOT make real LLM/Docker calls — config + file existence only).
+    """
+    import os as _os
+    import socket as _socket
+    from pathlib import Path as _Path
+
+    checks = []
+
+    # 1. LLM configuration
+    chat_model = _os.environ.get("CHAT_MODEL", "")
+    embedding_model = _os.environ.get("EMBEDDING_MODEL", "")
+    has_key = bool(_os.environ.get("OPENAI_API_KEY") or _os.environ.get("DEEPSEEK_API_KEY"))
+    api_base = _os.environ.get("OPENAI_API_BASE", "")
+    checks.append({
+        "name": "LLM 配置",
+        "icon": "🤖",
+        "status": "pass" if (chat_model and has_key) else "warn",
+        "detail": f"chat={chat_model or '未设置'}, embedding={embedding_model or '未设置'}, key={'已设' if has_key else '未设'}, base={api_base or '默认'}",
+    })
+
+    # 2. Docker daemon
+    docker_ok = False
+    docker_detail = "未检测到 Docker"
+    try:
+        import docker as _docker
+        client = _docker.from_env(timeout=3)
+        client.ping()
+        docker_ok = True
+        # Check local_qlib image
+        images = [tag for img in client.images.list() for tag in (img.tags or [])]
+        qlib_img = [i for i in images if "local_qlib" in i]
+        docker_detail = f"Docker 正常, 镜像: {qlib_img[0] if qlib_img else '无 local_qlib 镜像'}"
+    except Exception as e:
+        docker_detail = f"Docker 不可用: {str(e)[:80]}"
+    checks.append({
+        "name": "Docker 环境",
+        "icon": "🐳",
+        "status": "pass" if docker_ok else "fail",
+        "detail": docker_detail,
+    })
+
+    # 3. Qlib data
+    qlib_data_path = _Path.home() / ".qlib" / "qlib_data" / "cn_data"
+    calendars = qlib_data_path / "calendars" / "day.txt"
+    if calendars.exists():
+        with open(calendars) as f:
+            lines = f.readlines()
+        checks.append({
+            "name": "Qlib 数据",
+            "icon": "📊",
+            "status": "pass",
+            "detail": f"{qlib_data_path}, {len(lines)} 天数据 ({lines[0].strip() if lines else '?'} ~ {lines[-1].strip() if lines else '?'})",
+        })
+    else:
+        checks.append({
+            "name": "Qlib 数据",
+            "icon": "📊",
+            "status": "fail",
+            "detail": f"数据不存在: {qlib_data_path}",
+        })
+
+    # 4. CONDA_DEFAULT_ENV (factor CoSTEER 子进程用)
+    conda_env = _os.environ.get("CONDA_DEFAULT_ENV", "")
+    checks.append({
+        "name": "Conda 环境",
+        "icon": "🐍",
+        "status": "pass" if conda_env else "warn",
+        "detail": f"CONDA_DEFAULT_ENV={conda_env or '未设置（因子代码验证可能失败）'}",
+    })
+
+    # 5. MLflow file store (docker 内需要)
+    mlflow_flag = _os.environ.get("MLFLOW_ALLOW_FILE_STORE", "")
+    checks.append({
+        "name": "MLflow 配置",
+        "icon": "📈",
+        "status": "pass" if mlflow_flag == "true" else "warn",
+        "detail": f"MLFLOW_ALLOW_FILE_STORE={mlflow_flag or '未设置（docker 内 qrun 可能报 mlflow 错误）'}",
+    })
+
+    all_pass = all(c["status"] == "pass" for c in checks)
+    return jsonify({"overall": "pass" if all_pass else "issues", "checks": checks}), 200
+
+
 @app.route("/user_interaction/submit", methods=["POST"])
 def submit_user_interaction_response():
     """Frontend submits a user response; server forwards it to the rdagent subprocess via IPC queue."""
