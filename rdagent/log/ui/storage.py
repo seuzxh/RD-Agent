@@ -277,9 +277,17 @@ class WebStorage(Storage):
                 }
         elif "token_cost" in tag:
             # litellm emits {model, prompt_tokens, completion_tokens, cost, accumulated_cost}
-            # per LLM call (rdagent/oai/backend/litellm.py). Forward as-is; the frontend
-            # (trace-model.ts) has fallbacks for both single-call and accumulated fields.
-            token_obj = obj if isinstance(obj, dict) else {}
+            # per LLM call (rdagent/oai/backend/litellm.py). cost may be NaN when litellm
+            # can't estimate the price for a model; JSON has no NaN, so sanitize to 0.0
+            # (the old project's storage.py did the same, see _obj_to_json token_cost branch).
+            import math
+
+            raw = obj if isinstance(obj, dict) else {}
+            token_obj = {
+                k: (0.0 if isinstance(v, float) and math.isnan(v) else
+                    0.0 if isinstance(v, float) and math.isinf(v) else v)
+                for k, v in raw.items()
+            }
             data = {
                 "id": id,
                 "msg": {
