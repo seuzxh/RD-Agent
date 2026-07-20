@@ -21,18 +21,12 @@ from typing import Optional
 import typer
 from typing_extensions import Annotated
 
-from rdagent.app.data_science.loop import main as data_science
-from rdagent.app.finetune.llm.loop import main as llm_finetune
-from rdagent.app.general_model.general_model import (
-    extract_models_and_implement as general_model,
-)
 from rdagent.app.qlib_rd_loop.factor import main as fin_factor
 from rdagent.app.qlib_rd_loop.factor_from_report import main as fin_factor_report
 from rdagent.app.qlib_rd_loop.model import main as fin_model
 from rdagent.app.qlib_rd_loop.quant import main as fin_quant
 from rdagent.app.utils.health_check import health_check
 from rdagent.app.utils.info import collect_info
-from rdagent.log.mle_summary import grade_summary as grade_summary
 
 app = typer.Typer()
 
@@ -42,15 +36,10 @@ CheckDockerOption = Annotated[bool, typer.Option("--check-docker/--no-check-dock
 CheckPortsOption = Annotated[bool, typer.Option("--check-ports/--no-check-ports", "-p/-P")]
 
 
-def ui(port=19899, log_dir="", debug: bool = False, data_science: bool = False):
+def ui(port=19899, log_dir="", debug: bool = False):
     """
     start web app to show the log traces.
     """
-    if data_science:
-        with rpath("rdagent.log.ui", "dsapp.py") as app_path:
-            cmds = ["streamlit", "run", app_path, f"--server.port={port}"]
-            subprocess.run(cmds)
-        return
     with rpath("rdagent.log.ui", "app.py") as app_path:
         cmds = ["streamlit", "run", app_path, f"--server.port={port}"]
         if log_dir or debug:
@@ -69,14 +58,6 @@ def server_ui(port=19899):
     from rdagent.log.server.app import main as log_server_main
 
     log_server_main(port=port)
-
-
-def ds_user_interact(port=19900):
-    """
-    start web app to show the log traces in real time
-    """
-    commands = ["streamlit", "run", "rdagent/log/ui/ds_user_interact.py", f"--server.port={port}"]
-    subprocess.run(commands)
 
 
 @app.command(name="fin_factor")
@@ -122,62 +103,6 @@ def fin_factor_report_cli(
     fin_factor_report(report_folder=report_folder, path=path, all_duration=all_duration, checkout=checkout)
 
 
-@app.command(name="general_model")
-def general_model_cli(report_file_path: str):
-    general_model(report_file_path)
-
-
-@app.command(name="data_science")
-def data_science_cli(
-    path: Optional[str] = None,
-    checkout: CheckoutOption = True,
-    step_n: Optional[int] = None,
-    loop_n: Optional[int] = None,
-    timeout: Optional[str] = None,
-    competition: Optional[str] = None,
-):
-    data_science(
-        path=path,
-        checkout=checkout,
-        step_n=step_n,
-        loop_n=loop_n,
-        timeout=timeout,
-        competition=competition,
-    )
-
-
-@app.command(name="llm_finetune")
-def llm_finetune_cli(
-    path: Optional[str] = None,
-    checkout: CheckoutOption = True,
-    benchmark: Optional[str] = None,
-    benchmark_description: Optional[str] = None,
-    dataset: Optional[str] = None,
-    base_model: Optional[str] = None,
-    upper_data_size_limit: Optional[int] = None,
-    step_n: Optional[int] = None,
-    loop_n: Optional[int] = None,
-    timeout: Optional[str] = None,
-):
-    llm_finetune(
-        path=path,
-        checkout=checkout,
-        benchmark=benchmark,
-        benchmark_description=benchmark_description,
-        dataset=dataset,
-        base_model=base_model,
-        upper_data_size_limit=upper_data_size_limit,
-        step_n=step_n,
-        loop_n=loop_n,
-        timeout=timeout,
-    )
-
-
-@app.command(name="grade_summary")
-def grade_summary_cli(log_folder: str):
-    grade_summary(log_folder)
-
-
 app.command(name="ui")(ui)
 app.command(name="server_ui")(server_ui)
 
@@ -196,7 +121,66 @@ def collect_info_cli():
     collect_info()
 
 
-app.command(name="ds_user_interact")(ds_user_interact)
+@app.command(name="sota")
+def sota_cli(
+    log_path: Optional[str] = None,
+    trace_name: Optional[str] = None,
+    output: str = "json",
+):
+    """
+    Query SOTA (best) experiment artifacts from a LoopBase session.
+
+    Specify either --log-path (direct session path) or --trace-name (scan log/).
+    Output format: json (default) | table | code (factor/model code only).
+    """
+    import json as json_mod
+
+    from rdagent.log.sota_query import find_session_by_trace_name, query_sota
+
+    if log_path is None and trace_name is None:
+        typer.echo("Error: must specify --log-path or --trace-name", err=True)
+        raise typer.Exit(1)
+
+    if log_path is None:
+        resolved = find_session_by_trace_name(trace_name)
+        if resolved is None:
+            typer.echo(f"Error: no session matching trace '{trace_name}' in log/", err=True)
+            raise typer.Exit(1)
+        log_path = str(resolved)
+
+    result = query_sota(log_path)
+
+    if "error" in result:
+        typer.echo(f"Error: {result['error']} — {result.get('detail', '')}", err=True)
+        raise typer.Exit(1)
+
+    if output == "json":
+        typer.echo(json_mod.dumps(result, indent=2, default=str, ensure_ascii=False))
+    elif output == "code":
+        for f in result.get("sota_factors", []):
+            typer.echo(f"--- Factor: {f.get('name', '?')} ---")
+            typer.echo(f.get("code", "(no code)"))
+        model = result.get("sota_model")
+        if model:
+            typer.echo(f"--- Model: {model.get('name', '?')} ---")
+            typer.echo(model.get("code", "(no code)"))
+    else:
+        # table format
+        typer.echo(f"SOTA Loop ID:    {result.get('sota_loop_id', '?')}")
+        typer.echo(f"Experiments:     {result.get('total_experiments', '?')}")
+        hyp = result.get("sota_hypothesis", {})
+        typer.echo(f"Hypothesis:      {hyp.get('hypothesis', '?')[:80]}...")
+        typer.echo(f"Decision:        {result.get('sota_feedback', {}).get('decision', '?')}")
+        typer.echo("\nMetrics:")
+        for k, v in result.get("sota_metrics", {}).items():
+            typer.echo(f"  {k}: {v}")
+        for f in result.get("sota_factors", []):
+            typer.echo(f"\nFactor: {f.get('name', '?')} — {f.get('description', '?')[:60]}")
+            typer.echo(f"  workspace: {f.get('workspace_path', '?')}")
+        model = result.get("sota_model")
+        if model:
+            typer.echo(f"\nModel: {model.get('name', '?')} ({model.get('model_type', '?')})")
+            typer.echo(f"  workspace: {model.get('workspace_path', '?')}")
 
 
 if __name__ == "__main__":

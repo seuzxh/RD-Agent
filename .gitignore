@@ -189,3 +189,5 @@ AGENTS.md
 !rdagent/**/AGENTS.md
 
 scripts/
+# Local qlib source tarball used by Dockerfile (download separately)
+rdagent/scenarios/qlib/docker/qlib-src.tar.gz

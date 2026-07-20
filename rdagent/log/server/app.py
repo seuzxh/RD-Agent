@@ -46,7 +46,7 @@ def _configure_app_logger() -> None:
 _configure_app_logger()
 
 
-_TARGETS_WITHOUT_USER_INTERACTION = {"general_model", "fin_factor_report"}
+_TARGETS_WITHOUT_USER_INTERACTION = {"fin_factor_report"}
 
 
 class RDAgentTask:
@@ -134,17 +134,7 @@ class RDAgentTask:
                             (self.user_request_q, self.user_response_q),
                         )
 
-                    if self.target_name == "data_science":
-                        from rdagent.app.data_science.loop import main as data_science
-
-                        data_science(**self.kwargs)
-                    elif self.target_name == "general_model":
-                        from rdagent.app.general_model.general_model import (
-                            extract_models_and_implement as general_model,
-                        )
-
-                        general_model(**self.kwargs)
-                    elif self.target_name == "fin_factor":
+                    if self.target_name == "fin_factor":
                         from rdagent.app.qlib_rd_loop.factor import main as fin_factor
 
                         fin_factor(**self.kwargs)
@@ -448,16 +438,6 @@ def upload_file():
     if scenario == "Finance Data Building (Reports)":
         target_name = "fin_factor_report"
         kwargs = {"report_folder": str(trace_files_path), "all_duration": all_duration_val}
-    if scenario == "General Model Implementation":
-        if len(files) == 0:  # files is one link
-            rfp = request.form.get("files")[0]
-        else:  # one file is uploaded
-            rfp = str(trace_files_path / files[0].filename)
-        target_name = "general_model"
-        kwargs = {"report_file_path": rfp}
-    if scenario == "Data Science":
-        target_name = "data_science"
-        kwargs = {"competition": competition, "loop_n": loop_n_val, "timeout": all_duration_val}
 
     if target_name is None:
         return jsonify({"error": "Unknown scenario"}), 400
@@ -574,6 +554,39 @@ def test():
     msgs = {k: [i["tag"] for i in task.messages] for k, task in rdagent_processes.items()}
     pointers = {k: dict(task.pointers) for k, task in rdagent_processes.items()}
     return jsonify({"msgs": msgs, "pointers": pointers}), 200
+
+
+@app.route("/traces/<path:trace_name>/sota", methods=["GET"])
+def get_sota(trace_name: str):
+    """Query SOTA experiment artifacts for a given trace.
+
+    Args:
+        trace_name: Trace identifier (can be a log/ timestamp or a Flask trace id).
+
+    Query params:
+        log_path: Direct path to log directory (bypasses trace_name scanning).
+    """
+    from rdagent.log.sota_query import find_session_by_trace_name, query_sota
+
+    log_path = request.args.get("log_path")
+    if log_path is None:
+        # Try trace_name as direct path first, then scan log/
+        candidate = Path(trace_name)
+        if candidate.is_dir() and (candidate / "__session__").exists():
+            log_path = str(candidate)
+        else:
+            resolved = find_session_by_trace_name(trace_name)
+            if resolved is None:
+                return jsonify({
+                    "error": "Trace not found",
+                    "detail": f"No session matching '{trace_name}' in log/",
+                    "hint": "Try GET /traces to list available trace ids, or pass ?log_path=<path>",
+                }), 404
+            log_path = str(resolved)
+
+    result = query_sota(log_path)
+    status_code = 404 if "error" in result else 200
+    return jsonify(result), status_code
 
 
 @app.route("/", methods=["GET"])

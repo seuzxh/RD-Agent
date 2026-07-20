@@ -27,7 +27,10 @@ def get_model_env(
     else:
         raise ValueError(f"Unknown env type: {conf.env_type}")
 
-    env.conf.extra_volumes = extra_volumes.copy()
+    # 仅在调用方显式传入 extra_volumes 时覆盖，否则保留 QlibDockerConf/QlibCondaConf 的默认挂载
+    # （原代码无条件覆盖会清空 QlibDockerConf.extra_volumes，导致 QTDockerEnv.prepare 取 next(iter({})) 报 StopIteration）
+    if extra_volumes:
+        env.conf.extra_volumes = extra_volumes.copy()
     env.conf.running_timeout_period = running_timeout_period
     if enable_cache is not None:
         env.conf.enable_cache = enable_cache

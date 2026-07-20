@@ -9,7 +9,7 @@ from rdagent.components.coder.model_coder.conf import MODEL_COSTEER_SETTINGS
 from rdagent.core.experiment import Experiment, FBWorkspace
 from rdagent.core.utils import cache_with_pickle
 from rdagent.oai.llm_utils import md5_hash
-from rdagent.utils.env import KGDockerEnv, QlibCondaConf, QlibCondaEnv, QTDockerEnv
+from rdagent.utils.env import QlibCondaConf, QlibCondaEnv, QTDockerEnv
 
 
 class ModelTask(CoSTEERTask):
@@ -78,13 +78,11 @@ class ModelFBWorkspace(FBWorkspace):
         - the `model.py` that contains a variable named `model_cls` which indicates the implemented model structure
             - `model_cls` is a instance of `torch.nn.Module`;
 
-    We support two ways of interface:
-        (version 1) for qlib we'll make a script to import the model in the implementation in file `model.py` after setting the cwd into the directory
+    We support the following interface:
+        for qlib we'll make a script to import the model in the implementation in file `model.py` after setting the cwd into the directory
             - from model import model_cls
             - initialize the model by initializing it `model_cls(input_dim=INPUT_DIM)`
             - And then verify the model.
-
-        (version 2) for kaggle we'll make a script to call the fit and predict function in the implementation in file `model.py` after setting the cwd into the directory
     """
 
     def hash_func(
@@ -113,19 +111,15 @@ class ModelFBWorkspace(FBWorkspace):
     ):
         self.before_execute()
         try:
-            if self.target_task.version == 1:
-                if MODEL_COSTEER_SETTINGS.env_type == "docker":
-                    qtde = QTDockerEnv()
-                elif MODEL_COSTEER_SETTINGS.env_type == "conda":
-                    qtde = QlibCondaEnv(conf=QlibCondaConf())
-                else:
-                    raise ValueError(f"Unknown env_type: {MODEL_COSTEER_SETTINGS.env_type}")
+            if MODEL_COSTEER_SETTINGS.env_type == "docker":
+                qtde = QTDockerEnv()
+            elif MODEL_COSTEER_SETTINGS.env_type == "conda":
+                qtde = QlibCondaEnv(conf=QlibCondaConf())
             else:
-                qtde = KGDockerEnv()
+                raise ValueError(f"Unknown env_type: {MODEL_COSTEER_SETTINGS.env_type}")
             qtde.prepare()
 
-            if self.target_task.version == 1:
-                dump_code = f"""
+            dump_code = f"""
 MODEL_TYPE = "{self.target_task.model_type}"
 BATCH_SIZE = {batch_size}
 NUM_FEATURES = {num_features}
@@ -135,8 +129,6 @@ INPUT_VALUE = {input_value}
 PARAM_INIT_VALUE = {param_init_value}
 {(Path(__file__).parent / 'model_execute_template_v1.txt').read_text()}
 """
-            elif self.target_task.version == 2:
-                dump_code = (Path(__file__).parent / "model_execute_template_v2.txt").read_text()
 
             log, results = qtde.dump_python_code_run_and_get_results(
                 code=dump_code,
