@@ -15,6 +15,8 @@ import re
 import select
 import shutil
 import subprocess
+import sys
+import threading
 import time
 import uuid
 import zipfile
@@ -684,43 +686,60 @@ class LocalEnv(Env[ASpecificLocalConf]):
                 raise RuntimeError("The subprocess did not correctly create stdout/stderr pipes")
 
             if self.conf.live_output:
-                stdout_fd = process.stdout.fileno()
-                stderr_fd = process.stderr.fileno()
-
-                poller = select.poll()
-                poller.register(stdout_fd, select.POLLIN)
-                poller.register(stderr_fd, select.POLLIN)
-
                 combined_output = ""
-                while True:
-                    if process.poll() is not None:
-                        break
-                    events = poller.poll(100)
-                    for fd, event in events:
-                        if event & select.POLLIN:
-                            if fd == stdout_fd:
-                                while True:
-                                    output = process.stdout.readline()
-                                    if output == "":
-                                        break
-                                    Console().print(output.strip(), markup=False)
-                                    combined_output += output
-                            elif fd == stderr_fd:
-                                while True:
-                                    error = process.stderr.readline()
-                                    if error == "":
-                                        break
-                                    Console().print(error.strip(), markup=False)
-                                    combined_output += error
 
-                # Capture any final output
-                remaining_output, remaining_error = process.communicate()
-                if remaining_output:
-                    Console().print(remaining_output.strip(), markup=False)
-                    combined_output += remaining_output
-                if remaining_error:
-                    Console().print(remaining_error.strip(), markup=False)
-                    combined_output += remaining_error
+                if sys.platform != "win32":
+                    # Unix: use select.poll for efficient I/O multiplexing
+                    stdout_fd = process.stdout.fileno()
+                    stderr_fd = process.stderr.fileno()
+
+                    poller = select.poll()
+                    poller.register(stdout_fd, select.POLLIN)
+                    poller.register(stderr_fd, select.POLLIN)
+
+                    while True:
+                        if process.poll() is not None:
+                            break
+                        events = poller.poll(100)
+                        for fd, event in events:
+                            if event & select.POLLIN:
+                                if fd == stdout_fd:
+                                    while True:
+                                        output = process.stdout.readline()
+                                        if output == "":
+                                            break
+                                        Console().print(output.strip(), markup=False)
+                                        combined_output += output
+                                elif fd == stderr_fd:
+                                    while True:
+                                        error = process.stderr.readline()
+                                        if error == "":
+                                            break
+                                        Console().print(error.strip(), markup=False)
+                                        combined_output += error
+                else:
+                    # Windows: use threads to read stdout/stderr concurrently
+                    output_lines = []
+                    error_lines = []
+
+                    def read_stdout():
+                        for line in iter(process.stdout.readline, ""):
+                            Console().print(line.strip(), markup=False)
+                            output_lines.append(line)
+
+                    def read_stderr():
+                        for line in iter(process.stderr.readline, ""):
+                            Console().print(line.strip(), markup=False)
+                            error_lines.append(line)
+
+                    t_out = threading.Thread(target=read_stdout, daemon=True)
+                    t_err = threading.Thread(target=read_stderr, daemon=True)
+                    t_out.start()
+                    t_err.start()
+                    process.wait()
+                    t_out.join(timeout=5)
+                    t_err.join(timeout=5)
+                    combined_output = "".join(output_lines) + "".join(error_lines)
             else:
                 # Sacrifice real-time output to avoid possible standard I/O hangs
                 out, err = process.communicate()
