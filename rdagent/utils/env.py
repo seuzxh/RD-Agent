@@ -423,24 +423,25 @@ class Env(Generic[ASpecificEnvConf]):
             log_file_relative_path = log_file.relative_to(Path(local_path))
             entry = f"{entry} > {log_file_relative_path} 2>&1"
 
-        if self.conf.running_timeout_period is None:
-            timeout_cmd = entry
+        if sys.platform == "win32" and not isinstance(self.conf, DockerConf):
+            # Windows: skip /bin/sh wrapper and timeout (not available on host)
+            entry_add_timeout = entry
         else:
-            timeout_cmd = f"timeout --kill-after=10 {self.conf.running_timeout_period} {entry}"
-        entry_add_timeout = (
-            f"/bin/sh -c '"  # start of the sh command
-            + f"{timeout_cmd}; entry_exit_code=$?; "
-            + (
-                f"{_get_chmod_cmd(self.conf.mount_path)}; "
-                # We don't have to change the permission of the cache and input folder to remove it
-                # + f"if [ -d {self.conf.mount_path}/cache ]; then chmod 777 {self.conf.mount_path}/cache; fi; " +
-                #     f"if [ -d {self.conf.mount_path}/input ]; then chmod 777 {self.conf.mount_path}/input; fi; "
-                if isinstance(self.conf, DockerConf)
-                else ""
+            if self.conf.running_timeout_period is None:
+                timeout_cmd = entry
+            else:
+                timeout_cmd = f"timeout --kill-after=10 {self.conf.running_timeout_period} {entry}"
+            entry_add_timeout = (
+                f"/bin/sh -c '"  # start of the sh command
+                + f"{timeout_cmd}; entry_exit_code=$?; "
+                + (
+                    f"{_get_chmod_cmd(self.conf.mount_path)}; "
+                    if isinstance(self.conf, DockerConf)
+                    else ""
+                )
+                + "exit $entry_exit_code"
+                + "'"  # end of the sh command
             )
-            + "exit $entry_exit_code"
-            + "'"  # end of the sh command
-        )
 
         if self.conf.enable_cache:
             result = self.cached_run(
@@ -645,13 +646,17 @@ class LocalEnv(Env[ASpecificLocalConf]):
             if "CUDA_VISIBLE_DEVICES" in os.environ and "CUDA_VISIBLE_DEVICES" not in env:
                 env["CUDA_VISIBLE_DEVICES"] = os.environ["CUDA_VISIBLE_DEVICES"]
 
-            path = [
-                *self.conf.bin_path.split(":"),
-                "/bin/",
-                "/usr/bin/",
-                *env.get("PATH", "").split(":"),
-            ]
-            env["PATH"] = ":".join(path)
+            if sys.platform == "win32":
+                # Windows: use system PATH as-is
+                env["PATH"] = os.environ.get("PATH", "")
+            else:
+                path = [
+                    *self.conf.bin_path.split(":"),
+                    "/bin/",
+                    "/usr/bin/",
+                    *env.get("PATH", "").split(":"),
+                ]
+                env["PATH"] = ":".join(path)
 
             if entry is None:
                 entry = self.conf.default_entry
@@ -769,12 +774,18 @@ class CondaConf(LocalConf):
         to ensure bin_path is set correctly even if the conda env was just created.
         """
         conda_path_result = subprocess.run(
-            f"conda run -n {self.conda_env_name} --no-capture-output env | grep '^PATH='",
+            f"conda run -n {self.conda_env_name} --no-capture-output env",
             capture_output=True,
             text=True,
             shell=True,
         )
-        self.bin_path = conda_path_result.stdout.strip().split("=")[1] if conda_path_result.returncode == 0 else ""
+        if conda_path_result.returncode == 0:
+            for line in conda_path_result.stdout.strip().split("\n"):
+                if line.startswith("PATH="):
+                    self.bin_path = line.split("=", 1)[1]
+                    break
+        else:
+            self.bin_path = ""
 
 
 ## Docker Environment -----
