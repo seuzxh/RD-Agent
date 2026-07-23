@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import random
@@ -46,7 +47,7 @@ def _configure_app_logger() -> None:
 _configure_app_logger()
 
 
-_TARGETS_WITHOUT_USER_INTERACTION = {"fin_factor_report"}
+_TARGETS_WITHOUT_USER_INTERACTION = {"fin_factor_report", "fin_predict"}
 
 
 class RDAgentTask:
@@ -152,6 +153,10 @@ class RDAgentTask:
                         from rdagent.app.qlib_rd_loop.quant import main as fin_quant
 
                         fin_quant(**self.kwargs)
+                    elif self.target_name == "fin_predict":
+                        from rdagent.app.qlib_rd_loop.predict import main as fin_predict
+
+                        fin_predict(**self.kwargs)
                     else:
                         raise ValueError(f"Unknown target: {self.target_name}")
                 except Exception:
@@ -508,6 +513,7 @@ def upload_file():
     kwargs = {}
     loop_n_val = int(loop_n) if loop_n else None
     all_duration_val = f"{all_duration}h" if all_duration else None
+    auto_mode = request.form.get("auto_mode", "false").lower() in ("true", "1", "yes")
 
     if scenario == "Finance Data Building":
         target_name = "fin_factor"
@@ -516,6 +522,7 @@ def upload_file():
             "all_duration": all_duration_val,
             "base_features_path": str(trace_files_path),
             "description": request.form.get("description"),
+            "auto_mode": auto_mode,
         }
     if scenario == "Finance Model Implementation":
         target_name = "fin_model"
@@ -524,6 +531,7 @@ def upload_file():
             "all_duration": all_duration_val,
             "base_features_path": str(trace_files_path),
             "description": request.form.get("description"),
+            "auto_mode": auto_mode,
         }
     if scenario == "Finance Whole Pipeline":
         target_name = "fin_quant"
@@ -532,6 +540,7 @@ def upload_file():
             "all_duration": all_duration_val,
             "base_features_path": str(trace_files_path),
             "description": request.form.get("description"),
+            "auto_mode": auto_mode,
         }
     if scenario == "Finance Data Building (Reports)":
         target_name = "fin_factor_report"
@@ -803,6 +812,162 @@ def get_sota(trace_name: str):
         "detail": f"No session or message stream matching '{trace_name}'",
         "hint": "Try GET /traces to list available trace ids, or pass ?log_path=<path>",
     }), 404
+
+
+# ==================== Prediction Dashboard APIs ====================
+
+
+@app.route("/predict/experiments", methods=["GET"])
+def list_predict_experiments():
+    """List fin_factor experiments that have SOTA + params.pkl, for the prediction dashboard."""
+    from rdagent.log.sota_query import query_sota as _query_sota
+
+    experiments = []
+    seen_workspaces = set()
+
+    # Source 1: webUI traces (trace_folder)
+    trace_ids = _collect_existing_trace_ids(log_folder_path)
+    for tid in trace_ids:
+        if not tid.startswith("Finance Data Building/"):
+            continue
+        sota_response = get_sota(tid)
+        if sota_response[1] != 200:
+            continue
+        result = sota_response[0].get_json()
+        if not result or not result.get("sota_factors"):
+            continue
+        wp = result.get("experiment_workspace_path")
+        if not wp or not Path(wp).exists() or wp in seen_workspaces:
+            continue
+        import glob as _glob
+        if not _glob.glob(str(Path(wp) / "mlruns/*/*/artifacts/params.pkl")):
+            continue
+        seen_workspaces.add(wp)
+        experiments.append(_build_exp_entry(tid, result, wp))
+
+    # Source 2: CLI sessions (log/ directory)
+    log_root = Path("log")
+    if log_root.exists():
+        for ts_dir in sorted(log_root.iterdir()):
+            if not (ts_dir / "__session__").is_dir():
+                continue
+            try:
+                result = _query_sota(ts_dir)
+            except Exception:
+                continue
+            if "error" in result or not result.get("sota_factors"):
+                continue
+            wp = result.get("experiment_workspace_path")
+            if not wp or not Path(wp).exists() or wp in seen_workspaces:
+                continue
+            import glob as _glob
+            if not _glob.glob(str(Path(wp) / "mlruns/*/*/artifacts/params.pkl")):
+                continue
+            seen_workspaces.add(wp)
+            tid = f"CLI/{ts_dir.name}"
+            experiments.append(_build_exp_entry(tid, result, wp))
+
+    return jsonify({"experiments": experiments})
+
+
+def _build_exp_entry(tid: str, result: dict, wp: str) -> dict:
+    """Build an experiment entry for the predict API response."""
+    metrics = result.get("sota_metrics", {})
+    return {
+        "trace_id": tid,
+        "name": tid.split("/")[-1],
+        "created_at": tid,
+        "factor_count": len(result.get("sota_factors", [])),
+        "metrics": {
+            "IC": round(metrics.get("IC", 0), 4) if isinstance(metrics.get("IC"), (int, float)) else None,
+            "annualized_return": round(metrics.get("1day.excess_return_with_cost.annualized_return", 0), 4)
+            if isinstance(metrics.get("1day.excess_return_with_cost.annualized_return"), (int, float))
+            else None,
+            "max_drawdown": round(metrics.get("1day.excess_return_with_cost.max_drawdown", 0), 4)
+            if isinstance(metrics.get("1day.excess_return_with_cost.max_drawdown"), (int, float))
+            else None,
+        },
+        "has_model": True,
+        "workspace_path": wp,
+        "sota_factors": [(f["name"], f.get("code", "")) for f in result.get("sota_factors", [])],
+    }
+
+
+@app.route("/predict/run", methods=["POST"])
+def run_predict():
+    """Trigger an async prediction task for a given experiment."""
+    data = request.get_json(silent=True) or {}
+    trace_id = data.get("trace_id")
+    if not trace_id:
+        return jsonify({"error": "trace_id is required"}), 400
+
+    # Resolve experiment details
+    import glob as _glob
+    if trace_id.startswith("CLI/"):
+        # CLI session: query_sota directly
+        from rdagent.log.sota_query import query_sota as _qs
+        log_path = Path("log") / trace_id.split("/", 1)[1]
+        result = _qs(log_path)
+        if "error" in result or not result.get("sota_factors"):
+            return jsonify({"error": "no SOTA for this trace"}), 404
+    else:
+        # webUI trace: use get_sota
+        sota_response = get_sota(trace_id)
+        if sota_response[1] != 200:
+            return jsonify({"error": f"trace not found or no SOTA: {trace_id}"}), 404
+        result = sota_response[0].get_json()
+        if not result or not result.get("sota_factors"):
+            return jsonify({"error": "no SOTA for this trace"}), 404
+    wp = result.get("experiment_workspace_path")
+    if not wp or not Path(wp).exists():
+        return jsonify({"error": "workspace not found"}), 404
+    params_files = _glob.glob(str(Path(wp) / "mlruns/*/*/artifacts/params.pkl"))
+    if not params_files:
+        return jsonify({"error": "params.pkl not found"}), 404
+    sota_factors = [(f["name"], f.get("code", "")) for f in result.get("sota_factors", [])]
+
+    # Create prediction task (reuse RDAgentTask infrastructure)
+    trace_name = f"{randomname.get_name()}-{datetime.now().strftime('%Y%m%d')}"
+    scenario = "Finance Prediction"
+    log_trace_path = log_folder_path / scenario / trace_name
+    stdout_path = log_folder_path / scenario / f"{trace_name}.log"
+    log_trace_path.mkdir(parents=True, exist_ok=True)
+
+    kwargs = {
+        "trace_id": trace_id,
+        "workspace_path": wp,
+        "sota_factors": sota_factors,
+    }
+    task = RDAgentTask(
+        target_name="fin_predict",
+        kwargs=kwargs,
+        stdout_path=str(stdout_path),
+        log_trace_path=str(log_trace_path),
+        scenario=scenario,
+        trace_name=trace_name,
+        ui_server_port=app.config.get("UI_SERVER_PORT", 19899),
+    )
+    task.start()
+    rdagent_processes[str(log_trace_path)] = task
+    return jsonify({"task_id": f"{scenario}/{trace_name}"})
+
+
+@app.route("/predict/history", methods=["GET"])
+def predict_history():
+    """List historical prediction records."""
+    trace_id = request.args.get("trace_id")
+    history_dir = log_folder_path / "Prediction History"
+    records = []
+    if history_dir.exists():
+        for f in sorted(history_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+            try:
+                rec = json.loads(f.read_text())
+                if trace_id and rec.get("source_trace_id") != trace_id:
+                    continue
+                records.append(rec)
+            except Exception:
+                continue
+    return jsonify({"records": records})
 
 
 @app.route("/", methods=["GET"])

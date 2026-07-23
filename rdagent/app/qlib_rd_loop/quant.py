@@ -149,13 +149,16 @@ def main(
     else:
         quant_loop = QuantRDLoop.load(path, checkout=checkout)
     quant_loop._init_base_features(base_features_path)
-    if description:
-        # User provided a description via the webUI -> use the framework's native
-        # user_instruction channel (LLMHypothesisGen.gen reads plan["user_instruction"])
-        # and skip the interactive initial-params flow.
-        quant_loop.plan["user_instruction"] = description
-    elif "user_interaction_queues" in kwargs and kwargs["user_interaction_queues"] is not None:
+
+    auto_mode = kwargs.get("auto_mode", False)
+    has_queues = "user_interaction_queues" in kwargs and kwargs["user_interaction_queues"] is not None
+
+    if not auto_mode and has_queues:
         quant_loop._set_interactor(*kwargs["user_interaction_queues"])
+
+    if description:
+        quant_loop.plan["user_instruction"] = description
+    elif not auto_mode and hasattr(quant_loop, "user_request_q"):
         quant_loop._interact_init_params()
 
     asyncio.run(quant_loop.run(step_n=step_n, loop_n=loop_n, all_duration=all_duration))
