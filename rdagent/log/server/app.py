@@ -115,6 +115,16 @@ class RDAgentTask:
                 pass
 
     def _run(self) -> None:
+        import os as _os
+        # Ensure critical env vars survive into the forked subprocess.
+        # Some environments (nohup, systemd) don't propagate these properly.
+        if not _os.environ.get("CONDA_DEFAULT_ENV"):
+            _os.environ["CONDA_DEFAULT_ENV"] = "rdagent4qlib"
+        if not _os.environ.get("MLFLOW_ALLOW_FILE_STORE"):
+            _os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
+        # Clear empty CONDA_ENV_NAME that pydantic-settings reads (overrides init kwargs)
+        if _os.environ.get("CONDA_ENV_NAME") == "":
+            del _os.environ["CONDA_ENV_NAME"]
         from rdagent.log.conf import LOG_SETTINGS
 
         LOG_SETTINGS.set_ui_server_port(self.ui_server_port)

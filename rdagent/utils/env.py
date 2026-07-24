@@ -735,7 +735,7 @@ class LocalEnv(Env[ASpecificLocalConf]):
 
 
 class CondaConf(LocalConf):
-    conda_env_name: str
+    conda_env_name: str = "rdagent4qlib"
     default_entry: str = "python main.py"
 
     @model_validator(mode="after")
