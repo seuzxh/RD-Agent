@@ -49,6 +49,7 @@ export default defineConfig({
     proxy: {
       '/traces': 'http://115.190.106.124:19899',
       '/trace': 'http://115.190.106.124:19899',
+      '/predict': 'http://115.190.106.124:19899',
       '/upload': 'http://115.190.106.124:19899',
       '/control': 'http://115.190.106.124:19899',
       '/logs': 'http://115.190.106.124:19899',

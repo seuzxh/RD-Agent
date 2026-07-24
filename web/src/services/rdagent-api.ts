@@ -83,3 +83,34 @@ export async function fetchStdoutRange(id: string, offset: number, signal?: Abor
   const len = Number(response.headers.get('Content-Length')) || text.length
   return { text, nextOffset: len }
 }
+
+// ==================== Prediction Dashboard ====================
+
+export interface PredictExperiment {
+  trace_id: string
+  name: string
+  created_at: string
+  factor_count: number
+  metrics: { IC: number | null; annualized_return: number | null; max_drawdown: number | null }
+  has_model: boolean
+}
+
+export interface Top20Item { rank: number; instrument: string; score: number }
+export interface Top20Result { predict_date: string; top20: Top20Item[] }
+export interface PredictRecord {
+  date: string
+  source_trace_id: string
+  top20: Top20Item[]
+  created_at: string
+}
+
+export const fetchPredictExperiments = (signal?: AbortSignal) =>
+  fetch('/predict/experiments', { signal }).then(r => parseResponse<{ experiments: PredictExperiment[] }>(r))
+
+export const runPredict = (traceId: string) =>
+  fetch('/predict/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trace_id: traceId }) })
+    .then(r => parseResponse<{ task_id: string }>(r))
+
+export const fetchPredictHistory = (traceId?: string, signal?: AbortSignal) =>
+  fetch(`/predict/history${traceId ? '?trace_id=' + encodeURIComponent(traceId) : ''}`, { signal })
+    .then(r => parseResponse<{ records: PredictRecord[] }>(r))

@@ -1,8 +1,22 @@
 from typing import Optional
 
+from pydantic import field_validator
 from pydantic_settings import SettingsConfigDict
 
 from rdagent.components.workflow.conf import BasePropSetting
+
+
+def _resolve_auto_test_end(v: Optional[str]) -> Optional[str]:
+    """如果 test_end 是 'auto'，动态取 qlib 最新交易日。
+    qlib 未 init 时 fallback 到 None（让 yaml 模板的 default 生效）。"""
+    if v != "auto":
+        return v
+    try:
+        from qlib.data import D
+
+        return str(D.calendar(freq="day")[-1].date())
+    except Exception:
+        return None
 
 
 class ModelBasePropSetting(BasePropSetting):
@@ -45,8 +59,13 @@ class ModelBasePropSetting(BasePropSetting):
     test_start: str = "2017-01-01"
     """Start date of the test / backtest segment"""
 
-    test_end: Optional[str] = "2020-08-01"
-    """End date of the test / backtest segment"""
+    test_end: Optional[str] = "auto"
+    """End date of the test / backtest segment. 'auto' = qlib 最新交易日"""
+
+    @field_validator("test_end")
+    @classmethod
+    def _resolve_test_end(cls, v):
+        return _resolve_auto_test_end(v)
 
 
 class FactorBasePropSetting(BasePropSetting):
@@ -89,8 +108,13 @@ class FactorBasePropSetting(BasePropSetting):
     test_start: str = "2017-01-01"
     """Start date of the test / backtest segment"""
 
-    test_end: Optional[str] = "2020-08-01"
-    """End date of the test / backtest segment"""
+    test_end: Optional[str] = "auto"
+    """End date of the test / backtest segment. 'auto' = qlib 最新交易日"""
+
+    @field_validator("test_end")
+    @classmethod
+    def _resolve_test_end(cls, v):
+        return _resolve_auto_test_end(v)
 
     model_selector: str = "lgbm"
     """Model for factor validation.
@@ -176,8 +200,13 @@ class QuantBasePropSetting(BasePropSetting):
     test_start: str = "2017-01-01"
     """Start date of the test / backtest segment"""
 
-    test_end: Optional[str] = "2020-08-01"
-    """End date of the test / backtest segment"""
+    test_end: Optional[str] = "auto"
+    """End date of the test / backtest segment. 'auto' = qlib 最新交易日"""
+
+    @field_validator("test_end")
+    @classmethod
+    def _resolve_test_end(cls, v):
+        return _resolve_auto_test_end(v)
 
 
 FACTOR_PROP_SETTING = FactorBasePropSetting()
