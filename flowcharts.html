@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <title>RD-Agent 前后端流程图</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      padding: 12px;
+      line-height: 1.6;
+    }
+    h1 {
+      font-size: 20px;
+      color: #58a6ff;
+      padding: 12px 0;
+      border-bottom: 1px solid #21262d;
+      margin-bottom: 16px;
+    }
+    nav {
+      position: sticky;
+      top: 0;
+      background: #0d1117;
+      padding: 8px 0;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #21262d;
+      z-index: 10;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    nav a {
+      display: inline-block;
+      color: #8b949e;
+      text-decoration: none;
+      padding: 6px 10px;
+      margin-right: 4px;
+      font-size: 13px;
+      border: 1px solid #21262d;
+      border-radius: 6px;
+    }
+    nav a:active { background: #21262d; color: #58a6ff; }
+    section {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+    h2 {
+      font-size: 16px;
+      color: #58a6ff;
+      margin-bottom: 8px;
+    }
+    .desc {
+      font-size: 13px;
+      color: #8b949e;
+      margin-bottom: 10px;
+    }
+    .mermaid {
+      background: #ffffff;
+      border-radius: 6px;
+      padding: 8px;
+      overflow-x: auto;
+      text-align: center;
+    }
+    .legend {
+      font-size: 12px;
+      color: #8b949e;
+      margin-top: 8px;
+      padding: 8px;
+      background: #0d1117;
+      border-radius: 4px;
+    }
+    .legend code { color: #f0883e; }
+  </style>
+</head>
+<body>
+  <h1>RD-Agent 前后端流程图</h1>
+  <nav>
+    <a href="#arch">整体架构</a>
+    <a href="#task-msg">Task/Message</a>
+    <a href="#new-task">新建任务</a>
+    <a href="#view-task">查看任务</a>
+    <a href="#history">历史任务</a>
+    <a href="#msg-flow">消息流转</a>
+    <a href="#interact">用户交互</a>
+    <a href="#predict">预测看板</a>
+  </nav>
+
+  <section id="arch">
+    <h2>1. 前后端整体架构</h2>
+    <div class="desc">浏览器与 Flask 服务端、子进程、文件存储的关系总览。</div>
+    <div class="mermaid">
+graph TD
+    subgraph 浏览器["浏览器 Vue3+Vite"]
+        PG["PlaygroundPage.vue<br/全量拉取 3s"]
+        MA["MultiAlphaApp<br/>cursor 增量 5s"]
+        PD["PredictDashboard"]
+    end
+
+    subgraph Flask["Flask 服务端 :19899<br/>单进程单线程"]
+        R1["GET /traces<br/>列出任务"]
+        R2["POST /trace<br/>按 cursor 返回消息"]
+        R3["POST /upload<br/>启动子进程"]
+        R4["POST /control<br/>pause/resume/stop"]
+        R5["GET /stdout<br/>Range 读日志"]
+        R6["GET /health<br/>ping Docker"]
+        R7["POST /receive<br/>WebStorage 推送"]
+        R8["GET /traces/id/sota"]
+        R9["POST /user_interaction/submit"]
+        MEM["rdagent_processes<br/>dict trace_id - RDAgentTask<br/>task.messages: list"]
+    end
+
+    subgraph 子进程["RDAgent 子进程"]
+        LOOP["RD 循环<br/>proposal-coder-runner-feedback"]
+        LOG["RDAgentLog.log_object"]
+        UI["user_request_q.put"]
+    end
+
+    subgraph 存储["文件存储"]
+        PKL["traces/.../*.pkl<br/>pickle 二进制"]
+        LOGF["*.log 纯文本"]
+        JSON["Prediction History/*.json"]
+        SQLITE["LLM 缓存 SQLite"]
+        MLF["mlruns/ MLflow"]
+    end
+
+    PG --> R2
+    PG --> R5
+    MA --> R1
+    MA --> R2
+    MA --> R3
+    MA --> R4
+    MA --> R9
+    PD --> R8
+
+    R2 --> MEM
+    R3 --> MEM
+    R7 --> MEM
+    R9 --> MEM
+
+    R3 -->|fork| LOOP
+    LOOP --> LOG
+    LOOP --> UI
+
+    LOG -->|FileStorage| PKL
+    LOG -->|WebStorage HTTP| R7
+    LOOP -->|redirect stdout| LOGF
+    LOOP -->|log_metric| MLF
+    LOOP -->|LLM 缓存| SQLITE
+
+    R8 --> PKL
+    R8 --> MLF
+    </div>
+    <div class="legend">
+      <code>红框</code>瓶颈点：单线程 Flask / 全量拉取 / N+1 pickle 加载
+    </div>
+  </section>
+
+  <section id="task-msg">
+    <h2>2. Task 与 Message 的关系</h2>
+    <div class="desc">一个 Task 承载一次运行，Message 是其中每条结构化日志。</div>
+    <div class="mermaid">
+graph TD
+    subgraph Task["RDAgentTask (1次运行)"]
+        PROC["process: 子进程<br/>multiprocessing.Process"]
+        REQ["user_request_q<br/>子→父 交互请求"]
+        RESP["user_response_q<br/>父→子 用户输入"]
+        MSGS["messages: list Message"]
+        PTR["pointers<br/>按 client 已读位置"]
+    end
+
+    subgraph Msgs["messages 按时间顺序追加"]
+        M0["[0] research.hypothesis<br/>loop_id=0"]
+        M1["[1] research.tasks<br/>loop_id=0"]
+        M2["[2] evolving.codes<br/>loop_id=0 evo_id=0"]
+        M3["[3] evolving.feedbacks<br/>loop_id=0 evo_id=0"]
+        M4["[...] 更多 evo 代"]
+        M5["[N] feedback.metric<br/>loop_id=0"]
+        M6["[N+1] feedback.hypothesis_feedback"]
+        M7["[...] 更多 loop"]
+        M8["[-1] END<br/>end_code"]
+    end
+
+    PROC -->|运行 RD 循环| SINK["RDAgentLog.log_object"]
+    SINK -->|WebStorage POST /receive| MSGS
+    SINK -->|FileStorage pickle| PKL2["*.pkl 落盘"]
+    PROC --> REQ
+    REQ -->|drain 到 messages| MSGS
+    RESP -.->|唤醒子进程| PROC
+
+    MSGS --> M0
+    MSGS --> M1
+    MSGS --> M2
+    MSGS --> M3
+    MSGS --> M4
+    MSGS --> M5
+    MSGS --> M6
+    MSGS --> M7
+    MSGS --> M8
+    </div>
+  </section>
+
+  <section id="new-task">
+    <h2>3. 新建任务时序图</h2>
+    <div class="desc">用户提交表单 → 启动子进程 → 首次拉取 → 开始轮询。</div>
+    <div class="mermaid">
+sequenceDiagram
+    actor U as 用户
+    participant FE as 前端 MultiAlphaApp
+    participant SRV as Flask 服务端
+    participant SUB as 子进程
+    participant FS as 文件存储
+
+    U->>FE: 填写表单点击启动
+    FE->>SRV: POST /upload FormData
+    SRV->>SRV: 创建 RDAgentTask
+    SRV->>SUB: Process.start fork
+    SUB->>FS: pickle.dump 首条消息
+    SUB->>SRV: POST /receive (WebStorage)
+    SRV-->>FE: {id: scenario/name}
+    FE->>SRV: GET /traces 刷新列表
+    SRV-->>FE: 任务列表
+    FE->>SRV: POST /trace all=true reset=true
+    Note over SRV: return_all=true start=0
+    SRV-->>FE: messages 0:N
+    FE->>FE: 渲染 + 启动 poll
+    loop 每 5s
+        FE->>SRV: POST /trace cursor=messages.length
+        SRV->>SRV: drain user_requests
+        SRV-->>FE: messages N:M 增量
+        FE->>FE: push 追加
+    end
+    </div>
+  </section>
+
+  <section id="view-task">
+    <h2>4. 查看运行中任务时序图</h2>
+    <div class="desc">从侧边栏点击一个正在运行的任务。</div>
+    <div class="mermaid">
+sequenceDiagram
+    actor U as 用户
+    participant FE as 前端
+    participant SRV as Flask
+    participant TASK as RDAgentTask 内存
+    participant SUB as 子进程
+
+    U->>FE: 点击任务
+    FE->>FE: selectTrace id
+    FE->>FE: stopPolling 清旧轮询
+    FE->>FE: 检查 LRU 缓存
+    alt 缓存命中
+        FE->>FE: 直接用缓存 messages
+    else 未命中
+        FE->>SRV: POST /trace all=true reset=true
+        SRV->>TASK: _get_or_create_task
+        SRV->>TASK: _drain_user_requests
+        TASK-->>SRV: messages 0:N
+        SRV-->>FE: 返回全量
+    end
+    FE->>FE: deriveTraceStatus
+    alt status != done
+        loop 每 5s
+            FE->>SRV: POST /trace cursor=N
+            SRV->>TASK: drain user_requests
+            SRV->>SUB: 检查 is_alive
+            alt 子进程结束
+                SRV->>TASK: 追加 END tag
+            end
+            TASK-->>SRV: messages N:M
+            SRV-->>FE: 增量
+            FE->>FE: push + 更新 status
+            alt status == done
+                FE->>FE: 停止轮询
+            end
+        end
+    end
+    </div>
+  </section>
+
+  <section id="history">
+    <h2>5. 查看历史任务时序图</h2>
+    <div class="desc">点击已结束的任务，无运行中的子进程。</div>
+    <div class="mermaid">
+sequenceDiagram
+    actor U as 用户
+    participant FE as 前端
+    participant SRV as Flask
+    participant FS as 文件存储 pkl
+
+    Note over SRV: 服务启动时已执行
+    SRV->>FS: _load_existing_traces
+    FS-->>SRV: 全量 pickle.load 所有 trace
+    SRV->>SRV: 填充各 task.messages
+
+    U->>FE: 点击历史任务
+    FE->>SRV: POST /trace all=true reset=true
+    SRV->>SRV: _get_or_create_task
+    Note over SRV: process is None<br/>create_process=False
+    SRV-->>FE: messages 0:N 从内存
+    FE->>FE: deriveTraceStatus
+    Note over FE: 检测到 END tag<br/>status=done
+    FE->>FE: 不启动轮询
+
+    FE->>SRV: GET /traces/id/sota 按需
+    SRV->>FS: LoopBase.load pickle
+    SRV->>FS: 扫描 mlruns artifacts
+    FS-->>SRV: SOTA 指标/因子/代码
+    SRV-->>FE: 返回
+    </div>
+  </section>
+
+  <section id="msg-flow">
+    <h2>6. 消息双通道流转</h2>
+    <div class="desc">每条 Message 同时走两条路径：落盘 + HTTP 推送。</div>
+    <div class="mermaid">
+graph LR
+    OBJ["Python 对象<br/>Hypothesis/Experiment/Feedback"]
+    LOG["RDAgentLog.log_object"]
+
+    OBJ --> LOG
+
+    LOG -->|路径A 主存储| FS["FileStorage.log<br/>save_type=pkl 默认"]
+    FS --> PKL["traces/.../*.pkl<br/>pickle 二进制<br/>每条一个文件"]
+
+    LOG -->|路径B 旁路推送| WS["WebStorage.log<br/>_obj_to_json 转换"]
+    WS -->|POST /receive<br/>timeout=1s| SRV["Flask receive_msgs"]
+    SRV -->|append| MEM["task.messages<br/>内存 list"]
+
+    PKL -.->|服务重启时恢复| MEM
+
+    MEM -->|POST /trace cursor| FE["前端 messages.value"]
+    FE -->|push 增量| UI["渲染 Loop/Evo/Feedback 面板"]
+
+    style PKL fill:#ffe0b2
+    style MEM fill:#c8e6c9
+    style WS fill:#ffcdd2
+    </div>
+    <div class="legend">
+      <code>橙色</code> pickle 落盘 主存储<br/>
+      <code>绿色</code> 内存 前端实际消费<br/>
+      <code>红色</code> WebStorage 超时丢日志风险
+    </div>
+  </section>
+
+  <section id="interact">
+    <h2>7. 用户交互流程（交互式模式）</h2>
+    <div class="desc">子进程需要用户输入时，通过双队列 IPC 与前端通信。</div>
+    <div class="mermaid">
+sequenceDiagram
+    participant SUB as 子进程
+    participant SRV as Flask 服务端
+    participant FE as 前端
+    actor U as 用户
+
+    SUB->>SUB: 需要用户输入
+    SUB->>SRV: user_request_q.put req
+    Note over SUB: 阻塞等待 response_q.get
+
+    FE->>SRV: POST /trace cursor=N
+    SRV->>SRV: _drain_user_requests_into_messages
+    SRV->>SRV: task.messages.append req
+    SRV-->>FE: 返回含 user_interaction.request
+    FE->>FE: 检测到 request 弹窗
+    U->>FE: 填写提交
+    FE->>SRV: POST /user_interaction/submit
+    SRV->>SRV: user_response_q.put payload
+    SRV-->>FE: 200 OK
+    SRV->>SUB: 队列唤醒
+    SUB->>SUB: response_q.get 继续
+    </div>
+  </section>
+
+  <section id="predict">
+    <h2>8. 预测看板时序图</h2>
+    <div class="desc">加载实验列表 → 运行预测 → 轮询 Top20。</div>
+    <div class="mermaid">
+sequenceDiagram
+    actor U as 用户
+    participant FE as 前端
+    participant SRV as Flask
+    participant FS as 文件存储
+
+    U->>FE: 点击预测
+    FE->>SRV: GET /predict/experiments
+    loop 每个 trace N+1
+        SRV->>FS: LoopBase.load pickle
+        SRV->>FS: 扫描 mlruns
+        FS-->>SRV: SOTA 指标
+    end
+    SRV-->>FE: experiments 列表
+
+    U->>FE: 选中实验点预测
+    FE->>SRV: POST /predict/run trace_id
+    SRV->>SRV: 启动预测子进程
+    SRV-->>FE: task_id
+
+    loop 每 5s 最多 120 次
+        FE->>SRV: POST /trace id=task_id cursor=N
+        SRV-->>FE: messages 增量
+        alt 含 prediction.top20
+            FE->>FE: 显示 Top20
+        else 含 END
+            FE->>FE: 判断 end_code 停止
+        end
+    end
+
+    U->>FE: 查看历史预测
+    FE->>SRV: GET /predict/history trace_id
+    SRV->>FS: 全量读 Prediction History/*.json
+    FS-->>SRV: JSON
+    SRV-->>FE: 返回
+    </div>
+  </section>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'default',
+      flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
+      sequence: { useMaxWidth: true, wrap: true },
+      config: { securityLevel: 'loose' }
+    });
+  </script>
+</body>
+</html>
