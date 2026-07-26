@@ -197,3 +197,7 @@ doc/_site/
 doc/.jekyll-cache/
 doc/.jekyll-metadata
 doc/Gemfile.lock
+
+# 工具本地目录（codegraph 索引、zcode 会话缓存）
+.codegraph/
+.zcode/

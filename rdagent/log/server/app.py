@@ -590,23 +590,31 @@ def read_trace(log_path: Path, id: str = "") -> None:
 
 
 def _collect_existing_trace_ids(trace_root: Path) -> list[str]:
-    """Return trace ids that should be visible in the UI history panel."""
+    """Return trace ids that should be visible in the UI history panel.
 
-    if not trace_root.exists():
-        return []
+    合并两个数据源：
+    - 文件系统扫描（已落盘、含 .pkl 的历史任务）
+    - 内存 trace_states 中 status=running 的任务（/upload 后子进程尚未写出 .pkl，
+      否则新建任务在看板里会缺失，Bug 1）
+    """
+    trace_ids: set[str] = set()
 
-    trace_ids: list[str] = []
-    for trace_dir in sorted(trace_root.glob("*/*"), key=lambda p: str(p)):
-        if not trace_dir.is_dir():
-            continue
-        if "uploads" in trace_dir.relative_to(trace_root).parts:
-            continue
-        if not any(trace_dir.rglob("*.pkl")):
-            continue
+    if trace_root.exists():
+        for trace_dir in sorted(trace_root.glob("*/*"), key=lambda p: str(p)):
+            if not trace_dir.is_dir():
+                continue
+            if "uploads" in trace_dir.relative_to(trace_root).parts:
+                continue
+            if not any(trace_dir.rglob("*.pkl")):
+                continue
+            trace_ids.add(trace_dir.relative_to(trace_root).as_posix())
 
-        trace_ids.append(trace_dir.relative_to(trace_root).as_posix())
+    # 合并内存 catalog 中尚未落盘的 running 任务（/upload 已同步初始化 trace_states）
+    for tid, state in trace_states.items():
+        if state.get("status") == "running":
+            trace_ids.add(tid)
 
-    return trace_ids
+    return sorted(trace_ids)
 
 
 def _index_trace_catalog_from_files(trace_dir: Path, trace_id: str) -> None:
