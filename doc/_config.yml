@@ -12,6 +12,10 @@ exclude:
   - Gemfile
   - Gemfile.lock
   - node_modules
+  - vendor       # bundle 装的 gems（含 jekyll 自身模板，否则 _posts 报 Invalid date）
+  - .sass-cache
+  - .jekyll-cache
+  - .jekyll-metadata
 
 # 页面辅助
 defaults:
