@@ -905,16 +905,10 @@ def upload_file():
     global rdagent_processes
     scenario = request.form.get("scenario")
     files = request.files.getlist("files")
-    competition = request.form.get("competition")
     loop_n = request.form.get("loops")
     all_duration = request.form.get("all_duration")
 
-    # scenario = "Data Science Loop"
-    if scenario == "Data Science":
-        competition = competition[10:]  # Eg. MLE-Bench:aerial-cactus-competition
-        trace_name = f"{competition}-{randomname.get_name()}"
-    else:
-        trace_name = randomname.get_name()
+    trace_name = randomname.get_name()
     trace_files_path = log_folder_path / "uploads" / scenario / trace_name
 
     log_trace_path = (log_folder_path / scenario / trace_name).absolute()
