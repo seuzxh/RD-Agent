@@ -23,7 +23,7 @@
   height: 20px;
   margin: 0;
   overflow: hidden;
-  font: 10px/20px 'JetBrains Mono', monospace;
+  font: 10px/20px 'JetBrains Mono',monospace;
   white-space: pre;
   text-overflow: ellipsis;
 }
