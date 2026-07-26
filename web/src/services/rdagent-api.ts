@@ -25,6 +25,19 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 export const fetchTraceIds = (signal?: AbortSignal) => fetch('/traces', { signal }).then(response => parseResponse<string[]>(response))
+
+export interface TraceStatusItem {
+  id: string
+  status: 'running' | 'done' | 'error' | 'idle'
+  loops: number[]
+  created_at: string | null
+  updated_at: string | null
+  has_chart: boolean
+}
+
+/** C1 catalog: 批量获取所有 trace 状态（替代 N+1 全量拉取） */
+export const fetchTraceStatuses = (signal?: AbortSignal) =>
+  fetch('/traces/status', { signal }).then(response => parseResponse<TraceStatusItem[]>(response))
 export const fetchTrace = (data: TraceRequest, signal?: AbortSignal) => fetch('/trace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal }).then(response => parseResponse<TraceMessage[]>(response))
 export const uploadTask = (data: FormData, signal?: AbortSignal) => fetch('/upload', { method: 'POST', body: data, signal }).then(response => parseResponse<{ id?: string; error?: string }>(response))
 export const controlTask = (id: string, action: string, signal?: AbortSignal) => fetch('/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action }), signal }).then(response => parseResponse<unknown>(response))

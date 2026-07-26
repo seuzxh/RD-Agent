@@ -1,6 +1,6 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { controlTask, fetchTrace, fetchTraceIds, uploadTask } from './api'
+import { controlTask, fetchTrace, fetchTraceIds, fetchTraceStatuses, uploadTask } from './api'
 import { buildTraceView, deriveTraceStatus } from './trace-model'
 import type { TaskMethod, TraceMessage, TraceStatus, TraceTask } from './types'
 
@@ -36,29 +36,44 @@ export function useMultiAlpha() {
     while (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value as string)
   }
 
+  let listGeneration = 0
+
   async function loadTraceIds() {
     listLoading.value = true; listError.value = ''
+    const generation = ++listGeneration
     try {
       traceIds.value = await fetchTraceIds()
+      if (generation !== listGeneration) return  // 被新一轮刷新取代
       // Use cached statuses immediately so the list renders without blocking.
       for (const id of traceIds.value) {
         const cached = cache.get(id)
         if (cached) statuses.value[id] = deriveTraceStatus(cached)
       }
-      // Backfill statuses for non-cached traces in the background.
-      const uncached = traceIds.value.filter(id => !cache.has(id))
-      loadStatusesSequentially(uncached)
+      // C2: 批量获取所有 trace 状态（单次请求，替代 N+1 全量拉取）
+      loadStatusesBatch(generation)
     }
     catch (error) { listError.value = error instanceof Error ? error.message : '任务列表加载失败'; ElMessage.error(listError.value) }
     finally { listLoading.value = false }
   }
 
-  async function loadStatusesSequentially(ids: string[]) {
-    for (const id of ids) {
-      try {
-        const msgs = await fetchTrace({ id, all: true, reset: true })
-        statuses.value[id] = deriveTraceStatus(msgs)
-      } catch { statuses.value[id] = 'idle' }
+  async function loadStatusesBatch(generation: number) {
+    try {
+      const items = await fetchTraceStatuses()
+      if (generation !== listGeneration) return  // 旧请求过期，丢弃
+      for (const item of items) {
+        statuses.value[item.id] = item.status
+      }
+    } catch {
+      // catalog 端点不可用（旧后端）→ 回退：对未缓存 trace 逐个拉取
+      const uncached = traceIds.value.filter(id => !cache.has(id) && !statuses.value[id])
+      for (const id of uncached) {
+        if (generation !== listGeneration) return
+        try {
+          const msgs = await fetchTrace({ id, all: true, reset: true })
+          if (generation !== listGeneration) return
+          statuses.value[id] = deriveTraceStatus(msgs)
+        } catch { statuses.value[id] = 'idle' }
+      }
     }
   }
 
