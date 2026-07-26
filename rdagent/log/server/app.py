@@ -19,6 +19,7 @@ from werkzeug.utils import secure_filename
 from rdagent.log.storage import FileStorage
 from rdagent.log.ui.conf import UI_SETTING
 from rdagent.log.ui.storage import WebStorage
+from rdagent.log.utils import extract_loopid_func_name
 
 app = Flask(__name__, static_folder=str(Path(UI_SETTING.static_path).resolve()))
 CORS(app)
@@ -405,12 +406,29 @@ def _read_trace_into(log_path: Path, task: RDAgentTask) -> None:
     """把历史 trace 的 pkl 读入给定 task 的 messages（不污染 registry）。
 
     read_trace 的无副作用版本——不调 _get_or_create_task/_get_or_load_task。
+
+    C4 一致性：对 feedback.return_chart 消息做 descriptor 替换（与 /receive 实时路径一致），
+    避免历史 trace 仍内联 5MB chart_html。
     """
+    external_id = _trace_id_to_external(str(log_path))
     fs = FileStorage(log_path)
     ws = WebStorage(port=1, path=log_path)
     task.messages = []
     last_timestamp = None
     for msg in fs.iter_msg():
+        # C4 历史路径补齐：chart tag 不走 _obj_to_json（避免 plotly.io.to_html 生成 5MB inline），
+        # 直接生成轻量 descriptor。原 pickle 仍保留在磁盘上，C5 artifact 端点会按需读取。
+        if "Quantitative Backtesting Chart" in msg.tag:
+            loop_id, _ = extract_loopid_func_name(msg.tag)
+            descriptor = _make_chart_descriptor(
+                trace_id=external_id,
+                loop_id=loop_id,
+                timestamp=msg.timestamp.isoformat(),
+            )
+            task.messages.append(descriptor)
+            last_timestamp = msg.timestamp
+            continue
+
         data = ws._obj_to_json(obj=msg.content, tag=msg.tag, id=str(log_path), timestamp=msg.timestamp.isoformat())
         if data:
             if isinstance(data, list):
@@ -644,8 +662,11 @@ def _load_existing_traces(trace_root: Path) -> None:
 # C4: /receive 收到 feedback.return_chart 时，把 5MB chart_html 替换为轻量 descriptor。
 # C5: GET /api/v2/trace/artifact 按 trace_id + loop_id 按需生成 chart HTML。
 
-# plotly.js CDN URL（版本对齐 multialphav env 的 Python plotly）
-_PLOTLY_VERSION = "6.7.0"
+# plotly.js CDN URL（bootcdn 国内镜像）。
+# 注意：bootcdn 同步自 cdnjs，plotly.js 在 cdnjs 上最高只到 3.1.1（6.x 未同步，会 404）。
+# 2.35.3 是 cdnjs/bootcdn 上稳定可用的最高 2.x 版本，覆盖 report_figure 用到的全部
+# trace/layout 特性；Python 后端仍可用任意版本生成 figure JSON（仅作为数据源）。
+_PLOTLY_VERSION = "2.35.3"
 _PLOTLY_CDN_URL = f"https://cdn.bootcdn.net/ajax/libs/plotly.js/{_PLOTLY_VERSION}/plotly.min.js"
 
 

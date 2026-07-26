@@ -59,5 +59,10 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
   for(const loopId of loops){const metric=loopMetricMap[loopId];if(metric&&metric.IC!=null)loopMetrics[loopId]=`IC=${Number(metric.IC).toFixed(3)}`}
   const promptTokens=Number(token.accumulated_prompt_tokens||token.prompt_tokens||0)
   const completionTokens=Number(token.accumulated_completion_tokens||token.completion_tokens||0)
-  return{hasEnd,hasError,loops,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef:(objectValue(chartData?.chart_ref)||objectValue(chartData as object)) as ChartRef|null,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:Number(token.total_tokens||promptTokens+completionTokens),callCount:Number(token.call_count||0),loopMetrics}
+  // C6 防御：chartRef 仅当 trace_id 是非空字符串时才有效，否则走 chartHtml fallback。
+  // 历史 trace 走老的 _obj_to_json 时可能仍内联 chart_html（没有 chart_ref），不能把
+  // {chart_html: "..."} 误判为 ChartRef，否则 iframe 会拼出 id=undefined 的 URL。
+  const rawChartRef=objectValue(chartData?.chart_ref)
+  const chartRef:ChartRef|null=rawChartRef&&typeof rawChartRef.trace_id==='string'&&rawChartRef.trace_id.trim()!==''?rawChartRef as unknown as ChartRef:null
+  return{hasEnd,hasError,loops,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:Number(token.total_tokens||promptTokens+completionTokens),callCount:Number(token.call_count||0),loopMetrics}
 }
