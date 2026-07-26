@@ -1,3 +1,6 @@
+
+
+{% raw %}
 # Qlib 四大场景：训练机制与模型来源
 
 > 适用：**multialphaV** 项目内 RD-Agent 框架的 Qlib 量化场景理解。
@@ -237,3 +240,5 @@ exp.based_experiments = [t[0] for t in trace.hist
 **更新来源**：
 - 2026-07-19 团队讨论「四 qlib 场景是否都训练模型 / Model 场景模型来源」结论沉淀
 - 2026-07-20 实现沉淀：Factor 场景多模型选择器 `model_selector`（4 取值 lgbm/linear/xgboost/catboost，Jinja 参数化模板，cache key 纳入 selector；commit `d0348280`）
+
+{% endraw %}

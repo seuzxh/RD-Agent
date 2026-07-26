@@ -1,3 +1,6 @@
+
+
+{% raw %}
 # Factor 模型选择器（model_selector）技术方案
 
 > 允许用户在 webUI 创建因子挖掘任务时选择验证模型（LightGBM/Linear/XGBoost/CatBoost），而非固定使用 LightGBM。
@@ -234,3 +237,5 @@ qlib.contrib.model.linear.LinearModel 训练 + 回测
 **版本**：v1.0（2026-07-21）
 **适用目录**：`/home/zxh/projects/1.multialphaV/RD-Agent`
 **配套文档**：[docs/QLIB_SCENARIOS.md](../architecture/QLIB_SCENARIOS.md)（§3.1 model_selector）、[docs/reference/API.md](../reference/API.md)（§2.1 description + model_selector 字段）、[docs/reference/ENV.md](../reference/ENV.md)（§3.3 QLIB_FACTOR_MODEL_SELECTOR）
+
+{% endraw %}
