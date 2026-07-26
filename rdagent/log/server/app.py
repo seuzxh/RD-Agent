@@ -640,6 +640,145 @@ def _load_existing_traces(trace_root: Path) -> None:
             app.logger.exception("Failed to index trace catalog from %s", trace_id)
 
 
+# ==================== Chart Artifact（C4/C5）====================
+# C4: /receive 收到 feedback.return_chart 时，把 5MB chart_html 替换为轻量 descriptor。
+# C5: GET /api/v2/trace/artifact 按 trace_id + loop_id 按需生成 chart HTML。
+
+# plotly.js CDN URL（版本对齐 multialphav env 的 Python plotly）
+_PLOTLY_VERSION = "6.7.0"
+_PLOTLY_CDN_URL = f"https://cdn.bootcdn.net/ajax/libs/plotly.js/{_PLOTLY_VERSION}/plotly.min.js"
+
+
+def _find_chart_pkl(trace_dir: Path, loop_id: int | None) -> Path | None:
+    """在 trace 目录中找到指定 loop 的最新 chart pkl。
+
+    路径模式：Loop_N/running/Quantitative Backtesting Chart/<pid_chain>/<timestamp>.pkl
+    多个时取时间戳最新的一份（tie-breaker：规范化相对路径字典序）。
+    """
+    if loop_id is not None:
+        pattern = f"Loop_{loop_id}/running/Quantitative Backtesting Chart/**/*.pkl"
+    else:
+        pattern = "**/Quantitative Backtesting Chart/**/*.pkl"
+    pkls = sorted(trace_dir.glob(pattern), reverse=True)
+    return pkls[0] if pkls else None
+
+
+def _generate_chart_html(df_pkl_path: Path) -> str:
+    """从 chart pkl（DataFrame）生成 chart HTML（bootcdn CDN 加载 plotly.js，不内联）。
+
+    落盘到 artifact cache 目录，后续请求直接 send_file。
+    """
+    import pickle as _pickle
+    import plotly
+    from rdagent.log.ui.qlib_report_figure import report_figure
+
+    with open(df_pkl_path, 'rb') as f:
+        df = _pickle.load(f)
+
+    fig = report_figure(df)
+    html = plotly.io.to_html(fig, include_plotlyjs=False, full_html=True)
+    # 注入 bootcdn script（include_plotlyjs=False 只留占位，需手动加 script 标签）
+    html = html.replace(
+        '</head>',
+        f'<script src="{_PLOTLY_CDN_URL}"></script></head>',
+    ) if '</head>' in html else html
+    return html
+
+
+def _get_or_create_artifact_html(trace_id: str, loop_id: int | None) -> tuple[str | None, str | None]:
+    """获取或生成 chart HTML，落盘缓存。返回 (html_path, etag) 或 (None, None)。"""
+    trace_dir = log_folder_path / trace_id
+    if not trace_dir.exists():
+        return None, None
+
+    chart_pkl = _find_chart_pkl(trace_dir, loop_id)
+    if chart_pkl is None:
+        return None, None
+
+    import hashlib
+    # artifact 缓存路径
+    loop_str = str(loop_id) if loop_id is not None else 'latest'
+    cache_key = f"{trace_id.replace('/', '__')}_{loop_str}"
+    cache_dir = Path(UI_SETTING.trace_artifact_cache_path)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    html_path = cache_dir / f"{cache_key}.html"
+
+    # ETag 基于 chart pkl 的内容 hash
+    pkl_content = chart_pkl.read_bytes()
+    etag = hashlib.sha256(pkl_content).hexdigest()[:16]
+
+    # 如果缓存 HTML 不存在或 pkl 变了，重新生成
+    meta_path = html_path.with_suffix('.etag')
+    if not html_path.exists() or not meta_path.exists() or meta_path.read_text().strip() != etag:
+        try:
+            html = _generate_chart_html(chart_pkl)
+            html_path.write_text(html, encoding='utf-8')
+            meta_path.write_text(etag, encoding='utf-8')
+        except Exception:
+            app.logger.exception("Failed to generate chart artifact for %s loop %s", trace_id, loop_id)
+            return None, None
+
+    return str(html_path), etag
+
+
+def _make_chart_descriptor(trace_id: str, loop_id, timestamp: str) -> dict:
+    """C4: 生成轻量 chart descriptor（替代 5MB chart_html）。"""
+    return {
+        "tag": "feedback.return_chart",
+        "timestamp": timestamp,
+        "loop_id": loop_id,
+        "content": {
+            "chart_ref": {"trace_id": trace_id, "loop_id": loop_id},
+            "available": True,
+        },
+    }
+
+
+@app.route("/api/v2/trace/artifact", methods=["GET"])
+def get_chart_artifact():
+    """C5: 按 trace_id + loop_id 按需返回 chart HTML。
+
+    支持 If-None-Match → 304。HTML 通过 bootcdn CDN 加载 plotly.js（不内联 2.7MB）。
+    """
+    from werkzeug.utils import secure_filename
+
+    trace_id = request.args.get('id', '')
+    loop_str = request.args.get('loop', '')
+    if not trace_id:
+        return jsonify({"error": "Missing 'id' parameter"}), 400
+
+    # 路径越界校验
+    try:
+        trace_dir = (log_folder_path / trace_id).resolve()
+        if os.path.commonpath([str(trace_dir), str(log_folder_path)]) != str(log_folder_path):
+            return jsonify({"error": "Invalid trace id"}), 422
+    except (ValueError, OSError):
+        return jsonify({"error": "Invalid trace id"}), 422
+
+    try:
+        loop_id = int(loop_str) if loop_str else None
+    except ValueError:
+        return jsonify({"error": "Invalid loop parameter"}), 422
+
+    html_path_str, etag = _get_or_create_artifact_html(trace_id, loop_id)
+    if html_path_str is None:
+        return jsonify({"error": "Chart not found for this trace/loop"}), 404
+
+    # ETag / 304 支持
+    if_none_match = request.headers.get('If-None-Match', '')
+    if etag and if_none_match and etag in if_none_match:
+        return '', 304
+
+    html_path = Path(html_path_str)
+    response = send_file(html_path, mimetype='text/html')
+    if etag:
+        response.headers['ETag'] = etag
+    response.headers['Cache-Control'] = 'private, max-age=0, must-revalidate'
+    return response
+
+
+# ==================== Chart Artifact END ============================
+
 @app.route("/trace", methods=["POST"])
 def update_trace():
     data = request.get_json()
@@ -872,17 +1011,34 @@ def receive_msgs():
 
     if isinstance(data, list):
         for d in data:
-            task = _get_running_task(d["id"])
-            if task is not None:
-                task.messages.append(d["msg"])
-            _update_trace_state(_trace_id_to_external(d["id"]), d["msg"])
+            _process_incoming_message(d["id"], d["msg"])
     else:
-        task = _get_running_task(data["id"])
-        if task is not None:
-            task.messages.append(data["msg"])
-        _update_trace_state(_trace_id_to_external(data["id"]), data["msg"])
+        _process_incoming_message(data["id"], data["msg"])
 
     return jsonify({"status": "success"}), 200
+
+
+def _process_incoming_message(internal_id: str, msg: dict) -> None:
+    """C4: 处理收到的消息——对 chart 消息做 descriptor 替换，然后 append + 投影。"""
+    tag = msg.get("tag", "")
+    external_id = _trace_id_to_external(internal_id)
+
+    # C4: chart 消息替换为轻量 descriptor（不 append 5MB chart_html）
+    if tag == "feedback.return_chart":
+        loop_id = msg.get("loop_id")
+        timestamp = msg.get("timestamp", datetime.now(timezone.utc).isoformat())
+        descriptor = _make_chart_descriptor(external_id, loop_id, timestamp)
+        task = _get_running_task(internal_id)
+        if task is not None:
+            task.messages.append(descriptor)
+        _update_trace_state(external_id, descriptor)
+        return
+
+    # 普通消息：正常 append + 投影
+    task = _get_running_task(internal_id)
+    if task is not None:
+        task.messages.append(msg)
+    _update_trace_state(external_id, msg)
 
 
 @app.route("/health", methods=["GET"])

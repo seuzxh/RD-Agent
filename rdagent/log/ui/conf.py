@@ -23,5 +23,8 @@ class UIBasePropSetting(ExtendedBaseSettings):
     # C3: 按需加载的内存 LRU 上限（含运行中的 task）
     max_inmemory_traces: int = 20
 
+    # C5: artifact（chart HTML）磁盘缓存目录
+    trace_artifact_cache_path: str = "./git_ignore_folder/web_artifacts"
+
 
 UI_SETTING = UIBasePropSetting()
