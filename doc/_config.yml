@@ -1,6 +1,9 @@
 title: multialphaV
 description: 基于 RD-Agent + Qlib 的量化金融因子挖掘平台文档
 theme: jekyll-theme-primer
+# 显式声明仓库，避免 jekyll-github-metadata 调 GitHub API 探测
+# （CI 中默认 GITHUB_TOKEN 权限不足会报 "No repo name found"）
+repository: seuzxh/RD-Agent
 
 # Markdown 处理
 markdown: kramdown
