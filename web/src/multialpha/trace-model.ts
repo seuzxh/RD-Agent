@@ -1,9 +1,8 @@
-import type { CodeFile,FactorItem,FeedbackSummary,MetricItem,TraceMessage,TraceStatus,TraceViewModel } from './types'
+import type { ChartRef,CodeFile,FactorItem,FeedbackSummary,MetricItem,TraceMessage,TraceStatus,TraceViewModel } from './types'
 
 function objectValue(value:unknown):Record<string,unknown>|null{if(value&&typeof value==='object'&&!Array.isArray(value))return value as Record<string,unknown>;if(typeof value!=='string')return null;try{return objectValue(JSON.parse(value))}catch{return null}}
 function arrayValue(value:unknown):unknown[]{if(Array.isArray(value))return value;if(typeof value!=='string')return[];try{const parsed=JSON.parse(value);return Array.isArray(parsed)?parsed:[]}catch{return[]}}
 function textValue(value:unknown):string{if(typeof value==='string')return value;if(value==null)return'';try{return JSON.stringify(value,null,2)}catch{return String(value)}}
-function latest(messages:TraceMessage[],tag:string){for(let i=messages.length-1;i>=0;i--){if(messages[i].tag===tag)return messages[i]}return undefined}
 
 export function deriveTraceStatus(messages:TraceMessage[]):TraceStatus{
   let hasEnd=false,hasFinalFeedback=false,hasMetric=false,hasError=false
@@ -60,5 +59,5 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
   for(const loopId of loops){const metric=loopMetricMap[loopId];if(metric&&metric.IC!=null)loopMetrics[loopId]=`IC=${Number(metric.IC).toFixed(3)}`}
   const promptTokens=Number(token.accumulated_prompt_tokens||token.prompt_tokens||0)
   const completionTokens=Number(token.accumulated_completion_tokens||token.completion_tokens||0)
-  return{hasEnd,hasError,loops,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef:objectValue(chartData?.chart_ref)||objectValue(chartData as object)||null,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:Number(token.total_tokens||promptTokens+completionTokens),callCount:Number(token.call_count||0),loopMetrics}
+  return{hasEnd,hasError,loops,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef:(objectValue(chartData?.chart_ref)||objectValue(chartData as object)) as ChartRef|null,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:Number(token.total_tokens||promptTokens+completionTokens),callCount:Number(token.call_count||0),loopMetrics}
 }

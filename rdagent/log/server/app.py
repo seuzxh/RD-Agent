@@ -699,7 +699,7 @@ def _get_or_create_artifact_html(trace_id: str, loop_id: int | None) -> tuple[st
     # artifact 缓存路径
     loop_str = str(loop_id) if loop_id is not None else 'latest'
     cache_key = f"{trace_id.replace('/', '__')}_{loop_str}"
-    cache_dir = Path(UI_SETTING.trace_artifact_cache_path)
+    cache_dir = Path(UI_SETTING.trace_artifact_cache_path).resolve()
     cache_dir.mkdir(parents=True, exist_ok=True)
     html_path = cache_dir / f"{cache_key}.html"
 
