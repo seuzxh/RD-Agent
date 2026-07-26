@@ -35,6 +35,8 @@ layout: home
 - [Factor 模型选择器](design/FACTOR_MODEL_SELECTOR.md) — lgbm/linear/xgboost/catboost 下拉选择，4 层改造点
 - [股池预测看板技术方案](design/STOCKPOOL_DASHBOARD_TECH.md) — 零新依赖，扩展现有 Flask + RDAgentTask
 - [webUI 性能优化最终设计](design/WEBUI_PERFORMANCE_FINAL.md) — 三个分离 + C1-C10 改造点 + CDN 决策
+- [任务状态判断修复](design/TRACE_STATUS_FIX.md) — stop/异常终止后仍显示 running 的根因（3 个 bug）与修复方案
+- [任务并发限制](design/TASK_CONCURRENCY_LIMIT.md) — 运行中任务达上限（默认 10）禁止新建，前后端配合
 
 ## 🏛 架构说明
 
