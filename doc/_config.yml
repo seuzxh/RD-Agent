@@ -1,0 +1,21 @@
+title: multialphaV
+description: 基于 RD-Agent + Qlib 的量化金融因子挖掘平台文档
+theme: jekyll-theme-primer
+
+# Markdown 处理
+markdown: kramdown
+kramdown:
+  parse_block_html: true
+
+# 排除非文档文件
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+
+# 页面辅助
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
