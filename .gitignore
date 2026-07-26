@@ -191,3 +191,9 @@ AGENTS.md
 scripts/
 # Qlib docker 镜像导出 tar(大文件,不入库,外部分发);qlib-src.tar.gz 是构建依赖,需入库(见下)
 rdagent/scenarios/qlib/docker/local_qlib*.tar.gz
+
+# Jekyll 本地构建产物（CI 中由 actions/deploy-pages 单独处理）
+doc/_site/
+doc/.jekyll-cache/
+doc/.jekyll-metadata
+doc/Gemfile.lock

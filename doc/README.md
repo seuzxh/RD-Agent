@@ -1,3 +1,9 @@
+---
+title: MultiAlpha 文档
+description: 基于 RD-Agent + Qlib 的量化金融因子挖掘平台文档
+layout: home
+---
+
 # MultiAlpha 文档
 
 > 基于 RD-Agent + Qlib 的量化金融因子挖掘平台
