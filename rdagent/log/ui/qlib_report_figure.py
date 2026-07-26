@@ -313,6 +313,38 @@ def _calculate_mdd(series):
     return series - series.cummax()
 
 
+def _calc_group_returns(pred_label: pd.DataFrame, n_groups: int = 5) -> pd.DataFrame:
+    """计算分组累计收益净值（移植 qlib _group_return 算法）。
+
+    :param pred_label: MultiIndex DataFrame，index=[datetime, instrument]，
+                       列含 'score'（预测分）和 'label'（真实收益）。
+    :param n_groups: 分组数，默认 5。
+    :return: DataFrame，index=datetime（%Y-%m-%d 字符串），列为
+             ['Group1',...,'Group{n_groups}', 'long-short']，值为累计净值。
+             输入为空时返回空 DataFrame。
+    """
+    if pred_label.empty or "score" not in pred_label.columns or "label" not in pred_label.columns:
+        return pd.DataFrame()
+
+    # 按 score 降序排序后按 datetime 分组，每日均分 n_groups 档取 label 均值
+    sorted_pl = pred_label.sort_values("score", ascending=False)
+    daily_group_returns = {}
+    for i in range(n_groups):
+        daily_group_returns[f"Group{i + 1}"] = sorted_pl.groupby(level="datetime", group_keys=False)[
+            "label"
+        ].apply(lambda x: x[len(x) // n_groups * i : len(x) // n_groups * (i + 1)].mean())
+
+    group_df = pd.DataFrame(daily_group_returns)
+    # long-short = Group1 - GroupN（每日）
+    group_df["long-short"] = group_df[f"Group1"] - group_df[f"Group{n_groups}"]
+    # 累计净值
+    group_df = group_df.cumsum()
+    # 索引 strftime（与 _calculate_report_data 一致）
+    group_df.index = group_df.index.strftime("%Y-%m-%d")
+    group_df.sort_index(ascending=True, inplace=True)
+    return group_df
+
+
 def _calculate_report_data(raw_df: pd.DataFrame) -> pd.DataFrame:
     """
 
