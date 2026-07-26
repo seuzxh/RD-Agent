@@ -2,5 +2,3 @@ export { fetchHealth, fetchTraceIds, fetchSota, fetchStdoutRange, stdoutUrl, sub
 export type { HealthCheck } from '../services/rdagent-api'
 export { controlTask, fetchTrace, fetchTraceStatuses } from '../services/rdagent-api'
 export type { TraceStatusItem } from '../services/rdagent-api'
-export { fetchPredictExperiments, runPredict, fetchPredictHistory } from '../services/rdagent-api'
-export type { PredictExperiment, Top20Result, PredictRecord, Top20Item } from '../services/rdagent-api'
