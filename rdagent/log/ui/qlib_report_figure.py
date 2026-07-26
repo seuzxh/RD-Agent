@@ -377,10 +377,13 @@ def _calculate_report_data(raw_df: pd.DataFrame) -> pd.DataFrame:
     return report_df
 
 
-def report_figure(df: pd.DataFrame) -> list | tuple:
+def report_figure(df: pd.DataFrame, group_df: pd.DataFrame = None) -> list | tuple:
     """
 
     :param df:
+    :param group_df: 分组累计净值 DataFrame（Task 1 输出格式，列为
+                     ['Group1',...,'Group5','long-short']）或 None。为空/None 时
+                     维持原 7 子图行为（向后兼容）。
     :return:
     """
 
@@ -401,6 +404,14 @@ def report_figure(df: pd.DataFrame) -> list | tuple:
     report_df = _temp_df
 
     # Create figure
+    has_group = group_df is not None and not group_df.empty
+    n_rows = 8 if has_group else 7
+
+    if has_group:
+        # group_df 索引已是 %Y-%m-%d 字符串，对齐 report_df
+        for col in ["Group1", "Group2", "Group3", "Group4", "Group5", "long-short"]:
+            report_df[col] = group_df[col].reindex(report_df.index).ffill().fillna(0)
+
     _default_kind_map = dict(kind="Scatter", kwargs={"mode": "lines+markers"})
     _temp_fill_args = {"fill": "tozeroy", "mode": "lines+markers"}
     _column_row_col_dict = [
@@ -416,11 +427,27 @@ def report_figure(df: pd.DataFrame) -> list | tuple:
         ("cum_ex_return_wo_cost_mdd", dict(row=7, col=1, graph_kwargs=_temp_fill_args)),
     ]
 
+    if has_group:
+        _group_colors = {
+            "Group1": "#2ca02c",
+            "Group2": "#98df8a",
+            "Group3": "#ffbb78",
+            "Group4": "#ff7f0e",
+            "Group5": "#d62728",
+        }
+        for col in ["Group1", "Group2", "Group3", "Group4", "Group5"]:
+            _column_row_col_dict.append(
+                (col, dict(row=8, col=1, graph_kwargs={"mode": "lines", "line_color": _group_colors[col]}))
+            )
+        _column_row_col_dict.append(
+            ("long-short", dict(row=8, col=1, graph_kwargs={"mode": "lines", "line_dash": "dash", "line_width": 2}))
+        )
+
     _subplot_layout = dict()
-    for i in range(1, 8):
+    for i in range(1, n_rows + 1):
         # yaxis
         _subplot_layout.update({"yaxis{}".format(i): dict(zeroline=True, showline=True, showticklabels=True)})
-        _show_line = i == 7
+        _show_line = i == n_rows
         _subplot_layout.update({"xaxis{}".format(i): dict(showline=_show_line, type="category", tickangle=45)})
 
     _layout_style = dict(
@@ -458,12 +485,16 @@ def report_figure(df: pd.DataFrame) -> list | tuple:
         ],
     )
 
+    _row_width = [1, 1, 1, 3, 1, 1, 3]  # 原 7 行
+    if has_group:
+        _row_width = [1] + _row_width  # group 子图加在最前（plotly row_width 是倒序）
+
     _subplot_kwargs = dict(
         shared_xaxes=True,
         vertical_spacing=0.01,
-        rows=7,
+        rows=n_rows,
         cols=1,
-        row_width=[1, 1, 1, 3, 1, 1, 3],
+        row_width=_row_width,
         print_grid=False,
     )
     figure = SubplotsGraph(

@@ -83,5 +83,58 @@ class CalcGroupReturnsTestCase(unittest.TestCase):
         self.assertEqual(len(result), 2)  # 两天
 
 
+class ReportFigureGroupTestCase(unittest.TestCase):
+    def _make_ret_df(self) -> pd.DataFrame:
+        """构造最小组合层 DataFrame（满足 _calculate_report_data 所需列）。"""
+        dates = pd.date_range("2024-07-01", periods=5, freq="D")
+        return pd.DataFrame(
+            {
+                "return": [0.01, 0.02, -0.01, 0.015, 0.005],
+                "bench": [0.005, 0.005, 0.005, 0.005, 0.005],
+                "cost": [0.001] * 5,
+                "turnover": [0.1] * 5,
+            },
+            index=dates,
+        )
+
+    def _make_group_df(self) -> pd.DataFrame:
+        """构造最小 group DataFrame（6 列，5 日）。"""
+        dates = ["2024-07-01", "2024-07-02", "2024-07-03", "2024-07-04", "2024-07-05"]
+        return pd.DataFrame(
+            {
+                "Group1": [0.01, 0.02, 0.03, 0.04, 0.05],
+                "Group2": [0.005, 0.01, 0.015, 0.02, 0.025],
+                "Group3": [0.0, 0.0, 0.0, 0.0, 0.0],
+                "Group4": [-0.005, -0.01, -0.015, -0.02, -0.025],
+                "Group5": [-0.01, -0.02, -0.03, -0.04, -0.05],
+                "long-short": [0.02, 0.04, 0.06, 0.08, 0.10],
+            },
+            index=dates,
+        )
+
+    def test_report_figure_backward_compat_no_group(self):
+        """group_df=None 时维持原 7 子图行为（向后兼容）。"""
+        from rdagent.log.ui.qlib_report_figure import report_figure
+
+        fig = report_figure(self._make_ret_df(), group_df=None)
+        # plotly figure 的 layout 有 7 行（原行为）
+        self.assertIn("yaxis7", fig.layout)  # 第 7 行 y 轴存在
+        self.assertNotIn("yaxis8", fig.layout)  # 第 8 行不存在
+
+    def test_report_figure_with_group_has_8_rows(self):
+        """group_df 非空时扩展为 8 子图。"""
+        from rdagent.log.ui.qlib_report_figure import report_figure
+
+        fig = report_figure(self._make_ret_df(), group_df=self._make_group_df())
+        self.assertIn("yaxis8", fig.layout)  # 第 8 行存在
+
+    def test_report_figure_with_empty_group_falls_back_to_7(self):
+        """group_df 为空 DataFrame 时回退 7 子图（向后兼容）。"""
+        from rdagent.log.ui.qlib_report_figure import report_figure
+
+        fig = report_figure(self._make_ret_df(), group_df=pd.DataFrame())
+        self.assertNotIn("yaxis8", fig.layout)
+
+
 if __name__ == "__main__":
     unittest.main()
