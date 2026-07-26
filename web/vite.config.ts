@@ -19,6 +19,7 @@ export default defineConfig({
       input: {
         // main: pathResolve('./index.html'),
         multialpha: pathResolve('./multialpha.html'),
+        predict: pathResolve('./predict.html'),
       },
     },
   },

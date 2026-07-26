@@ -1,44 +1,83 @@
-# R&D-Agent
+# Multiαlpha Web
 
-## Project setup
+Vite + Vue 3 + TypeScript 前端，多页应用（MPA）结构。当前生产构建仅输出
+**MultiAlpha 量化决策终端**入口。
 
-```
+## 环境要求
+
+- Node.js 18+（建议 20 LTS）
+- npm（随 Node 安装）
+
+后端 API 默认监听 `http://localhost:19899`，启动前端前请先确认后端服务已就绪。
+
+## 安装依赖
+
+```bash
 npm install
 ```
 
-### Compiles and hot-reloads for development
+## 本地开发
 
-```
+```bash
 npm run dev
 ```
 
-The Vite project exposes two independent MPA entries:
+- 开发服务器监听 `http://localhost:8080`，并自动打开 MultiAlpha 入口。
+- MultiAlpha API 请求通过 Vite 代理转发到 `http://localhost:19899`，覆盖以下路径：
+  `/traces` `/trace` `/predict` `/upload` `/control` `/logs` `/stdout` `/health`
 
-- `http://localhost:8080/` — existing R&D-Agent application
-- `http://localhost:8080/multialpha.html` — MultiAlpha quant terminal
+入口地址：
 
-During local development, MultiAlpha API requests are proxied to
-`http://115.190.106.124:19899`. Production builds use same-origin API paths.
+| 入口 | 开发访问地址 | 说明 |
+| --- | --- | --- |
+| MultiAlpha | http://localhost:8080/multialpha.html | 当前主入口，`dev` 默认打开 |
+| Finance Prediction | http://localhost:8080/predict.html | 股池预测，独立页面，与主页平级 |
+| R&D-Agent | http://localhost:8080/ | 原 R&D-Agent 应用，仅开发模式可访问 |
 
-### Compiles and minifies for production
+> 生产构建目前不输出 `index.html`，R&D-Agent 入口仅在 `npm run dev` 下可用。
+> MultiAlpha 与 Finance Prediction 是两个相互独立的 Vue 应用（各自 `createApp`），主页通过"📊 预测"按钮跨页跳转到 `predict.html`。
 
-```
+## 生产构建
+
+```bash
+# 构建到 ./dist
 npm run build
+
+# 构建到 ../git_ignore_folder/static，供 Flask 同源服务
+npm run build:flask
 ```
 
-The default build writes both HTML entries to `dist/`. Use `npm run build:flask`
-to write both entries to `../git_ignore_folder/static` for Flask serving.
+两种命令的产物一致，均为 `multialpha.html` + `assets/`，只是输出目录不同。
 
-### API URL behavior after build
+## 本地预览生产构建
 
-This project uses the current page origin as the API base URL.
+```bash
+npm run preview
+```
 
-If the built frontend is served by the same Flask server that also exposes `/upload`, `/trace`, `/control` and other APIs, no extra frontend configuration is needed. The frontend will automatically call the same host and port that served the page.
+## API 地址行为
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+前端使用相对路径发起请求（如 `fetch('/traces')`）。
 
-## Recommended Setup
+- **开发**：由 `vite.config.ts` 的 `server.proxy` 转发到 `http://localhost:19899`。
+- **生产**：使用当前页面同源地址。若前端由同样暴露 `/upload` `/trace` `/control`
+  等接口的 Flask 服务器提供，则无需额外配置，前端会自动调用服务该页面的同主机同端口。
 
-- [VS Code](https://code.visualstudio.com/) + [Vue - Official](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (previously Volar) and disable Vetur
+## 项目结构
 
-- Use [vue-tsc](https://github.com/vuejs/language-tools/tree/master/packages/tsc) for performing the same type checking from the command line, or for generating d.ts files for SFCs.
+```
+web/
+├── index.html              # R&D-Agent 入口（仅开发模式）
+├── multialpha.html         # MultiAlpha 入口（主入口，参与生产构建）
+├── vite.config.ts          # Vite 配置：MPA 入口、代理、端口、自动打开
+├── package.json            # 脚本：dev / build / build:flask / preview
+└── src/
+    ├── main.ts             # R&D-Agent 应用入口
+    ├── multialpha/         # MultiAlpha 应用入口与逻辑
+    └── services/           # API 封装（rdagent-api.ts），相对路径请求
+```
+
+## 推荐 IDE 配置
+
+- [VS Code](https://code.visualstudio.com/) + [Vue - Official](https://marketplace.visualstudio.com/items?itemName=Vue.volar)（原 Volar），并禁用 Vetur。
+- 使用 [vue-tsc](https://github.com/vuejs/language-tools/tree/master/packages/tsc) 进行命令行类型检查。

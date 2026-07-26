@@ -372,19 +372,37 @@ print(json.dumps({"predict_date": str(qlib_latest.date()), "top20": [...]}))
 
 ## 4. 前端设计
 
-### 4.1 新增/修改文件
+### 4.1 文件结构（v2.1 架构升级：独立 predict.html 入口）
+
+> **架构变更说明**：v2.0 初版把 PredictDashboard 嵌入 `MultiAlphaApp.vue` 的渲染分支，
+> 违背了本节"前端新增 1 页面，不改现有页面"的设计原则，污染了四个 scenario 场景的根组件。
+> v2.1 回归设计初衷，改为与 `multialpha.html` 平级的独立 HTML 入口，彻底物理隔离。
 
 ```
-web/src/multialpha/
-├── components/
-│   └── PredictDashboard.vue          # 新增 主看板组件(列表+表格+历史)
-├── use-predict.ts                    # 新增 composable(状态+API+轮询)
-├── api.ts                            # 修改 re-export 新 API 函数
-├── router.ts                         # 修改 加 /predict 路由
-└── components/MultiAlphaApp.vue      # 修改 侧栏加入口 + 路由分支
-
-web/src/services/rdagent-api.ts       # 修改 加 fetch 函数
+web/
+├── predict.html                       # 新增 独立 HTML 入口（与 multialpha.html 平级）
+├── vite.config.ts                     # 修改 rollupOptions.input 加 predict 入口
+└── src/
+    ├── predict/                       # 新增 独立 Vue 应用
+    │   ├── main.ts                    # createApp(PredictApp).mount('#predict-app')
+    │   ├── PredictApp.vue             # 最小根组件
+    │   ├── router.ts                  # 独立 hash 路由
+    │   ├── PredictDashboard.vue       # 主看板（金色 --ma-* 令牌 + 终端风 Hero）
+    │   ├── use-predict.ts             # composable（状态+API+轮询，复用 fetchTrace）
+    │   ├── api.ts                     # predict 专用 re-export（含 fetchTrace）
+    │   └── styles/predict.css         # --ma-* 设计令牌
+    ├── multialpha/
+    │   ├── MultiAlphaApp.vue          # 清理：删除 9 处 prediction 污染，悬浮按钮改跨页跳转
+    │   ├── router.ts                  # 清理：删除 /predict 占位路由
+    │   └── api.ts                     # 清理：删除 prediction re-export
+    └── services/rdagent-api.ts        # 不变：prediction 段保留原位（共享 fetchTrace）
 ```
+
+**关键决策**：
+- `predict.html` 是独立 Vue 应用（独立 `createApp`），与 `multialpha.html` 互不感知
+- 主页"📊 预测"按钮通过 `window.location.href = './predict.html'` 跨页跳转
+- prediction 页"← 返回主站"通过 `window.location.href = './multialpha.html'` 回跳
+- `services/rdagent-api.ts` 的 prediction API 保留原位，因为 `use-predict.ts` 复用同文件的通用 `fetchTrace` 做任务轮询
 
 ### 4.2 路由 + 侧栏入口
 
