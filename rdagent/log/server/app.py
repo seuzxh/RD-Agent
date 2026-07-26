@@ -1037,6 +1037,18 @@ def upload_file():
     task.start()
     app.logger.warning(f"Task {log_trace_path} started.")
     rdagent_processes[str(log_trace_path)] = task
+    # 记录用户原始输入，供前端 TaskBrief 展示（区别于 LLM 生成的 hypothesis）。
+    # 只进内存 messages（/trace 直接返回其切片），不调 _update_trace_state 以免污染 status/loops 投影。
+    task.messages.append({
+        "tag": "task.user_input",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "content": {
+            "description": request.form.get("description"),
+            "scenario": scenario,
+            "loops": loop_n_val,
+            "auto_mode": auto_mode,
+        },
+    })
     # 初始化 catalog 状态投影（C1）
     external_id = f"{scenario}/{trace_name}"
     trace_states[external_id] = {
