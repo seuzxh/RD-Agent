@@ -8,9 +8,11 @@ export interface CodeFile { name:string; content:string; target?:string; evoId?:
 export interface MetricItem { label:string; value:string|number; rawValue?:number; tone?:'up'|'down'|'neutral'; percent?:boolean }
 export interface FactorItem { name:string; description?:string; formula?:string; variables?:Record<string,string>; code?:string }
 export interface FeedbackSummary { decision:boolean|null; reason:string; observations:string; evaluation:string; newHypothesis:string; exception:string }
+export interface ChartRef { trace_id: string; loop_id: number | null }
+
 export interface TraceViewModel {
   hasEnd:boolean; hasError:boolean; loops:number[]; hypothesis:Record<string,unknown>|null
   initialTasks:FactorItem[]; config:Array<{key:string;value:string}>; factors:FactorItem[]; codes:CodeFile[]
-  chartHtml:string; metrics:MetricItem[]; metricValues:Record<string,number|string>; feedback:FeedbackSummary
+  chartRef:ChartRef|null; chartHtml:string; metrics:MetricItem[]; metricValues:Record<string,number|string>; feedback:FeedbackSummary
   promptTokens:number; completionTokens:number; totalTokens:number; callCount:number; loopMetrics:Record<number,string>
 }
