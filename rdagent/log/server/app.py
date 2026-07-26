@@ -223,6 +223,90 @@ class RDAgentTask:
 rdagent_processes: dict[str, RDAgentTask] = {}
 log_folder_path = Path(UI_SETTING.trace_folder).absolute()
 
+# ==================== Catalog 状态投影层（C1）====================
+# 轻量读模型：trace_id → 状态快照，由事件流投影而来，列表/状态查询只读这里。
+trace_states: dict[str, dict] = {}
+# 结构：{"Finance Data Building/plain-transformation": {
+#   "status": "running|done|error",
+#   "loops": set(),
+#   "created_at": "ISO-8601",   # 首次设置后不变，用于列表排序
+#   "updated_at": "ISO-8601",   # 每次消息更新
+#   "has_chart": bool,
+# }}
+
+
+def _derive_status_from_tags(tags_seen: set[str]) -> str:
+    """从已观察的 tag 集合推导 trace 状态（复用前端 deriveTraceStatus 逻辑）。"""
+    if "END" in tags_seen:
+        return "done"
+    has_final_feedback = "feedback.hypothesis_feedback" in tags_seen
+    has_metric = "feedback.metric" in tags_seen
+    if has_final_feedback and has_metric:
+        return "done"
+    if any("error" in t.lower() for t in tags_seen):
+        return "error"
+    return "running"
+
+
+def _update_trace_state(trace_id: str, msg: dict) -> None:
+    """事件投影：从单条消息增量更新状态读模型。
+
+    trace_id 是对外 id（如 "Finance Data Building/plain-transformation"）。
+    """
+    state = trace_states.get(trace_id)
+    if state is None:
+        state = {
+            "status": "running",
+            "loops": set(),
+            "created_at": msg.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+            "updated_at": None,
+            "has_chart": False,
+            "_tags_seen": set(),
+        }
+        trace_states[trace_id] = state
+
+    tag = msg.get("tag", "")
+    loop_id = msg.get("loop_id")
+    ts = msg.get("timestamp")
+
+    if tag:
+        state["_tags_seen"].add(tag)
+    if loop_id is not None:
+        try:
+            state["loops"].add(int(loop_id))
+        except (ValueError, TypeError):
+            pass
+    if tag == "feedback.return_chart":
+        state["has_chart"] = True
+    if ts:
+        state["updated_at"] = ts
+
+    state["status"] = _derive_status_from_tags(state["_tags_seen"])
+
+
+def _trace_state_public(state: dict) -> dict:
+    """投影内部 state 为对外 JSON（隐藏 _tags_seen，转 loops set 为排序列表）。"""
+    return {
+        "status": state["status"],
+        "loops": sorted(state["loops"]),
+        "created_at": state["created_at"],
+        "updated_at": state["updated_at"],
+        "has_chart": state["has_chart"],
+    }
+
+
+def _trace_id_to_external(trace_path_id: str) -> str:
+    """把内部绝对路径 id 转为对外相对 id。
+
+    内部：/abs/traces/Finance Data Building/plain-transformation
+    外部：Finance Data Building/plain-transformation
+    """
+    try:
+        return str(Path(trace_path_id).relative_to(log_folder_path))
+    except (ValueError, TypeError):
+        return trace_path_id
+
+
 
 def _drain_user_requests_into_messages(task: RDAgentTask) -> None:
     """Move a single pending user-interaction request into `task.messages`.
@@ -529,6 +613,21 @@ def list_traces():
     return jsonify(trace_ids), 200
 
 
+@app.route("/traces/status", methods=["GET"])
+def list_trace_statuses():
+    """Return lightweight status snapshots for all traces (C1 catalog read model).
+
+    Single bulk request replacing N+1 full-trace fetches on the homepage.
+    Response is sorted by created_at DESC, id ASC.
+    """
+    items = [
+        {"id": tid, **_trace_state_public(state)}
+        for tid, state in trace_states.items()
+    ]
+    items.sort(key=lambda x: (x.get("created_at") or "", x["id"]), reverse=True)
+    return jsonify(items), 200
+
+
 @app.route("/upload", methods=["POST"])
 def upload_file():
     # 获取请求体中的字段
@@ -631,6 +730,16 @@ def upload_file():
     task.start()
     app.logger.warning(f"Task {log_trace_path} started.")
     rdagent_processes[str(log_trace_path)] = task
+    # 初始化 catalog 状态投影（C1）
+    external_id = f"{scenario}/{trace_name}"
+    trace_states[external_id] = {
+        "status": "running",
+        "loops": set(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": None,
+        "has_chart": False,
+        "_tags_seen": set(),
+    }
     return (
         jsonify(
             {
@@ -654,9 +763,11 @@ def receive_msgs():
         for d in data:
             task = _get_or_create_task(d["id"])
             task.messages.append(d["msg"])
+            _update_trace_state(_trace_id_to_external(d["id"]), d["msg"])
     else:
         task = _get_or_create_task(data["id"])
         task.messages.append(data["msg"])
+        _update_trace_state(_trace_id_to_external(data["id"]), data["msg"])
 
     return jsonify({"status": "success"}), 200
 
