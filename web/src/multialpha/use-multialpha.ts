@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
 import { controlTask, fetchTrace, fetchTraceIds, fetchTraceStatuses, uploadTask } from './api'
 import { buildTraceView, deriveTraceStatus } from './trace-model'
@@ -9,7 +9,7 @@ const CACHE_LIMIT = 5
 export function useMultiAlpha() {
   const traceIds = ref<string[]>([])
   const currentTraceId = ref('')
-  const messages = ref<TraceMessage[]>([])
+  const messages = shallowRef<TraceMessage[]>([])
   const loading = ref(false)
   const listLoading = ref(false)
   const listError = ref('')
@@ -92,7 +92,7 @@ export function useMultiAlpha() {
       const updates = await fetchTrace({ id, all: false, reset: false, cursor: messages.value.length }, pollController.signal)
       if (currentTraceId.value !== id) return
       if (updates.length) {
-        messages.value.push(...updates)
+        messages.value = [...messages.value, ...updates]
         if (selectedLoop.value == null) {
           const loops = messages.value.map(message => Number(message.loop_id)).filter(Number.isFinite)
           if (loops.length) selectedLoop.value = Math.max(...loops)
