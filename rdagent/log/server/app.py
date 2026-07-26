@@ -250,6 +250,28 @@ def _derive_status_from_tags(tags_seen: set[str]) -> str:
     return "running"
 
 
+def _resolve_trace_status(external_id: str, catalog_status: str) -> str:
+    """结合 catalog 状态 + 进程存活状态，给出最终对外状态。
+
+    - catalog 已判 done/error → 直接采用（完成信号可靠，无需检查进程）
+    - catalog 判 running → 检查进程是否真的存活：
+        存活 → running；已死/不存在 → error（异常终止）
+
+    注意：直接用 catalog 已存的 status（由 _index_trace_catalog_from_files
+    或 _update_trace_state 推导），不重新调 _derive_status_from_tags——
+    因为 catalog 路径的 _tags_seen 存的是路径关键字（'feedback'/'hypothesis'），
+    粒度与 _derive_status_from_tags 要求的完整 tag 名不一致。
+    """
+    if catalog_status != "running":
+        return catalog_status
+
+    internal_id = str(log_folder_path / external_id)
+    task = rdagent_processes.get(internal_id)
+    if task is not None and task.is_alive():
+        return "running"
+    return "error"
+
+
 def _update_trace_state(trace_id: str, msg: dict) -> None:
     """事件投影：从单条消息增量更新状态读模型。
 
@@ -829,6 +851,7 @@ def update_trace():
                     },
                 }
             )
+            _update_trace_state(_trace_id_to_external(trace_id), task.messages[-1])
             app.logger.warning(f"Process for {trace_id} has ended.")
 
     total = len(task.messages)
@@ -892,7 +915,10 @@ def list_trace_statuses():
     Response is sorted by created_at DESC, id ASC.
     """
     items = [
-        {"id": tid, **_trace_state_public(state)}
+        {"id": tid, **_trace_state_public({
+            **state,
+            "status": _resolve_trace_status(tid, state["status"]),
+        })}
         for tid, state in trace_states.items()
     ]
     items.sort(key=lambda x: (x.get("created_at") or "", x["id"]), reverse=True)
@@ -929,6 +955,14 @@ def upload_file():
                 file.save(target_path)
             else:
                 return jsonify({"error": "Invalid file path"}), 400
+
+    # 并发限制：运行中任务达上限时拒绝新建
+    max_concurrent = getattr(UI_SETTING, 'max_concurrent_tasks', 10)
+    running_count = sum(1 for t in rdagent_processes.values() if t.is_alive())
+    if running_count >= max_concurrent:
+        return jsonify({
+            "error": f"当前有 {running_count} 个任务正在运行（上限 {max_concurrent}），请等待部分任务完成后再新建"
+        }), 429
 
     target_name = None
     kwargs = {}
@@ -1226,6 +1260,7 @@ def control_process():
                     "content": {"error_msg": "RD-Agent process was stopped by user.", "end_code": -1},
                 }
             )
+            _update_trace_state(_trace_id_to_external(id), task.messages[-1])
             app.logger.warning(f"Process for {id} has been stopped.")
         return jsonify({"status": "stopped"}), 200
     except Exception as e:
