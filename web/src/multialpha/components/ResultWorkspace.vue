@@ -1,6 +1,6 @@
 <template>
   <section class="result-workspace">
-    <nav class="result-tabs"><button v-for="item in tabs" :key="item.value" :class="{active:tab===item.value}" :disabled="!item.available" @click="item.available&&(tab=item.value)">{{ item.label }}<span v-if="item.count">{{ item.count }}</span></button><el-button text size="small" :loading="sotaLoading" @click="loadSota">🏆 SOTA 产物</el-button><el-button text size="small" @click="$emit('download')">↓ 下载产物</el-button></nav>
+    <nav class="result-tabs"><button v-for="item in tabs" :key="item.value" :class="{active:tab===item.value}" :disabled="!item.available" @click="item.available&&(tab=item.value)">{{ item.label }}<span v-if="item.count" class="count-badge">{{ item.count }}</span></button><el-button text size="small" :loading="sotaLoading" @click="loadSota">🏆 SOTA 产物</el-button><el-button text size="small" @click="$emit('download')">↓ 下载产物</el-button></nav>
     <div class="result-body">
       <div v-if="tab==='conclusion'" class="conclusion-view">
         <section class="conclusion-hero"><h4>📊 本轮最终结论</h4><div class="conclusion-metrics"><article v-for="item in coreMetrics" :key="item.label"><small>{{ item.label }}</small><strong :class="item.tone">{{ formatMetric(item) }}</strong></article></div><span v-if="feedback.decision!==null" class="decision-chip" :class="feedback.decision?'accepted':'rejected'">{{ feedback.decision?'✓ 采纳 · 进入下一轮':'✕ 拒绝 · 跳过' }}</span><div class="conclusion-sections"><article v-for="item in feedbackItems" :key="item.label"><small>{{ item.icon }} {{ item.label }}</small><p>{{ item.value }}</p></article></div></section>
@@ -41,6 +41,9 @@ async function loadSota(){if(!props.traceId)return;sotaLoading.value=true;sotaVi
 async function copySotaCode(code:string){if(!code)return;await navigator.clipboard.writeText(code);ElMessage.success('代码已复制')}
 </script>
 <style scoped>
+.count-badge{display:inline-block;min-width:18px;margin-left:6px;padding:1px 6px;border-radius:9px;background:rgba(38,103,255,.12);color:#2857b2;font-size:11px;font-weight:600;line-height:1.5;text-align:center}
+.result-tabs>button.active .count-badge{background:var(--ma-gold-dark,#b7842a);color:#fff}
+.result-tabs>button:disabled .count-badge{opacity:.5}
 .sota-section{margin-bottom:1.2em}
 .sota-section h5{font-size:.95em;font-weight:700;color:#1c2b57;margin-bottom:.4em}
 .sota-hypothesis{font-size:.92em;line-height:1.5;color:#333;white-space:pre-wrap}
