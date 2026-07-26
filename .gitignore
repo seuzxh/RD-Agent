@@ -185,6 +185,8 @@ static/
 # AI assistant
 .cursor/
 .claude/
+.zcode/
+.codegraph/
 AGENTS.md
 !rdagent/**/AGENTS.md
 
