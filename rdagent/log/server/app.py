@@ -1090,6 +1090,9 @@ def health_check():
     # 2. Docker daemon
     docker_ok = False
     docker_detail = "未检测到 Docker"
+    # image_mlflow_flag 同时供 §5 MLflow 检查复用（避免重复 docker 调用）。
+    # 默认 None 表示「未知」（docker 不可用 / 镜像不存在时）。
+    image_mlflow_flag = None
     try:
         import docker as _docker
         from rdagent.utils.env import QlibDockerConf
@@ -1101,8 +1104,14 @@ def health_check():
         # 并校验本地是否存在。避免盲取 images.list() 第一个 tag 导致显示与运行时不一致。
         configured_image = QlibDockerConf().image
         try:
-            client.images.get(configured_image)
+            img = client.images.get(configured_image)
             docker_detail = f"Docker 正常, 镜像: {configured_image} ✓"
+            # 从镜像 ENV 读 MLFLOW_ALLOW_FILE_STORE（容器内 qrun 实际依赖的就是这一层）。
+            image_env = img.attrs.get("Config", {}).get("Env", []) or []
+            for entry in image_env:
+                if entry.startswith("MLFLOW_ALLOW_FILE_STORE="):
+                    image_mlflow_flag = entry.split("=", 1)[1]
+                    break
         except _docker.errors.ImageNotFound:
             docker_detail = f"Docker 正常, 镜像: {configured_image} ✕ 本地不存在（首次运行会自动 pull）"
     except Exception as e:
@@ -1143,13 +1152,23 @@ def health_check():
         "detail": f"CONDA_DEFAULT_ENV={conda_env or '未设置（因子代码验证可能失败）'}",
     })
 
-    # 5. MLflow file store (docker 内需要)
-    mlflow_flag = _os.environ.get("MLFLOW_ALLOW_FILE_STORE", "")
+    # 5. MLflow file store (docker 容器内 qrun 依赖)
+    # 真实生效层是 docker 镜像 ENV（容器内继承），其次才是 .env / 进程环境变量。
+    # 之前只读 os.environ 会在 server 父进程里误报「未设置」——
+    # 因为 _run() 的兜底注入只作用于任务子进程，不作用于 server 父进程。
+    if image_mlflow_flag is not None:
+        mlflow_detail = f"MLFLOW_ALLOW_FILE_STORE={image_mlflow_flag}（镜像 ENV）"
+        mlflow_status = "pass" if image_mlflow_flag == "true" else "warn"
+    else:
+        # 镜像不可用 / 不存在时，回退到进程环境变量（.env 或 _run 注入）
+        proc_flag = _os.environ.get("MLFLOW_ALLOW_FILE_STORE", "")
+        mlflow_detail = f"MLFLOW_ALLOW_FILE_STORE={proc_flag or '未设置（镜像不可读，无法确认容器内是否生效）'}"
+        mlflow_status = "pass" if proc_flag == "true" else "warn"
     checks.append({
         "name": "MLflow 配置",
         "icon": "📈",
-        "status": "pass" if mlflow_flag == "true" else "warn",
-        "detail": f"MLFLOW_ALLOW_FILE_STORE={mlflow_flag or '未设置（docker 内 qrun 可能报 mlflow 错误）'}",
+        "status": mlflow_status,
+        "detail": mlflow_detail,
     })
 
     all_pass = all(c["status"] == "pass" for c in checks)
