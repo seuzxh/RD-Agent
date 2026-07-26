@@ -326,10 +326,10 @@ def _calc_group_returns(pred_label: pd.DataFrame, n_groups: int = 5) -> pd.DataF
     if pred_label.empty or "score" not in pred_label.columns or "label" not in pred_label.columns:
         return pd.DataFrame()
 
-    # 丢弃 label 为 NaN 的标的（与 qlib pred_label_drop 一致）。真实 label.pkl 中
-    # 未来收益未结算的近期标的 label 为 NaN，若不丢弃会污染分组均值（top-score 桶
-    # 的 NaN 会让 Group1 全 NaN）。score 为 NaN 的标的同样无意义，一并丢弃。
-    pred_label = pred_label.dropna(subset=["label"])
+    # 丢弃 score 或 label 为 NaN 的标的（与 qlib 对齐：score 无法排名的标的必须丢弃；
+    # label 为 NaN 的标的也无法参与分组均值）。真实 label.pkl 中未来收益未结算的近期
+    # 标的 label 为 NaN，若不丢弃会污染分组均值（top-score 桶的 NaN 会让 Group1 全 NaN）。
+    pred_label = pred_label.dropna(subset=["score", "label"])
 
     # 按 score 降序排序后按 datetime 分组，每日均分 n_groups 档取 label 均值
     sorted_pl = pred_label.sort_values("score", ascending=False)

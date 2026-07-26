@@ -1,5 +1,4 @@
 """_calc_group_returns 单元测试：验证 Group1-5 + long-short 分组收益计算。"""
-import numpy as np
 import pandas as pd
 import unittest
 
@@ -81,18 +80,6 @@ class CalcGroupReturnsTestCase(unittest.TestCase):
         # 每日每组 1 个标的，Group1 label=4，两日累计 = 8
         self.assertAlmostEqual(result["Group1"].iloc[-1], 8.0, places=6)
         self.assertEqual(len(result), 2)  # 两天
-
-    def test_nan_labels_dropped_not_propagated(self):
-        """含 NaN label 的标的应被丢弃，不污染 group 均值（真实数据 label.pkl ~50% NaN）。"""
-        # 10 个标的，最高 score 的 2 个（即 top-score 桶）label 均为 NaN，模拟真实 qlib
-        # 未来收益未结算的近期高 score 标的。fix 前：Group1 桶=[NaN, NaN] → mean()=NaN
-        # （整个桶全 NaN 才会污染均值，与单点 NaN 被 mean 跳过不同）。
-        scores = [10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0]
-        labels = [float("nan"), float("nan"), 0.08, 0.07, 0.06, 0.05, 0.04, 0.03, 0.02, 0.01]
-        pl = _make_pred_label(scores, labels)
-        result = _calc_group_returns(pl, n_groups=5)
-        # 即使有 NaN，结果不应全 NaN（NaN 标的被丢弃后剩余标的仍能分组）
-        self.assertFalse(result["Group1"].isna().all(), "Group1 不应全 NaN（NaN label 需丢弃）")
 
     def test_nan_in_top_score_bucket_not_propagated(self):
         """NaN label 集中在 top-score 桶（真实数据典型情况）时也不应让 Group1 全 NaN。
