@@ -163,6 +163,19 @@ def step_e_save_pred(workspace_path: str, new_pred: pd.Series):
     return merged
 
 
+def _extract_top20(data, n: int = 20):
+    """从单日 pred 数据(Series 或 DataFrame)提取 Top20 Series。
+
+    兼容 pred.pkl 中列名可能为 'score'/'pred'/无列名/纯 Series 的情况。
+    """
+    if isinstance(data, pd.DataFrame):
+        score_col = "score" if "score" in data.columns else data.columns[0]
+        series = data[score_col].dropna()
+    else:
+        series = data.dropna()
+    return series.sort_values(ascending=False).head(n)
+
+
 def load_factor_codes(factors_dir: str):
     """从目录加载因子代码"""
     result = []
@@ -206,13 +219,13 @@ def main():
         old_pred = pickle.load(open(glob.glob(os.path.join(ws, "mlruns/*/*/artifacts/pred.pkl"))[0], "rb"))
         pred_end = old_pred.index.get_level_values(0).max()
         if pred_end >= qlib_latest:
-            top20 = old_pred.xs(pred_end, level=0).dropna().sort_values("score", ascending=False).head(20)
+            top20 = _extract_top20(old_pred.xs(pred_end, level=0))
         else:
             # parquet 到 T 日但 pred 没到,需要重新 D 步
             print("  pred 未到 T 日,执行 D 步...")
             pred, features = step_d_inference(ws, qlib_latest)
             pred = step_e_save_pred(ws, pred)
-            top20 = pred.xs(qlib_latest, level=0).dropna().sort_values(ascending=False).head(20)
+            top20 = _extract_top20(pred.xs(qlib_latest, level=0))
 
         result = {
             "predict_date": str(top20.index[0] if hasattr(top20.index[0], "year") else qlib_latest.date()),
@@ -243,16 +256,7 @@ def main():
 
     # ===== 输出 Top20 =====
     final_day = pred.index.get_level_values(0).max()
-    last_day_data = pred.xs(final_day, level=0)
-
-    # 统一转成 Series(code → score)
-    if isinstance(last_day_data, pd.DataFrame):
-        score_col = "score" if "score" in last_day_data.columns else last_day_data.columns[0]
-        last_series = last_day_data[score_col].dropna()
-    else:
-        last_series = last_day_data.dropna()
-
-    top20 = last_series.sort_values(ascending=False).head(20)
+    top20 = _extract_top20(pred.xs(final_day, level=0))
 
     print(f"\n{'='*60}")
     print(f"=== 预测完成 ===")

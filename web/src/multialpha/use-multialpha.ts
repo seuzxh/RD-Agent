@@ -38,9 +38,28 @@ export function useMultiAlpha() {
 
   async function loadTraceIds() {
     listLoading.value = true; listError.value = ''
-    try { traceIds.value = await fetchTraceIds() }
+    try {
+      traceIds.value = await fetchTraceIds()
+      // Use cached statuses immediately so the list renders without blocking.
+      for (const id of traceIds.value) {
+        const cached = cache.get(id)
+        if (cached) statuses.value[id] = deriveTraceStatus(cached)
+      }
+      // Backfill statuses for non-cached traces in the background.
+      const uncached = traceIds.value.filter(id => !cache.has(id))
+      loadStatusesSequentially(uncached)
+    }
     catch (error) { listError.value = error instanceof Error ? error.message : '任务列表加载失败'; ElMessage.error(listError.value) }
     finally { listLoading.value = false }
+  }
+
+  async function loadStatusesSequentially(ids: string[]) {
+    for (const id of ids) {
+      try {
+        const msgs = await fetchTrace({ id, all: true, reset: true })
+        statuses.value[id] = deriveTraceStatus(msgs)
+      } catch { statuses.value[id] = 'idle' }
+    }
   }
 
   function stopPolling() {

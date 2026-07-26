@@ -47,13 +47,14 @@ export default defineConfig({
       interval: 1000 // 监听的间隔时间(ms)
     },
     proxy: {
-      '/traces': 'http://115.190.106.124:19899',
-      '/trace': 'http://115.190.106.124:19899',
-      '/predict': 'http://115.190.106.124:19899',
-      '/upload': 'http://115.190.106.124:19899',
-      '/control': 'http://115.190.106.124:19899',
-      '/logs': 'http://115.190.106.124:19899',
-      '/stdout': 'http://115.190.106.124:19899',
+      '/traces': 'http://localhost:19899',
+      '/trace': 'http://localhost:19899',
+      '/predict': 'http://localhost:19899',
+      '/upload': 'http://localhost:19899',
+      '/control': 'http://localhost:19899',
+      '/logs': 'http://localhost:19899',
+      '/stdout': 'http://localhost:19899',
+      '/health': 'http://localhost:19899',
     },
   },
   resolve: {

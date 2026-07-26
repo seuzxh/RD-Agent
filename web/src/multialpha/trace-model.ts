@@ -42,5 +42,7 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
   const loops=[...loopSet].sort((a,b)=>a-b)
   const loopMetrics:Record<number,string>={}
   for(const loopId of loops){const metric=loopMetricMap[loopId];if(metric&&metric.IC!=null)loopMetrics[loopId]=`IC=${Number(metric.IC).toFixed(3)}`}
-  return{hasEnd,hasError,loops,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens:Number(token.accumulated_prompt_tokens||token.prompt_tokens||0),completionTokens:Number(token.accumulated_completion_tokens||token.completion_tokens||0),totalTokens:Number(token.total_tokens||Number(token.accumulated_prompt_tokens||0)+Number(token.accumulated_completion_tokens||0)),callCount:Number(token.call_count||tokenMessages.length),loopMetrics}
+  const promptTokens=Number(token.accumulated_prompt_tokens||token.prompt_tokens||0)
+  const completionTokens=Number(token.accumulated_completion_tokens||token.completion_tokens||0)
+  return{hasEnd,hasError,loops,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:Number(token.total_tokens||promptTokens+completionTokens),callCount:Number(token.call_count||tokenMessages.length),loopMetrics}
 }
