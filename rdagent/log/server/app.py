@@ -1092,13 +1092,19 @@ def health_check():
     docker_detail = "未检测到 Docker"
     try:
         import docker as _docker
+        from rdagent.utils.env import QlibDockerConf
+
         client = _docker.from_env(timeout=3)
         client.ping()
         docker_ok = True
-        # Check local_qlib image
-        images = [tag for img in client.images.list() for tag in (img.tags or [])]
-        qlib_img = [i for i in images if "local_qlib" in i]
-        docker_detail = f"Docker 正常, 镜像: {qlib_img[0] if qlib_img else '无 local_qlib 镜像'}"
+        # 读 .env 配置的实际镜像（QLIB_DOCKER_IMAGE，默认 local_qlib:latest），
+        # 并校验本地是否存在。避免盲取 images.list() 第一个 tag 导致显示与运行时不一致。
+        configured_image = QlibDockerConf().image
+        try:
+            client.images.get(configured_image)
+            docker_detail = f"Docker 正常, 镜像: {configured_image} ✓"
+        except _docker.errors.ImageNotFound:
+            docker_detail = f"Docker 正常, 镜像: {configured_image} ✕ 本地不存在（首次运行会自动 pull）"
     except Exception as e:
         docker_detail = f"Docker 不可用: {str(e)[:80]}"
     checks.append({
