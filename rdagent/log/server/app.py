@@ -24,6 +24,53 @@ app = Flask(__name__, static_folder=str(Path(UI_SETTING.static_path).resolve()))
 CORS(app)
 app.config["UI_SERVER_PORT"] = 19899
 
+# ==================== 性能观测中间件 ====================
+# 记录每个 API 请求的耗时 + 响应大小，控制台输出，用于性能优化前后对比。
+# 通过环境变量 PERF_LOG 关闭（默认开启）。
+import time as _perf_time
+from flask import g as _perf_g
+
+@app.before_request
+def _perf_start_timer() -> None:
+    _perf_g._perf_start = _perf_time.perf_counter()
+
+
+def _fmt_bytes(n: int) -> str:
+    if n < 1024:
+        return f"{n}B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f}KB"
+    return f"{n / (1024 * 1024):.2f}MB"
+
+
+@app.after_request
+def _perf_log_response(response):
+    import os as _perf_os
+    if _perf_os.environ.get("PERF_LOG", "1") == "0":
+        return response
+    start = getattr(_perf_g, "_perf_start", None)
+    if start is None:
+        return response
+    duration_ms = (_perf_time.perf_counter() - start) * 1000
+    resp_size = response.calculate_content_length() or 0
+    # 静态资源（CSS/JS/字体）和 /favicon 不记录，只关注 API
+    path = request.path
+    if path.endswith(('.css', '.js', '.woff2', '.woff', '.ttf', '.ico', '.png', '.svg', '.jpg')) and not path.startswith('/api/'):
+        return response
+    # 颜色：>1s 红，>200ms 黄，否则绿
+    color = '\033[31m' if duration_ms > 1000 else '\033[33m' if duration_ms > 200 else '\033[32m'
+    reset = '\033[0m'
+    # 用 sys.stderr 直接输出，避免 Flask logger 配置导致吞日志
+    import sys as _perf_sys
+    print(
+        f"{color}[PERF]{reset} {request.method} {path} → {response.status_code} "
+        f"{duration_ms:.0f}ms {_fmt_bytes(resp_size)}",
+        file=_perf_sys.stderr,
+        flush=True,
+    )
+    return response
+# ==================== 性能观测中间件 END ====================
+
 _YELLOW = "\033[33m"
 _RESET = "\033[0m"
 
