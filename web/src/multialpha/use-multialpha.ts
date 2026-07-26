@@ -64,16 +64,7 @@ export function useMultiAlpha() {
         statuses.value[item.id] = item.status
       }
     } catch {
-      // catalog 端点不可用（旧后端）→ 回退：对未缓存 trace 逐个拉取
-      const uncached = traceIds.value.filter(id => !cache.has(id) && !statuses.value[id])
-      for (const id of uncached) {
-        if (generation !== listGeneration) return
-        try {
-          const msgs = await fetchTrace({ id, all: true, reset: true })
-          if (generation !== listGeneration) return
-          statuses.value[id] = deriveTraceStatus(msgs)
-        } catch { statuses.value[id] = 'idle' }
-      }
+      // /traces/status 不可用：状态保持默认（idle），不影响列表展示
     }
   }
 
