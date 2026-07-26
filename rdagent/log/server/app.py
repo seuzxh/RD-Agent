@@ -132,6 +132,7 @@ class RDAgentTask:
             )
         self.messages: list[dict] = []
         self.pointers: defaultdict[str, int] = defaultdict(int)
+        self.last_access: float = _perf_time.time()  # C3 LRU 驱逐用
 
     def start(self) -> None:
         if self.process is not None:
@@ -346,21 +347,94 @@ def _normalize_static_request_path(fn: str) -> str:
     return fn
 
 
-def _get_or_create_task(trace_id: str) -> RDAgentTask:
+def _get_running_task(trace_id: str) -> RDAgentTask | None:
+    """只读：返回运行中的 task 或 None（C10：拒绝隐式创建幽灵 task）。"""
+    return rdagent_processes.get(trace_id)
+
+
+def _get_or_load_task(trace_id: str) -> RDAgentTask:
+    """显式加载：首次访问历史 trace 时按需 read_trace（C3 按需加载）。"""
     task = rdagent_processes.get(trace_id)
-    if task is None:
-        task = RDAgentTask(
-            target_name="",
-            kwargs={},
-            stdout_path="",
-            log_trace_path=trace_id,
-            scenario="",
-            trace_name="",
-            ui_server_port=None,
-            create_process=False,
-        )
-        rdagent_processes[trace_id] = task
+    if task is not None:
+        task.last_access = _perf_time.time()
+        return task
+
+    task = RDAgentTask(
+        target_name="",
+        kwargs={},
+        stdout_path="",
+        log_trace_path=trace_id,
+        scenario="",
+        trace_name="",
+        ui_server_port=None,
+        create_process=False,
+    )
+    task.last_access = _perf_time.time()
+    rdagent_processes[trace_id] = task
+
+    # 按需加载历史消息
+    trace_dir = Path(trace_id)
+    if trace_dir.exists() and trace_dir.is_dir():
+        try:
+            _read_trace_into(trace_dir, task)
+        except Exception:
+            app.logger.exception("Failed to lazy-load trace from %s", trace_id)
+
+    _evict_if_needed()
     return task
+
+
+def _evict_if_needed() -> None:
+    """C3 LRU 驱逐：超出 UI_MAX_INMEMORY_TRACES 时淘汰最久未访问的历史 trace。
+
+    关键约束：is_alive() 为真的运行任务永不驱逐。
+    """
+    max_traces = getattr(UI_SETTING, 'max_inmemory_traces', 20)
+    while len(rdagent_processes) > max_traces:
+        candidates = [
+            (tid, t) for tid, t in rdagent_processes.items()
+            if t.process is None or not t.is_alive()
+        ]
+        if not candidates:
+            break
+        evict_id = min(candidates, key=lambda x: getattr(x[1], 'last_access', 0))[0]
+        del rdagent_processes[evict_id]
+
+
+def _read_trace_into(log_path: Path, task: RDAgentTask) -> None:
+    """把历史 trace 的 pkl 读入给定 task 的 messages（不污染 registry）。
+
+    read_trace 的无副作用版本——不调 _get_or_create_task/_get_or_load_task。
+    """
+    fs = FileStorage(log_path)
+    ws = WebStorage(port=1, path=log_path)
+    task.messages = []
+    last_timestamp = None
+    for msg in fs.iter_msg():
+        data = ws._obj_to_json(obj=msg.content, tag=msg.tag, id=str(log_path), timestamp=msg.timestamp.isoformat())
+        if data:
+            if isinstance(data, list):
+                for d in data:
+                    task.messages.append(d["msg"])
+                    last_timestamp = msg.timestamp
+            else:
+                task.messages.append(data["msg"])
+                last_timestamp = msg.timestamp
+
+    now = datetime.now(timezone.utc)
+    if last_timestamp and (now - last_timestamp).total_seconds() > 1800:
+        task.messages.append(
+            {
+                "tag": "END",
+                "timestamp": now.isoformat(),
+                "content": {"error_msg": "Trace session has ended.", "end_code": 0},
+            }
+        )
+
+
+# 兼容旧调用：保持 _get_or_create_task 可用，但内部改为 _get_or_load_task
+def _get_or_create_task(trace_id: str) -> RDAgentTask:
+    return _get_or_load_task(trace_id)
 
 
 def _resolve_stdout_path(trace_id: str) -> Path | None:
@@ -470,31 +544,9 @@ def _sota_from_messages(messages: list[dict]) -> dict:
 
 
 def read_trace(log_path: Path, id: str = "") -> None:
-    fs = FileStorage(log_path)
-    ws = WebStorage(port=1, path=log_path)
-    task = _get_or_create_task(id)
-    task.messages = []
-    last_timestamp = None
-    for msg in fs.iter_msg():
-        data = ws._obj_to_json(obj=msg.content, tag=msg.tag, id=id, timestamp=msg.timestamp.isoformat())
-        if data:
-            if isinstance(data, list):
-                for d in data:
-                    task.messages.append(d["msg"])
-                    last_timestamp = msg.timestamp
-            else:
-                task.messages.append(data["msg"])
-                last_timestamp = msg.timestamp
-
-    now = datetime.now(timezone.utc)
-    if last_timestamp and (now - last_timestamp).total_seconds() > 1800:
-        task.messages.append(
-            {
-                "tag": "END",
-                "timestamp": now.isoformat(),
-                "content": {"error_msg": "Trace session has ended.", "end_code": 0},
-            }
-        )
+    """读取历史 trace 到 registry（兼容旧调用）。C3 后推荐用 _get_or_load_task。"""
+    task = _get_or_load_task(id or str(log_path))
+    _read_trace_into(log_path, task)
 
 
 def _collect_existing_trace_ids(trace_root: Path) -> list[str]:
@@ -517,16 +569,75 @@ def _collect_existing_trace_ids(trace_root: Path) -> list[str]:
     return trace_ids
 
 
+def _index_trace_catalog_from_files(trace_dir: Path, trace_id: str) -> None:
+    """C3: 从 pkl 文件名（不反序列化对象）推导 trace 的 catalog 状态。
+
+    pkl 文件名格式：{tag}.{pid_chain}.{YYYY-MM-DD_HH-MM-SS-FFFFFF}.pkl
+    - created_at = 最早 pkl 时间戳
+    - updated_at = 最晚 pkl 时间戳
+    - status = 从文件名含的 tag 推导（END/feedback/Quantitative Backtesting Chart）
+    - loops = 从文件名含的 Loop_N 提取
+    - has_chart = 是否含 Quantitative Backtesting Chart 目录
+    """
+    import re as _re
+    pkls = list(trace_dir.rglob("*.pkl"))
+    if not pkls:
+        return
+
+    timestamps = []
+    tags_seen: set[str] = set()
+    loops: set[int] = set()
+    has_chart = bool(list(trace_dir.rglob("*Chart*")))
+
+    ts_pattern = _re.compile(r'(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{6})\.pkl$')
+    loop_pattern = _re.compile(r'Loop_(\d+)\.')
+
+    for pkl in pkls:
+        name = pkl.name
+        m = ts_pattern.search(name)
+        if m:
+            parts = m.group(1).split('_')
+            if len(parts) == 2:
+                date_part = parts[0]
+                time_part = parts[1].replace('-', ':')
+                timestamps.append(f"{date_part}T{time_part}Z")
+        full_path = str(pkl.relative_to(trace_dir))
+        path_parts = full_path.replace('\\', '/').split('/')
+        for part in path_parts:
+            for tag_keyword in ['END', 'feedback', 'Quantitative Backtesting Chart', 'hypothesis']:
+                if tag_keyword.lower() in part.lower():
+                    tags_seen.add(tag_keyword)
+            lm = loop_pattern.match(part)
+            if lm:
+                loops.add(int(lm.group(1)))
+
+    created_at = min(timestamps) if timestamps else None
+    updated_at = max(timestamps) if timestamps else None
+
+    if 'END' in tags_seen or ('feedback' in tags_seen and 'hypothesis' in tags_seen):
+        status = 'done'
+    else:
+        status = 'running'
+
+    trace_states[trace_id] = {
+        "status": status,
+        "loops": loops,
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "has_chart": has_chart,
+        "_tags_seen": tags_seen,
+    }
+
+
 def _load_existing_traces(trace_root: Path) -> None:
-    """Load persisted traces into memory so the UI survives a server restart."""
+    """C3: 启动时只建 catalog 索引（扫文件名，不反序列化对象，不阻塞启动）。"""
 
     for trace_id in _collect_existing_trace_ids(trace_root):
         trace_dir = trace_root / trace_id
-
         try:
-            read_trace(trace_dir, id=str(trace_dir))
+            _index_trace_catalog_from_files(trace_dir, trace_id)
         except Exception:
-            app.logger.exception("Failed to load trace from %s", trace_dir)
+            app.logger.exception("Failed to index trace catalog from %s", trace_id)
 
 
 @app.route("/trace", methods=["POST"])
@@ -761,12 +872,14 @@ def receive_msgs():
 
     if isinstance(data, list):
         for d in data:
-            task = _get_or_create_task(d["id"])
-            task.messages.append(d["msg"])
+            task = _get_running_task(d["id"])
+            if task is not None:
+                task.messages.append(d["msg"])
             _update_trace_state(_trace_id_to_external(d["id"]), d["msg"])
     else:
-        task = _get_or_create_task(data["id"])
-        task.messages.append(data["msg"])
+        task = _get_running_task(data["id"])
+        if task is not None:
+            task.messages.append(data["msg"])
         _update_trace_state(_trace_id_to_external(data["id"]), data["msg"])
 
     return jsonify({"status": "success"}), 200

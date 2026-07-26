@@ -20,5 +20,8 @@ class UIBasePropSetting(ExtendedBaseSettings):
 
     enable_cache: bool = True
 
+    # C3: 按需加载的内存 LRU 上限（含运行中的 task）
+    max_inmemory_traces: int = 20
+
 
 UI_SETTING = UIBasePropSetting()
