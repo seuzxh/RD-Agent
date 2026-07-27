@@ -6,7 +6,6 @@
           <img class="brand-logo" src="https://h5.crsec.com.cn/logo.png" alt="国新证券" />
         </span>
         <span class="brand-copy">
-          <small>GUOXIN SECURITIES</small>
           <strong>AI 投研圆桌</strong>
         </span>
       </a>
@@ -14,13 +13,11 @@
         <span class="live-dot"></span>
         <span>六维协作诊股系统</span>
       </div>
-      <div class="topbar-mark">MULTI-AGENT RESEARCH DESK · 06</div>
     </header>
 
     <main class="workspace">
       <section class="hero">
         <div class="hero-copy">
-          <div class="eyebrow"><span>AI RESEARCH COUNCIL</span><i></i></div>
           <h1>六维视角，<em>共研一只股票。</em></h1>
           <p>汇总基本面、消息、资金、技术、评级与研报六个维度的既有观点。</p>
         </div>
@@ -79,11 +76,32 @@
         <div class="stock-focus-title">
           <span class="section-number">02</span>
           <div>
-            <small>CURRENT RESEARCH SUBJECT</small>
             <h2>
               {{ selectedStock.name }}
               <em>{{ selectedStock.code }}<span v-if="selectedStock.marketLabel"> · {{ selectedStock.marketLabel }}</span></em>
             </h2>
+          </div>
+        </div>
+        <div class="opinion-summary">
+          <div class="opinion-summary-head">
+            <small>六智能体观点汇总</small>
+          </div>
+          <div v-if="opinionItems.length" class="opinion-summary-copy">
+            <template v-for="(item, index) in opinionItems" :key="item.key">
+              <strong :class="item.key">{{ item.count }} {{ item.label }}</strong>
+              <i v-if="index < opinionItems.length - 1">·</i>
+            </template>
+          </div>
+          <div v-else class="opinion-summary-empty">
+            {{ isAnalyzing ? '观点读取中…' : '暂无有效观点' }}
+          </div>
+          <div class="opinion-ratio-bar" aria-label="六智能体观点比例">
+            <span
+              v-for="item in opinionDistribution"
+              :key="item.key"
+              :class="item.key"
+              :style="{ width: `${item.percent}%` }"
+            ></span>
           </div>
         </div>
         <div class="stock-quote">
@@ -105,7 +123,6 @@
           <div class="section-title">
             <span class="section-number">{{ selectedStock ? '03' : '02' }}</span>
             <div>
-              <small>THE RESEARCH COUNCIL</small>
               <h2>六维智能体观点</h2>
             </div>
           </div>
@@ -164,7 +181,7 @@
               class="analysis-content"
             >
               <section class="view-block">
-                <div class="block-label"><span>CORE VIEW</span>核心观点</div>
+                <div class="block-label">核心观点</div>
                 <ol>
                   <li
                     v-for="(view, viewIndex) in agentStates[agent.id].analysis?.coreViews"
@@ -179,11 +196,11 @@
                 </p>
               </section>
               <section class="risk-block">
-                <div class="block-label"><span>RISK NOTE</span>风险提示</div>
+                <div class="block-label">风险提示</div>
                 <p>{{ agentStates[agent.id].analysis?.risk || '本次分析未提供额外风险提示。' }}</p>
               </section>
               <blockquote>
-                <span>一句话结论</span>
+                <span>结论</span>
                 {{ agentStates[agent.id].analysis?.summary || '本次分析暂无总结。' }}
               </blockquote>
               <footer v-if="agentStates[agent.id].analysis?.createdAt">
@@ -243,6 +260,27 @@ let consultationGeneration = 0
 const agentControllers = new Map<number, AbortController>()
 
 const isAnalyzing = computed(() => AGENTS.some((agent) => agentStates[agent.id].status === 'loading'))
+const opinionDistribution = computed(() => {
+  const definitions: Array<{ key: AgentDirection; label: string }> = [
+    { key: 'positive', label: '积极' },
+    { key: 'neutral', label: '中立' },
+    { key: 'negative', label: '消极' },
+  ]
+  const successfulAnalyses = AGENTS
+    .map((agent) => agentStates[agent.id].analysis)
+    .filter((analysis) => analysis !== null)
+  const total = successfulAnalyses.length
+
+  return definitions.map((definition) => {
+    const count = successfulAnalyses.filter((analysis) => analysis.direction === definition.key).length
+    return {
+      ...definition,
+      count,
+      percent: total ? (count / total) * 100 : 0,
+    }
+  })
+})
+const opinionItems = computed(() => opinionDistribution.value.filter((item) => item.count > 0))
 
 function formatPrice(value: string): string {
   if (!value.trim()) return '—'
