@@ -123,7 +123,7 @@ class RDAgentTask:
         rdagent_logger.refresh_storages_from_settings()
         rdagent_logger.set_storages_path(self.log_trace_path)
         Path(self.stdout_path).parent.mkdir(parents=True, exist_ok=True)
-        with open(self.stdout_path, "w") as log_file:
+        with open(self.stdout_path, "w", encoding="utf-8") as log_file:
             with redirect_stdout(log_file), redirect_stderr(log_file):
                 rdagent_logger.rebind_console_to_current_streams()
                 try:
@@ -645,7 +645,7 @@ def health_check():
     qlib_data_path = _Path.home() / ".qlib" / "qlib_data" / "cn_data"
     calendars = qlib_data_path / "calendars" / "day.txt"
     if calendars.exists():
-        with open(calendars) as f:
+        with open(calendars, encoding="utf-8") as f:
             lines = f.readlines()
         checks.append({
             "name": "Qlib 数据",

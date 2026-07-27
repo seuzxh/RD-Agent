@@ -130,7 +130,7 @@ def get_file_desc(p: Path, variable_list=[]) -> str:
         )
 
     elif p.name.endswith(".md"):
-        with open(p) as f:
+        with open(p, encoding="utf-8") as f:
             content = f.read()
             return JJ_TPL.render(
                 file_name=p.name,

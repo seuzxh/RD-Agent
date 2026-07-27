@@ -354,7 +354,7 @@ class DeprecBackend(APIBackend):
 
             req = urllib.request.Request(self.gcr_endpoint, body, self.headers)  # noqa: S310
             response = urllib.request.urlopen(req)  # noqa: S310
-            resp = json.loads(response.read().decode())["output"]
+            resp = json.loads(response.read().decode("utf-8", errors="replace"))["output"]
             if LLM_SETTINGS.log_llm_chat_content:
                 logger.info(f"{LogColors.CYAN}Response:{resp}{LogColors.END}", tag="llm_messages")
         elif self.chat_use_azure_deepseek:

@@ -460,7 +460,7 @@ class Env(Generic[ASpecificEnvConf]):
                 running_extra_volume,
             )
         if self.conf.redirect_stdout_to_file:
-            stdout = log_file.read_text(errors="replace")
+            stdout = log_file.read_text(encoding="utf-8", errors="replace")
             log_file.unlink(missing_ok=True)
             result.update_stdout(stdout)
         if str(Path(local_path).resolve()) in result.stdout:
@@ -550,7 +550,7 @@ class Env(Generic[ASpecificEnvConf]):
         Dump the code into the local path and run the code.
         """
         random_file_name = f"{uuid.uuid4()}.py" if code_dump_file_py_name is None else f"{code_dump_file_py_name}.py"
-        with open(os.path.join(local_path, random_file_name), "w") as f:
+        with open(os.path.join(local_path, random_file_name), "w", encoding="utf-8") as f:
             f.write(code)
         entry = f"python {random_file_name}"
         log_output = self.check_output(entry, local_path, env, running_extra_volume=dict(running_extra_volume))
@@ -937,7 +937,7 @@ class DockerEnv(Env[DockerConf]):
             with Progress(SpinnerColumn(), TextColumn("{task.description}")) as p:
                 task = p.add_task("[cyan]Building image...")
                 for part in resp_stream:
-                    lines = part.decode("utf-8").split("\r\n")
+                    lines = part.decode("utf-8", errors="replace").split("\r\n")
                     for line in lines:
                         if line.strip():
                             status_dict = json.loads(line)

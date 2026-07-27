@@ -17,7 +17,7 @@ def check_docker_status() -> None:
         client = docker.from_env()
         client.images.pull("hello-world")
         container = client.containers.run("hello-world", detach=True)
-        logs = container.logs().decode("utf-8")
+        logs = container.logs().decode("utf-8", errors="replace")
         print(logs)
         logger.info(f"The docker status is normal")
     except docker.errors.DockerException as e:

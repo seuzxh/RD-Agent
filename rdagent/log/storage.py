@@ -53,7 +53,7 @@ class FileStorage(Storage):
 
         if save_type == "json":
             path = path.with_suffix(".json")
-            with path.open("w") as f:
+            with path.open("w", encoding="utf-8") as f:
                 try:
                     json.dump(obj, f)
                 except TypeError:
@@ -66,7 +66,7 @@ class FileStorage(Storage):
             return path
         elif save_type == "text":
             obj = str(obj)
-            with path.open("w") as f:
+            with path.open("w", encoding="utf-8") as f:
                 f.write(obj)
             return path
 

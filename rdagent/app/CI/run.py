@@ -735,7 +735,7 @@ while True:
 
     fix_records = repo.fix_records
     filename = f"{DIR.name}_{start_timestamp}_round_{len(ea.evolving_trace)}_fix_records.json"
-    with Path(filename).open("w") as file:
+    with Path(filename).open("w", encoding="utf-8") as file:
         json.dump({k: v.to_dict() for k, v in fix_records.items()}, file, indent=4)
 
     # Count the number of skipped errors
