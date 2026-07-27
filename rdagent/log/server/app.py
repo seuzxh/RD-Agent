@@ -716,9 +716,13 @@ def _generate_chart_html(df_pkl_path: Path) -> str:
     from rdagent.log.ui.qlib_report_figure import report_figure
 
     with open(df_pkl_path, 'rb') as f:
-        df = _pickle.load(f)
+        obj = _pickle.load(f)
 
-    fig = report_figure(df)
+    # 兼容 dict（新格式 {'ret':..,'group':..}）和 DataFrame（历史 trace）
+    if isinstance(obj, dict) and "ret" in obj:
+        fig = report_figure(obj["ret"], group_df=obj.get("group"))
+    else:
+        fig = report_figure(obj)
     html = plotly.io.to_html(fig, include_plotlyjs=False, full_html=True)
     # 注入 bootcdn script（include_plotlyjs=False 只留占位，需手动加 script 标签）
     html = html.replace(

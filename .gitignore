@@ -8,6 +8,11 @@ typescript*
 tmp/
 .ai/
 
+# 工具本地目录（索引数据库、会话缓存、SDD 工作区）
+.codegraph/
+.zcode/
+.superpowers/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

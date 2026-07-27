@@ -313,6 +313,43 @@ def _calculate_mdd(series):
     return series - series.cummax()
 
 
+def _calc_group_returns(pred_label: pd.DataFrame, n_groups: int = 5) -> pd.DataFrame:
+    """计算分组累计收益净值（移植 qlib _group_return 算法）。
+
+    :param pred_label: MultiIndex DataFrame，index=[datetime, instrument]，
+                       列含 'score'（预测分）和 'label'（真实收益）。
+    :param n_groups: 分组数，默认 5。
+    :return: DataFrame，index=datetime（%Y-%m-%d 字符串），列为
+             ['Group1',...,'Group{n_groups}', 'long-short']，值为累计净值。
+             输入为空时返回空 DataFrame。
+    """
+    if pred_label.empty or "score" not in pred_label.columns or "label" not in pred_label.columns:
+        return pd.DataFrame()
+
+    # 丢弃 score 或 label 为 NaN 的标的（与 qlib 对齐：score 无法排名的标的必须丢弃；
+    # label 为 NaN 的标的也无法参与分组均值）。真实 label.pkl 中未来收益未结算的近期
+    # 标的 label 为 NaN，若不丢弃会污染分组均值（top-score 桶的 NaN 会让 Group1 全 NaN）。
+    pred_label = pred_label.dropna(subset=["score", "label"])
+
+    # 按 score 降序排序后按 datetime 分组，每日均分 n_groups 档取 label 均值
+    sorted_pl = pred_label.sort_values("score", ascending=False)
+    daily_group_returns = {}
+    for i in range(n_groups):
+        daily_group_returns[f"Group{i + 1}"] = sorted_pl.groupby(level="datetime", group_keys=False)[
+            "label"
+        ].apply(lambda x: x[len(x) // n_groups * i : len(x) // n_groups * (i + 1)].mean())
+
+    group_df = pd.DataFrame(daily_group_returns)
+    # long-short = Group1 - GroupN（每日）
+    group_df["long-short"] = group_df[f"Group1"] - group_df[f"Group{n_groups}"]
+    # 累计净值
+    group_df = group_df.cumsum()
+    # 索引 strftime（与 _calculate_report_data 一致）
+    group_df.index = group_df.index.strftime("%Y-%m-%d")
+    group_df.sort_index(ascending=True, inplace=True)
+    return group_df
+
+
 def _calculate_report_data(raw_df: pd.DataFrame) -> pd.DataFrame:
     """
 
@@ -345,10 +382,13 @@ def _calculate_report_data(raw_df: pd.DataFrame) -> pd.DataFrame:
     return report_df
 
 
-def report_figure(df: pd.DataFrame) -> list | tuple:
+def report_figure(df: pd.DataFrame, group_df: pd.DataFrame = None) -> list | tuple:
     """
 
     :param df:
+    :param group_df: 分组累计净值 DataFrame（Task 1 输出格式，列为
+                     ['Group1',...,'Group5','long-short']）或 None。为空/None 时
+                     维持原 7 子图行为（向后兼容）。
     :return:
     """
 
@@ -369,6 +409,14 @@ def report_figure(df: pd.DataFrame) -> list | tuple:
     report_df = _temp_df
 
     # Create figure
+    has_group = group_df is not None and not group_df.empty
+    n_rows = 8 if has_group else 7
+
+    if has_group:
+        # group_df 索引已是 %Y-%m-%d 字符串，对齐 report_df
+        for col in ["Group1", "Group2", "Group3", "Group4", "Group5", "long-short"]:
+            report_df[col] = group_df[col].reindex(report_df.index).ffill().fillna(0)
+
     _default_kind_map = dict(kind="Scatter", kwargs={"mode": "lines+markers"})
     _temp_fill_args = {"fill": "tozeroy", "mode": "lines+markers"}
     _column_row_col_dict = [
@@ -384,11 +432,27 @@ def report_figure(df: pd.DataFrame) -> list | tuple:
         ("cum_ex_return_wo_cost_mdd", dict(row=7, col=1, graph_kwargs=_temp_fill_args)),
     ]
 
+    if has_group:
+        _group_colors = {
+            "Group1": "#2ca02c",
+            "Group2": "#98df8a",
+            "Group3": "#ffbb78",
+            "Group4": "#ff7f0e",
+            "Group5": "#d62728",
+        }
+        for col in ["Group1", "Group2", "Group3", "Group4", "Group5"]:
+            _column_row_col_dict.append(
+                (col, dict(row=8, col=1, graph_kwargs={"mode": "lines", "line_color": _group_colors[col]}))
+            )
+        _column_row_col_dict.append(
+            ("long-short", dict(row=8, col=1, graph_kwargs={"mode": "lines", "line_dash": "dash", "line_width": 2}))
+        )
+
     _subplot_layout = dict()
-    for i in range(1, 8):
+    for i in range(1, n_rows + 1):
         # yaxis
         _subplot_layout.update({"yaxis{}".format(i): dict(zeroline=True, showline=True, showticklabels=True)})
-        _show_line = i == 7
+        _show_line = i == n_rows
         _subplot_layout.update({"xaxis{}".format(i): dict(showline=_show_line, type="category", tickangle=45)})
 
     _layout_style = dict(
@@ -426,12 +490,16 @@ def report_figure(df: pd.DataFrame) -> list | tuple:
         ],
     )
 
+    _row_width = [1, 1, 1, 3, 1, 1, 3]  # 原 7 行
+    if has_group:
+        _row_width = [1] + _row_width  # group 子图加在最前（plotly row_width 是倒序）
+
     _subplot_kwargs = dict(
         shared_xaxes=True,
         vertical_spacing=0.01,
-        rows=7,
+        rows=n_rows,
         cols=1,
-        row_width=[1, 1, 1, 3, 1, 1, 3],
+        row_width=_row_width,
         print_grid=False,
     )
     figure = SubplotsGraph(
