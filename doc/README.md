@@ -35,6 +35,7 @@ layout: home
 - [首页](pages/home.md) — `#/` 任务列表 / 首屏仪表盘 / 任务入口 / 顶栏操作
 - [任务详情页](pages/detail.md) — `#/tasks/:id` 迭代过程 / 结果工作区 / 运行日志 / SOTA
 - [新建任务](pages/create-task.md) — 表单 / 文件上传 / 并发限制 / 启动流程
+- [设置页](pages/settings.md) — `#/settings` LLM配置 / 并发 / Qlib日期 / 执行环境 / 模型测试
 
 ## 🛠 技术方案 / 设计
 
@@ -43,6 +44,7 @@ layout: home
 - [webUI 性能优化最终设计](design/WEBUI_PERFORMANCE_FINAL.md) — 三个分离 + C1-C10 改造点 + CDN 决策
 - [任务状态判断修复](design/TRACE_STATUS_FIX.md) — stop/异常终止后仍显示 running 的根因（3 个 bug）与修复方案
 - [任务并发限制](design/TASK_CONCURRENCY_LIMIT.md) — 运行中任务达上限（默认 10）禁止新建，前后端配合
+- [设置页面设计](design/SETTINGS_PAGE_DESIGN.md) — 4分组37字段 + 密钥脱敏 + 模型测试 + 分步路由可视化
 
 ## 🏛 架构说明
 

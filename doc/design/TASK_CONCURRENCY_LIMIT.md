@@ -3,7 +3,7 @@
 > 类型：技术方案设计（新功能）
 > 创建：2026-07-26
 > 关联代码：`rdagent/log/ui/conf.py`、`rdagent/log/server/app.py`、`web/src/multialpha/`
-> 状态：**待实施**
+> 状态：**已实施**（commit `bd24aa9a`，2026-07-26 验证通过）
 
 ---
 
