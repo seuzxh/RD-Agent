@@ -20,6 +20,7 @@ export default defineConfig({
         // main: pathResolve('./index.html'),
         multialpha: pathResolve('./multialpha.html'),
         predict: pathResolve('./predict.html'),
+        anaAgents: pathResolve('./ana-agents.html'),
       },
     },
   },
