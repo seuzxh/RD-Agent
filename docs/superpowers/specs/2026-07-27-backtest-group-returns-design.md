@@ -166,6 +166,7 @@ report_figure(ret_df, group_df) → 8 子图 plotly HTML
 | ret_group.pkl 不存在（历史 trace） | `workspace.py` group_df=None，`report_figure(df)` 走原 7 子图 |
 | pred/label 形状不符（空数据） | `_calc_group_returns` 返回空 DataFrame，`report_figure` 检测空则跳过第 8 子图 |
 | 加载的 pkl 是 DataFrame 而非 dict（历史 trace 缓存） | `_generate_chart_html` isinstance 分支处理 |
+| **label.pkl 含大量 NaN**（真实数据，未来收益约 50% NaN，集中在高分位） | `_calc_group_returns` 在排序分组前 `dropna(subset=["score", "label"])`，丢弃 score 或 label 为 NaN 的标的；否则 Group1 会全 NaN（NaN 经 mean→cumsum 传播）。对齐 qlib `pred_label_drop` 行为 |
 
 ## 测试策略
 
