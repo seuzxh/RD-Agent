@@ -35,13 +35,13 @@
                 <label class="field-label">{{ field.label }}</label>
                 <div class="model-map-editor">
                   <div class="map-header">
-                    <span class="col-step">步骤</span>
+                    <span class="col-step">智能体 / 步骤</span>
                     <span class="col-model">模型</span>
                     <span class="col-temp">温度</span>
                     <span class="col-action"></span>
                   </div>
                   <div v-for="(row, idx) in modelMapRows" :key="idx" class="map-row">
-                    <el-select v-model="row.step" size="small" filterable allow-create default-first-option placeholder="选择或输入步骤" class="col-step">
+                    <el-select v-model="row.step" size="small" filterable allow-create default-first-option placeholder="选择智能体" class="col-step">
                       <el-option v-for="s in STEP_PRESETS" :key="s.value" :label="s.label" :value="s.value" />
                     </el-select>
                     <el-input v-model="row.model" size="small" placeholder="openai/gpt-4o" class="col-model" />
@@ -115,11 +115,25 @@ import { fetchSettingsSchema, saveSettings, type SettingsSchema, type ConfigFiel
 defineEmits<{ home: [] }>()
 
 const STEP_PRESETS = [
-  { label: '实验生成 (direct_exp_gen)', value: 'direct_exp_gen' },
-  { label: '代码实现 (coding)', value: 'coding' },
-  { label: '运行回测 (running)', value: 'running' },
-  { label: '反馈评审 (feedback)', value: 'feedback' },
+  { label: '🧠 假设生成', value: 'hypothesis' },
+  { label: '✏️ 实验设计', value: 'direct_exp_gen' },
+  { label: '▰ 代码实现', value: 'coding' },
+  { label: '📊 回测执行', value: 'running' },
+  { label: '🔍 反馈评审', value: 'feedback' },
 ]
+
+// step key → 中文名称映射（与 AgentFlow 智能体名称对齐）
+const STEP_LABELS: Record<string, string> = {
+  hypothesis: '🧠 假设生成',
+  direct_exp_gen: '✏️ 实验设计',
+  coding: '▰ 代码实现',
+  running: '📊 回测执行',
+  feedback: '🔍 反馈评审',
+}
+
+function stepLabel(key: string): string {
+  return STEP_LABELS[key] || key
+}
 
 interface MapRow { step: string; model: string; temperature?: number }
 
@@ -263,7 +277,7 @@ onMounted(loadSchema)
 .model-map-editor { border: 1px solid var(--ma-line); border-radius: 6px; overflow: hidden; }
 .map-header { display: flex; gap: 8px; padding: 8px 10px; background: var(--ma-surface-2); font-size: 11px; font-weight: 600; color: var(--ma-muted); }
 .map-row { display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--ma-line); align-items: center; }
-.col-step { flex: 0 0 180px; }
+.col-step { flex: 0 0 200px; }
 .col-model { flex: 1; }
 .col-temp { flex: 0 0 100px; }
 .col-action { flex: 0 0 28px; text-align: center; }
