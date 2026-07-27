@@ -162,7 +162,7 @@ class FactorFBWorkspace(FBWorkspace):
                 import site
 
                 execution_feedback = (
-                    e.output.decode()
+                    e.output.decode("utf-8", errors="replace")
                     .replace(str(execution_code_path.parent.absolute()), r"/path/to")
                     .replace(str(site.getsitepackages()[0]), r"/path/to/site-packages")
                 )

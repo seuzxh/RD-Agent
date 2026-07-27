@@ -1128,7 +1128,7 @@ class DockerEnv(Env[DockerConf]):
 
             with Live(format_tail_display(), refresh_per_second=2, console=Console()) as live:
                 for log in logs:
-                    decoded_log = log.strip().decode()
+                    decoded_log = log.strip().decode("utf-8", errors="replace")
                     log_output += decoded_log + "\n"
                     log_buffer.append(decoded_log)
 
@@ -1140,7 +1140,7 @@ class DockerEnv(Env[DockerConf]):
         else:
             # Default behavior: show all logs
             for log in logs:
-                decoded_log = log.strip().decode()
+                decoded_log = log.strip().decode("utf-8", errors="replace")
                 Console().print(decoded_log, markup=False)
                 log_output += decoded_log + "\n"
 

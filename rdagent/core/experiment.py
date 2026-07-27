@@ -366,7 +366,7 @@ class FBWorkspace(Workspace):
                 symlink_mode = 0o120000  # Constant for symlink file type in Unix
                 if mode == symlink_mode:  # Symlink
                     dest_path.parent.mkdir(parents=True, exist_ok=True)
-                    link_target = zf.read(info).decode()
+                    link_target = zf.read(info).decode("utf-8", errors="replace")
                     dest_path.symlink_to(link_target)
                 elif info.is_dir():
                     dest_path.mkdir(parents=True, exist_ok=True)
