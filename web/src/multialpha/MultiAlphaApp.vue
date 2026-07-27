@@ -2,8 +2,8 @@
   <div class="multialpha-app">
     <TopBar :loading="listLoading" @home="navigateHome" @refresh="loadTraceIds" @create="openDialog('text')" @settings="navigateSettings"/>
     <main class="app-main">
-      <TaskSidebar :tasks="tasks" :active-id="currentTraceId" :loading="listLoading" :error="listError" @select="navigateTask" @retry="loadTraceIds"/>
-      <button v-if="!isPredict" class="predict-entry-btn" title="股池预测" @click="navigatePredict">📊 预测</button>
+      <TaskSidebar v-if="!isSettings && !isPredict" :tasks="tasks" :active-id="currentTraceId" :loading="listLoading" :error="listError" @select="navigateTask" @retry="loadTraceIds"/>
+      <button v-if="!isPredict && !isSettings" class="predict-entry-btn" title="股池预测" @click="navigatePredict">📊 预测</button>
       <LandingTerminal v-if="isHome" :tasks="tasks" @create="openDialog" @history="focusTasks"/>
       <PredictDashboard v-else-if="isPredict" @home="navigateHome"/>
       <SettingsPage v-else-if="isSettings" @home="navigateHome"/>

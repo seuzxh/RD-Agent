@@ -280,7 +280,7 @@ onMounted(loadSchema)
 .nav-item:hover { background: var(--ma-surface-2); }
 .nav-item.active { border-left-color: var(--ma-gold); background: var(--ma-gold-soft); color: var(--ma-gold-dark); font-weight: 500; }
 .nav-icon { font-size: 14px; }
-.settings-main { flex: 1; overflow-y: auto; padding: 20px; max-width: 820px; }
+.settings-main { flex: 1; overflow-y: auto; padding: 20px; max-width: 960px; margin: 0 auto; }
 .settings-loading, .settings-error { display: flex; align-items: center; gap: 8px; justify-content: center; padding: 60px; color: var(--ma-muted); }
 .settings-error { color: var(--ma-danger); }
 .group-title { margin: 0 0 16px; font-size: 18px; font-weight: 600; }
