@@ -156,6 +156,6 @@ export const saveSettings = (fields: Record<string, unknown>) =>
 
 export interface TestModelResult { ok: boolean; latency_ms: number; error: string }
 
-export const testModel = (model: string, apiKey?: string, apiBase?: string) =>
-  fetch('/settings/test-model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, api_key: apiKey || '', api_base: apiBase || '' }) })
+export const testModel = (model: string, apiKey?: string, apiBase?: string, mode: 'chat' | 'embedding' = 'chat') =>
+  fetch('/settings/test-model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, api_key: apiKey || '', api_base: apiBase || '', mode }) })
     .then(r => parseResponse<TestModelResult>(r))

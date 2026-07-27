@@ -97,9 +97,9 @@
               <!-- string（默认） -->
               <div v-else class="field-item">
                 <label class="field-label">{{ field.label }}</label>
-                <div v-if="field.key === 'CHAT_MODEL'" class="model-test-wrap">
+                <div v-if="field.key === 'CHAT_MODEL' || field.key === 'EMBEDDING_MODEL'" class="model-test-wrap">
                   <el-input v-model="form[field.key]" size="small" :placeholder="field.default != null ? String(field.default) : ''" class="col-model" />
-                  <el-button text size="small" class="test-btn" :loading="testResults[String(form[field.key])]?.loading" @click="onTestModel(String(form[field.key]))">🧪 测试</el-button>
+                  <el-button text size="small" class="test-btn" :loading="testResults[String(form[field.key])]?.loading" @click="onTestModel(String(form[field.key]), field.key === 'EMBEDDING_MODEL' ? 'embedding' : 'chat')">🧪 测试</el-button>
                 </div>
                 <el-input v-else v-model="form[field.key]" size="small" :placeholder="field.default != null ? String(field.default) : ''" />
                 <small v-if="field.help" class="field-help">{{ field.help }}</small>
@@ -161,7 +161,7 @@ const initialModelMapJson = ref('')
 // 模型测试状态：key=模型名，value={loading, ok, latency_ms, error}
 const testResults = reactive<Record<string, { loading: boolean; ok: boolean; latency_ms: number; error: string }>>({})
 
-async function onTestModel(model: string) {
+async function onTestModel(model: string, mode: 'chat' | 'embedding' = 'chat') {
   if (!model || !model.trim()) { ElMessage.warning('请先输入模型名'); return }
   const key = model.trim()
   testResults[key] = { loading: true, ok: false, latency_ms: 0, error: '' }
@@ -169,7 +169,7 @@ async function onTestModel(model: string) {
     // 测试时传当前表单的 key/base（若有改动），否则后端回退到 .env
     const apiKey = String(form['OPENAI_API_KEY'] || '')
     const apiBase = String(form['OPENAI_API_BASE'] || '')
-    const result = await testModel(key, apiKey, apiBase)
+    const result = await testModel(key, apiKey, apiBase, mode)
     testResults[key] = { loading: false, ok: result.ok, latency_ms: result.latency_ms, error: result.error }
   } catch (e) {
     testResults[key] = { loading: false, ok: false, latency_ms: 0, error: e instanceof Error ? e.message : '测试失败' }

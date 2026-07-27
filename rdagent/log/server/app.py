@@ -1271,7 +1271,10 @@ def save_settings():
 
 @app.route("/settings/test-model", methods=["POST"])
 def test_model_connection():
-    """测试 LLM 模型连通性。发一个 max_tokens=1 的最小请求。
+    """测试 LLM/Embedding 模型连通性。
+
+    mode='chat'(默认)：发 max_tokens=1 的最小 completion 请求
+    mode='embedding'：发 input=['test'] 的最小 embedding 请求
 
     支持测试表单输入的值（未保存也能测）。密钥为空时回退到 .env 现有值。
     脱敏值（含 ***）视为未提供，回退到 .env。
@@ -1284,18 +1287,31 @@ def test_model_connection():
     model = data.get("model", "").strip()
     api_key = data.get("api_key", "").strip()
     api_base = data.get("api_base", "").strip()
+    mode = data.get("mode", "chat")  # chat | embedding
 
     if not model:
         return jsonify({"ok": False, "error": "模型名不能为空"}), 200
 
     # 密钥/base 回退：脱敏或空 → 读 .env 现有值
     env_values = dotenv_values(".env")
-    if not api_key or is_masked(api_key):
-        api_key = env_values.get("OPENAI_API_KEY") or env_values.get("CHAT_OPENAI_API_KEY") or ""
-    if not api_base or is_masked(api_base):
-        api_base = env_values.get("OPENAI_API_BASE") or env_values.get("CHAT_OPENAI_BASE_URL") or ""
+    if mode == "embedding":
+        # embedding 优先用 embedding 专用 key，回退通用 key
+        if not api_key or is_masked(api_key):
+            api_key = (env_values.get("EMBEDDING_OPENAI_API_KEY")
+                       or env_values.get("LITELLM_PROXY_API_KEY")
+                       or env_values.get("OPENAI_API_KEY") or "")
+        if not api_base or is_masked(api_base):
+            api_base = (env_values.get("EMBEDDING_OPENAI_API_BASE")
+                        or env_values.get("LITELLM_PROXY_API_BASE")
+                        or env_values.get("OPENAI_API_BASE") or "")
+    else:
+        # chat 优先用聊天专用 key，回退通用 key
+        if not api_key or is_masked(api_key):
+            api_key = env_values.get("OPENAI_API_KEY") or env_values.get("CHAT_OPENAI_API_KEY") or ""
+        if not api_base or is_masked(api_base):
+            api_base = env_values.get("OPENAI_API_BASE") or env_values.get("CHAT_OPENAI_BASE_URL") or ""
 
-    kwargs = {"model": model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1, "timeout": 10}
+    kwargs = {"timeout": 10}
     if api_key:
         kwargs["api_key"] = api_key
     if api_base:
@@ -1304,12 +1320,14 @@ def test_model_connection():
     import time
     start = time.time()
     try:
-        litellm.completion(**kwargs)
+        if mode == "embedding":
+            litellm.embedding(model=model, input=["test"], **kwargs)
+        else:
+            litellm.completion(model=model, messages=[{"role": "user", "content": "hi"}], max_tokens=1, **kwargs)
         latency = int((time.time() - start) * 1000)
         return jsonify({"ok": True, "latency_ms": latency, "error": ""}), 200
     except Exception as e:
         latency = int((time.time() - start) * 1000)
-        # 分类常见错误
         err_type = type(e).__name__
         err_msg = str(e)[:200]
         return jsonify({"ok": False, "latency_ms": latency, "error": f"{err_type}: {err_msg}"}), 200
