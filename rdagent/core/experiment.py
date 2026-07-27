@@ -270,7 +270,7 @@ class FBWorkspace(Workspace):
         for file_path in folder_path.rglob("*"):
             if file_path.suffix in (".py", ".yaml", ".md"):
                 relative_path = file_path.relative_to(folder_path)
-                self.inject_files(**{str(relative_path): file_path.read_text()})
+                self.inject_files(**{str(relative_path): file_path.read_text(encoding="utf-8")})
 
     def inject_code_from_file_dict(self, workspace: FBWorkspace) -> None:
         """

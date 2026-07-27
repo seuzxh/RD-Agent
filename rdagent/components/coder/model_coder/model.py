@@ -127,7 +127,7 @@ NUM_TIMESTEPS = {num_timesteps}
 NUM_EDGES = {num_edges}
 INPUT_VALUE = {input_value}
 PARAM_INIT_VALUE = {param_init_value}
-{(Path(__file__).parent / 'model_execute_template_v1.txt').read_text()}
+{(Path(__file__).parent / 'model_execute_template_v1.txt').read_text(encoding="utf-8")}
 """
 
             log, results = qtde.dump_python_code_run_and_get_results(

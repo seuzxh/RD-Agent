@@ -72,7 +72,7 @@ def load_content(uri: str, caller_dir: Path | None = None, ftype: str = "yaml") 
                     yaml_content = yaml_content[key]
                 return yaml_content
 
-            return file_path.read_text()
+            return file_path.read_text(encoding="utf-8")
         except FileNotFoundError:
             continue  # the file does not exist, so goto the next loop.
         except KeyError:

@@ -9,7 +9,7 @@ from rdagent.utils.env import Env
 def get_runtime_environment_by_env(env: Env) -> str:
     implementation = FBWorkspace()
     fname = "runtime_info.py"
-    implementation.inject_files(**{fname: (Path(__file__).absolute().resolve().parent / "runtime_info.py").read_text()})
+    implementation.inject_files(**{fname: (Path(__file__).absolute().resolve().parent / "runtime_info.py").read_text(encoding="utf-8")})
     stdout = implementation.execute(env=env, entry=f"python {fname}")
     # Extract JSON from stdout (skip CUDA/container warnings)
     json_match = re.search(r"\{.*\}", stdout, re.DOTALL)

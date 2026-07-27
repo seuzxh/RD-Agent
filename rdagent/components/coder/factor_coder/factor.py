@@ -213,7 +213,7 @@ class FactorFBWorkspace(FBWorkspace):
         code_dict = {}
         for file_path in path.iterdir():
             if file_path.suffix == ".py":
-                code_dict[file_path.name] = file_path.read_text()
+                code_dict[file_path.name] = file_path.read_text(encoding="utf-8")
         return FactorFBWorkspace(target_task=task, code_dict=code_dict, **kwargs)
 
 

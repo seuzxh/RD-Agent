@@ -80,7 +80,7 @@ class RDLoop(LoopBase, metaclass=LoopMeta):
 
                 feature_codes: dict[str, str] = {}
                 for py_file in sorted(base_dir.glob("*.py")):
-                    feature_codes[py_file.name] = py_file.read_text()
+                    feature_codes[py_file.name] = py_file.read_text(encoding="utf-8")
                 self.plan["feature_codes"] = feature_codes
 
                 if not base_factors_file.exists():

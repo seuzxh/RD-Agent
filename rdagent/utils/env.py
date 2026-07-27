@@ -188,7 +188,7 @@ class EnvConf(ExtendedBaseSettings):
         # data_key = sorted(data_key)
         local_path = Path(local_path)
         return [
-            [str(path.relative_to(local_path)), path.read_text()]
+            [str(path.relative_to(local_path)), path.read_text(encoding="utf-8")]
             for path in sorted(
                 list(local_path.rglob("*.py")) + list(local_path.rglob("*.csv")) + list(local_path.rglob("*.yaml"))
             )
