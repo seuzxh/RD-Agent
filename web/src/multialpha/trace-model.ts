@@ -1,4 +1,4 @@
-import type { ChartRef,CodeFile,FactorItem,FeedbackSummary,MetricItem,TraceMessage,TraceStatus,TraceViewModel } from './types'
+import type { ChartRef,CodeFile,FactorItem,FeedbackSummary,MetricItem,TraceMessage,TraceStatus,TraceViewModel,UserInput } from './types'
 
 function objectValue(value:unknown):Record<string,unknown>|null{if(value&&typeof value==='object'&&!Array.isArray(value))return value as Record<string,unknown>;if(typeof value!=='string')return null;try{return objectValue(JSON.parse(value))}catch{return null}}
 function arrayValue(value:unknown):unknown[]{if(Array.isArray(value))return value;if(typeof value!=='string')return[];try{const parsed=JSON.parse(value);return Array.isArray(parsed)?parsed:[]}catch{return[]}}
@@ -23,7 +23,7 @@ function parseConfig(value:unknown){const data=objectValue(value);const raw=text
 export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceViewModel{
   // C7: 单遍扫描，合并 latest() 查找 + loop/end/error/config/tasks/metric 收集
   const loopSet=new Set<number>(),loopMetricMap:Record<number,Record<string,number|string>>={}
-  let hasEnd=false,hasError=false,firstConfig:unknown,firstTasksLoop0:unknown
+  let hasEnd=false,hasError=false,firstConfig:unknown,firstTasksLoop0:unknown,userInputObj:Record<string,unknown>|null=null
   let token:Record<string,unknown>={}
   // latest-by-tag（仅限 selectedLoop 范围内）
   let latHypothesis:TraceMessage|undefined,latTasks:TraceMessage|undefined,latCodes:TraceMessage|undefined
@@ -37,6 +37,8 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
     else if(tag==='feedback.config'&&firstConfig===undefined)firstConfig=m.content
     else if(tag==='research.tasks'&&lid===0&&firstTasksLoop0===undefined)firstTasksLoop0=m.content
     else if(tag==='feedback.metric'&&Number.isFinite(lid)){loopMetricMap[lid]=parseMetricValues(m.content)}
+    // 用户原始输入：无 loop_id，全局只取首条（不受 loop 过滤）
+    else if(tag==='task.user_input'&&userInputObj===null)userInputObj=objectValue(m.content)
     // latest-by-tag（仅限 loop 范围内）
     if(loop==null||lid==null||lid===loop){
       if(tag==='token_cost')token=objectValue(m.content)||{}
@@ -64,5 +66,11 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
   // {chart_html: "..."} 误判为 ChartRef，否则 iframe 会拼出 id=undefined 的 URL。
   const rawChartRef=objectValue(chartData?.chart_ref)
   const chartRef:ChartRef|null=rawChartRef&&typeof rawChartRef.trace_id==='string'&&rawChartRef.trace_id.trim()!==''?rawChartRef as unknown as ChartRef:null
-  return{hasEnd,hasError,loops,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:Number(token.total_tokens||promptTokens+completionTokens),callCount:Number(token.call_count||0),loopMetrics}
+  const userInput:UserInput|null=userInputObj?{
+    description:textValue(userInputObj.description),
+    scenario:typeof userInputObj.scenario==='string'?userInputObj.scenario:undefined,
+    loops:userInputObj.loops==null?undefined:Number(userInputObj.loops),
+    autoMode:typeof userInputObj.auto_mode==='boolean'?userInputObj.auto_mode:userInputObj.auto_mode===undefined?undefined:String(userInputObj.auto_mode)==='true',
+  }:null
+  return{hasEnd,hasError,loops,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:Number(token.total_tokens||promptTokens+completionTokens),callCount:Number(token.call_count||0),loopMetrics,userInput}
 }
