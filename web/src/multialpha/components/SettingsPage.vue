@@ -118,7 +118,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { fetchSettingsSchema, saveSettings, testModel, type SettingsSchema, type ConfigField } from '../../services/rdagent-api'
@@ -132,19 +132,6 @@ const STEP_PRESETS = [
   { label: '📊 回测执行', value: 'running' },
   { label: '🔍 反馈评审', value: 'feedback' },
 ]
-
-// step key → 中文名称映射（与 AgentFlow 智能体名称对齐）
-const STEP_LABELS: Record<string, string> = {
-  hypothesis: '🧠 假设生成',
-  direct_exp_gen: '✏️ 实验设计',
-  coding: '▰ 代码实现',
-  running: '📊 回测执行',
-  feedback: '🔍 反馈评审',
-}
-
-function stepLabel(key: string): string {
-  return STEP_LABELS[key] || key
-}
 
 interface MapRow { step: string; model: string; temperature?: number }
 
