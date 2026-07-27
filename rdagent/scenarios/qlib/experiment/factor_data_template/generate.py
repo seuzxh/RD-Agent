@@ -12,16 +12,8 @@ data.to_hdf("./daily_pv_all.h5", key="data")
 
 
 fields = ["$open", "$close", "$high", "$low", "$volume", "$factor"]
-data = (
-    (
-        D.features(instruments, fields, start_time="2024-01-01", end_time="2025-12-31", freq="day")
-        .swaplevel()
-        .sort_index()
-    )
-    .swaplevel()
-    .loc[data.reset_index()["instrument"].unique()[:100]]
-    .swaplevel()
-    .sort_index()
-)
+debug_data = D.features(instruments, fields, start_time="2024-01-01", end_time="2025-12-31", freq="day").swaplevel().sort_index()
+available_instruments = debug_data.index.get_level_values("instrument").unique()
+debug_data = debug_data.swaplevel().loc[available_instruments[:100]].swaplevel().sort_index()
 
-data.to_hdf("./daily_pv_debug.h5", key="data")
+debug_data.to_hdf("./daily_pv_debug.h5", key="data")
