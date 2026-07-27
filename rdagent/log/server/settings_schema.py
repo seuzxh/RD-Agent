@@ -16,10 +16,13 @@ def mask_value(value: str) -> str:
 
 
 def is_masked(value: str) -> bool:
-    """判断值是否为脱敏格式（含 *** 且符合 mask_value 的输出特征）。"""
+    """判断值是否为脱敏格式（含 *** 即视为脱敏，不写入 .env）。
+
+    保守策略：任何包含 *** 的值都不写入，避免把脱敏占位符当真实值保存。
+    """
     if not isinstance(value, str):
         return False
-    return "***" in value and (value == "***" or (len(value) > 3 and value[3:6] == "***"))
+    return "***" in value
 
 
 _QLIB_DATE_FIELDS = [

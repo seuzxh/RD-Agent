@@ -74,7 +74,7 @@
               <!-- number -->
               <div v-else-if="field.type === 'number'" class="field-item">
                 <label class="field-label">{{ field.label }}</label>
-                <el-input-number v-model="form[field.key]" size="small" controls-position="right" :placeholder="field.default != null ? String(field.default) : ''" />
+                <el-input-number v-model="form[field.key]" size="small" controls-position="right" :precision="field.key.includes('TEMPERATURE') ? 1 : 0" :step="field.key.includes('TEMPERATURE') ? 0.1 : 1" :placeholder="field.default != null ? String(field.default) : ''" />
                 <small v-if="field.help" class="field-help">{{ field.help }}</small>
               </div>
 
@@ -239,6 +239,14 @@ async function loadSchema() {
         for (const field of card.fields) {
           if (field.type === 'model_map') {
             loadModelMap(field.value)
+          } else if (field.type === 'boolean') {
+            form[field.key] = String(field.value).toLowerCase() === 'true'
+            initialValues[field.key] = form[field.key]
+          } else if (field.type === 'number') {
+            // API 返回字符串，转成 number 避免 el-input-number 浮点精度 + 改动误判
+            const n = field.value != null && field.value !== '' ? Number(field.value) : undefined
+            form[field.key] = Number.isNaN(n as number) ? undefined : n
+            initialValues[field.key] = form[field.key]
           } else {
             form[field.key] = field.value
             initialValues[field.key] = field.value
