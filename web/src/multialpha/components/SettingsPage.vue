@@ -44,9 +44,16 @@
                     <el-select v-model="row.step" size="small" filterable allow-create default-first-option placeholder="选择智能体" class="col-step">
                       <el-option v-for="s in STEP_PRESETS" :key="s.value" :label="s.label" :value="s.value" />
                     </el-select>
-                    <el-input v-model="row.model" size="small" placeholder="openai/gpt-4o" class="col-model" />
+                    <div class="model-test-wrap">
+                      <el-input v-model="row.model" size="small" placeholder="openai/gpt-4o" class="col-model" />
+                      <el-button text size="small" class="test-btn" :loading="testResults[row.model]?.loading" @click="onTestModel(row.model)">🧪</el-button>
+                    </div>
                     <el-input-number v-model="row.temperature" size="small" :precision="1" :step="0.1" :min="0" :max="2" controls-position="right" class="col-temp" />
                     <el-button text size="small" class="col-action" @click="modelMapRows.splice(idx, 1)">✕</el-button>
+                  </div>
+                  <!-- 测试结果（按模型名聚合，显示在表格底部）-->
+                  <div v-for="tr in Object.entries(testResults).filter(([k,v]) => k && !v.loading)" :key="tr[0]" class="test-result" :class="tr[1].ok ? 'ok' : 'fail'">
+                    {{ tr[1].ok ? '✅' : '❌' }} {{ tr[0] }}：{{ tr[1].ok ? `连通 ${tr[1].latency_ms}ms` : tr[1].error }}
                   </div>
                   <el-button text size="small" class="map-add" @click="modelMapRows.push({ step: '', model: '', temperature: undefined })">+ 添加步骤</el-button>
                 </div>
@@ -90,7 +97,11 @@
               <!-- string（默认） -->
               <div v-else class="field-item">
                 <label class="field-label">{{ field.label }}</label>
-                <el-input v-model="form[field.key]" size="small" :placeholder="field.default != null ? String(field.default) : ''" />
+                <div v-if="field.key === 'CHAT_MODEL'" class="model-test-wrap">
+                  <el-input v-model="form[field.key]" size="small" :placeholder="field.default != null ? String(field.default) : ''" class="col-model" />
+                  <el-button text size="small" class="test-btn" :loading="testResults[String(form[field.key])]?.loading" @click="onTestModel(String(form[field.key]))">🧪 测试</el-button>
+                </div>
+                <el-input v-else v-model="form[field.key]" size="small" :placeholder="field.default != null ? String(field.default) : ''" />
                 <small v-if="field.help" class="field-help">{{ field.help }}</small>
               </div>
             </template>
@@ -110,7 +121,7 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { fetchSettingsSchema, saveSettings, type SettingsSchema, type ConfigField } from '../../services/rdagent-api'
+import { fetchSettingsSchema, saveSettings, testModel, type SettingsSchema, type ConfigField } from '../../services/rdagent-api'
 
 defineEmits<{ home: [] }>()
 
@@ -147,7 +158,23 @@ const initialValues = reactive<Record<string, unknown>>({})
 const showPassword = reactive<Record<string, boolean>>({})
 const modelMapRows = ref<MapRow[]>([])
 const initialModelMapJson = ref('')
+// 模型测试状态：key=模型名，value={loading, ok, latency_ms, error}
+const testResults = reactive<Record<string, { loading: boolean; ok: boolean; latency_ms: number; error: string }>>({})
 
+async function onTestModel(model: string) {
+  if (!model || !model.trim()) { ElMessage.warning('请先输入模型名'); return }
+  const key = model.trim()
+  testResults[key] = { loading: true, ok: false, latency_ms: 0, error: '' }
+  try {
+    // 测试时传当前表单的 key/base（若有改动），否则后端回退到 .env
+    const apiKey = String(form['OPENAI_API_KEY'] || '')
+    const apiBase = String(form['OPENAI_API_BASE'] || '')
+    const result = await testModel(key, apiKey, apiBase)
+    testResults[key] = { loading: false, ok: result.ok, latency_ms: result.latency_ms, error: result.error }
+  } catch (e) {
+    testResults[key] = { loading: false, ok: false, latency_ms: 0, error: e instanceof Error ? e.message : '测试失败' }
+  }
+}
 const currentGroup = computed(() => schema.value?.groups.find(g => g.id === activeGroup.value))
 
 const currentModelMapJson = computed(() => {
@@ -282,6 +309,14 @@ onMounted(loadSchema)
 .col-temp { flex: 0 0 100px; }
 .col-action { flex: 0 0 28px; text-align: center; }
 .map-add { margin-top: 8px; color: var(--ma-gold-dark); }
+
+/* 模型测试 */
+.model-test-wrap { display: flex; align-items: center; gap: 4px; }
+.model-test-wrap .col-model { flex: 1; }
+.test-btn { flex: none; color: var(--ma-gold-dark); }
+.test-result { font-size: 11px; padding: 6px 10px; border-top: 1px solid var(--ma-line); }
+.test-result.ok { color: var(--ma-success); background: rgba(34,176,125,.05); }
+.test-result.fail { color: var(--ma-danger); background: rgba(229,72,77,.05); }
 
 .settings-footer { position: absolute; bottom: 0; left: 200px; right: 0; height: 48px; border-top: 1px solid var(--ma-line); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; background: #fff; z-index: 10; }
 .restart-hint { font-size: 12px; color: var(--ma-warning); }

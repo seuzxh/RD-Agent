@@ -1269,6 +1269,52 @@ def save_settings():
     }), 200
 
 
+@app.route("/settings/test-model", methods=["POST"])
+def test_model_connection():
+    """测试 LLM 模型连通性。发一个 max_tokens=1 的最小请求。
+
+    支持测试表单输入的值（未保存也能测）。密钥为空时回退到 .env 现有值。
+    脱敏值（含 ***）视为未提供，回退到 .env。
+    """
+    from rdagent.log.server.settings_schema import is_masked
+    import litellm
+    from dotenv import dotenv_values
+
+    data = request.get_json(silent=True) or {}
+    model = data.get("model", "").strip()
+    api_key = data.get("api_key", "").strip()
+    api_base = data.get("api_base", "").strip()
+
+    if not model:
+        return jsonify({"ok": False, "error": "模型名不能为空"}), 200
+
+    # 密钥/base 回退：脱敏或空 → 读 .env 现有值
+    env_values = dotenv_values(".env")
+    if not api_key or is_masked(api_key):
+        api_key = env_values.get("OPENAI_API_KEY") or env_values.get("CHAT_OPENAI_API_KEY") or ""
+    if not api_base or is_masked(api_base):
+        api_base = env_values.get("OPENAI_API_BASE") or env_values.get("CHAT_OPENAI_BASE_URL") or ""
+
+    kwargs = {"model": model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1, "timeout": 10}
+    if api_key:
+        kwargs["api_key"] = api_key
+    if api_base:
+        kwargs["api_base"] = api_base
+
+    import time
+    start = time.time()
+    try:
+        litellm.completion(**kwargs)
+        latency = int((time.time() - start) * 1000)
+        return jsonify({"ok": True, "latency_ms": latency, "error": ""}), 200
+    except Exception as e:
+        latency = int((time.time() - start) * 1000)
+        # 分类常见错误
+        err_type = type(e).__name__
+        err_msg = str(e)[:200]
+        return jsonify({"ok": False, "latency_ms": latency, "error": f"{err_type}: {err_msg}"}), 200
+
+
 @app.route("/user_interaction/submit", methods=["POST"])
 def submit_user_interaction_response():
     """Frontend submits a user response; server forwards it to the rdagent subprocess via IPC queue."""

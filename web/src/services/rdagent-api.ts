@@ -153,3 +153,9 @@ export const fetchSettingsSchema = (signal?: AbortSignal) =>
 export const saveSettings = (fields: Record<string, unknown>) =>
   fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) })
     .then(r => parseResponse<{ status: string; written: string[]; skipped: string[]; restart_required: boolean }>(r))
+
+export interface TestModelResult { ok: boolean; latency_ms: number; error: string }
+
+export const testModel = (model: string, apiKey?: string, apiBase?: string) =>
+  fetch('/settings/test-model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, api_key: apiKey || '', api_base: apiBase || '' }) })
+    .then(r => parseResponse<TestModelResult>(r))
