@@ -48,7 +48,7 @@ export async function searchStocks(keyword: string, signal?: AbortSignal): Promi
     funcNo: '1500102',
     action: '5811',
     StockCode: keyword.trim(),
-    count: '100',
+    count: '10',
   }).toString()
 
   const payload = await requestJson(url, signal)
