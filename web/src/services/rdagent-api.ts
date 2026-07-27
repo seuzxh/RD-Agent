@@ -127,3 +127,29 @@ export const runPredict = (traceId: string) =>
 export const fetchPredictHistory = (traceId?: string, signal?: AbortSignal) =>
   fetch(`/predict/history${traceId ? '?trace_id=' + encodeURIComponent(traceId) : ''}`, { signal })
     .then(r => parseResponse<{ records: PredictRecord[] }>(r))
+
+// ==================== Settings ====================
+
+export type ConfigFieldType = 'string' | 'number' | 'boolean' | 'select' | 'json' | 'password' | 'model_map'
+
+export interface ConfigField {
+  key: string
+  label: string
+  type: ConfigFieldType
+  value: unknown
+  default?: unknown
+  options?: string[]
+  sensitive?: boolean
+  help?: string
+}
+
+export interface ConfigCard { id: string; title: string; fields: ConfigField[] }
+export interface ConfigGroup { id: string; label: string; icon: string; cards: ConfigCard[] }
+export interface SettingsSchema { groups: ConfigGroup[] }
+
+export const fetchSettingsSchema = (signal?: AbortSignal) =>
+  fetch('/settings/schema', { signal }).then(r => parseResponse<SettingsSchema>(r))
+
+export const saveSettings = (fields: Record<string, unknown>) =>
+  fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) })
+    .then(r => parseResponse<{ status: string; written: string[]; skipped: string[]; restart_required: boolean }>(r))

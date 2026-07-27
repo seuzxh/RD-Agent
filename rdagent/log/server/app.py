@@ -1203,6 +1203,72 @@ def health_check():
     return jsonify({"overall": "pass" if all_pass else "issues", "checks": checks}), 200
 
 
+# ==================== 设置页面 ====================
+
+@app.route("/settings/schema", methods=["GET"])
+def get_settings_schema():
+    """返回配置 schema + 当前值（密钥脱敏），供设置页动态渲染表单。"""
+    from rdagent.log.server.settings_schema import build_schema_response
+    return jsonify(build_schema_response()), 200
+
+
+@app.route("/settings", methods=["POST"])
+def save_settings():
+    """保存配置到 .env 文件。需重启服务生效。
+
+    - 密钥保护：值匹配脱敏格式（含 ***）视为未修改，跳过
+    - model_map 类型：dict 序列化为单行 JSON 写入
+    - 用 python-dotenv.set_key 原子写，保留 .env 原有注释和格式
+    - 写前备份 .env → .env.bak
+    """
+    import json as _json
+    from rdagent.log.server.settings_schema import is_masked
+    from dotenv import set_key
+
+    data = request.get_json(silent=True) or {}
+    fields = data.get("fields", {})
+    if not isinstance(fields, dict) or not fields:
+        return jsonify({"error": "fields 为空或格式错误"}), 400
+
+    env_path = Path(".env").resolve()
+    if not env_path.exists():
+        return jsonify({"error": ".env 文件不存在，请先复制 .env.example"}), 404
+
+    import shutil
+    bak_path = env_path.with_name(".env.bak")
+    try:
+        shutil.copy2(env_path, bak_path)
+    except Exception as e:
+        app.logger.warning(f"备份 .env 失败: {e}")
+
+    written = []
+    skipped = []
+    for key, value in fields.items():
+        if value is None:
+            continue
+        # dict/list 序列化为单行 JSON（如 CHAT_MODEL_MAP）
+        if isinstance(value, (dict, list)):
+            str_value = _json.dumps(value, ensure_ascii=False)
+        else:
+            str_value = str(value)
+        # 密钥保护：脱敏格式的值视为未修改
+        if is_masked(str_value):
+            skipped.append(key)
+            continue
+        try:
+            set_key(str(env_path), key, str_value)
+            written.append(key)
+        except Exception as e:
+            return jsonify({"error": f"写入 {key} 失败: {e}"}), 500
+
+    return jsonify({
+        "status": "saved",
+        "written": written,
+        "skipped": skipped,
+        "restart_required": True,
+    }), 200
+
+
 @app.route("/user_interaction/submit", methods=["POST"])
 def submit_user_interaction_response():
     """Frontend submits a user response; server forwards it to the rdagent subprocess via IPC queue."""
