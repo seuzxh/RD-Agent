@@ -202,3 +202,7 @@ doc/_site/
 doc/.jekyll-cache/
 doc/.jekyll-metadata
 doc/Gemfile.lock
+
+# Git worktrees (isolated dev workspaces)
+.worktrees/
+worktrees/
