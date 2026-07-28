@@ -906,10 +906,34 @@ class QlibDockerConf(DockerConf):
             "mode": "rw",
         }
     }
-    shm_size: str | None = "16g"
+    shm_size: str | None = "2g"
     enable_gpu: bool = True
     enable_cache: bool = False
     save_logs_to_file: bool = True  # Explicitly inherit from DockerConf for compatibility
+    qlib_data_path: str = ""
+    """Host path to the qlib data directory (e.g. E:\qlib_data).
+    When set, this directory is mounted into the Docker container so that
+    symlinks under ~/.qlib/qlib_data/ can resolve correctly.
+    Env var: QLIB_DOCKER_QLIB_DATA_PATH"""
+
+    @model_validator(mode="after")
+    def _mount_qlib_data(self, **kwargs: Any) -> "QlibDockerConf":
+        if self.qlib_data_path:
+            host_path = str(Path(self.qlib_data_path).expanduser().resolve().absolute())
+            # Determine the mount target inside the container.
+            # Docker Desktop on Windows translates Windows symlink targets to
+            # /mnt/host/<drive>/<path> (e.g. E:\qlib_data → /mnt/host/e/qlib_data).
+            # The mount path must match this convention so that symlinks created by
+            # mklink (e.g. cn_data → /mnt/host/e/qlib_data/cn_data) resolve correctly.
+            # On Linux/macOS, use the path as-is.
+            if os.name == "nt":
+                drive, tail = os.path.splitdrive(host_path)
+                drive_letter = drive.replace(":", "").lower()
+                container_path = f"/mnt/host/{drive_letter}{tail.replace(os.sep, '/')}"
+            else:
+                container_path = host_path
+            self.extra_volumes[host_path] = {"bind": container_path, "mode": "ro"}
+        return self
 
 
 # physionet.org/files/mimic-eicu-fiddle-feature/1.0.0/FIDDLE_mimic3
