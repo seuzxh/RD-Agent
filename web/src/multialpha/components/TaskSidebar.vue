@@ -33,7 +33,7 @@ const filters = [{ label: '全部', value: 'all' }, { label: '完成', value: 'd
 const scenarios = computed(() => [...new Set(props.tasks.map(task => task.scenario))])
 const filteredTasks = computed(() => props.tasks.filter(task => (!scenario.value || task.scenario === scenario.value) && (status.value === 'all' || task.status === status.value)))
 const visibleTasks = computed(() => filteredTasks.value.slice(0, limit.value))
-const labels: Record<string, string> = { 'Finance Data Building': '因子挖掘', 'Finance Data Building (Reports)': '研报因子提取', 'Finance Whole Pipeline': '量化全流程', 'Finance Model Implementation': '模型实现', 'Data Science': '数据科学' }
+const labels: Record<string, string> = { 'Finance Data Building': '因子挖掘', 'Finance Data Building (Reports)': '研报因子提取', 'Finance Whole Pipeline': '量化全流程', 'Finance Model Implementation': '模型实现' }
 const scenarioLabel = (value: string) => labels[value] || value
 const statusLabel = (value: TraceStatus) => ({ idle: '待查看', running: '运行中', done: '已完成', error: '异常' }[value])
 </script>

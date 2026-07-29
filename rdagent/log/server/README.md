@@ -6,17 +6,15 @@
 
 #### Request
 
-- "scenario": one of six values
+- "scenario": one of five values
     1. "Finance Data Building"
     2. "Finance Data Building (Reports)"
     3. "Finance Model Implementation"
     4. "General Model Implementation"
     5. "Medical Model Implementation"
-    6. "Data Science"
 - "files": **2** scenarios need this
     1. in "Finance Data Building (Reports)" Scenario, one or more pdf files.
     2. in "General Model Implementation" Scenario, one pdf file or one pdf link like `https://arxiv.org/pdf/2210.09789`
-- "competition": **Data Science** Scenario need this, one of 75 competitions.
 - "loops": Number of loops after which RD-Agent will automatically stop (optional; if not set, it will not stop automatically and must be stopped manually).
 - "all_duration": Total duration (in hours) for which the RD-Agent should run before stopping automatically. If not set, the agent will continue running until stopped manually or by the "loops" parameter.
 
@@ -68,7 +66,7 @@ Only **2** Message in one loop
     "content": {
         "hypothesis": "...",
         "reason": "...",
-        "component": "...", // only exists in Data Science Scenario
+        "component": "...", // optional
         "concise_reason": "...",
         "concise_justification": "...",
         "concise_observation": "...",
@@ -88,7 +86,7 @@ Only **2** Message in one loop
         {
             "name": "...",
             "description": "...",
-            "model_type": "...", // only exists in "Finance Model Implementation", "General Model Implementation", "Medical Model Implementation", or some tasks of "Data Science"
+            "model_type": "...", // only exists in "Finance Model Implementation", "General Model Implementation", "Medical Model Implementation"
             "architecture": "...", // same as above
             "hyperparameters": "...", // same as above
         },
@@ -103,8 +101,7 @@ Only **2** Message in one loop
 ### evolving
 
 - 1 to 10 pairs of Messages (codes & feedbacks), each identified by an "evo_id" indicating the evolving round.
-- In the **Data Science** scenario, each evolving round contains only **one task**, but the "codes" for that task may include **multiple code files**.
-- In other scenarios, each evolving round may contain **multiple tasks**, but each task's "codes" will include only **one code file**.
+- Each evolving round may contain **multiple tasks**, but each task's "codes" will include only **one code file**.
 
 1. codes
 

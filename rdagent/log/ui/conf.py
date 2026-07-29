@@ -20,5 +20,14 @@ class UIBasePropSetting(ExtendedBaseSettings):
 
     enable_cache: bool = True
 
+    # C3: 按需加载的内存 LRU 上限（含运行中的 task）
+    max_inmemory_traces: int = 20
+
+    # 运行中任务并发上限；超过则拒绝新建（/upload 返回 429）
+    max_concurrent_tasks: int = 10
+
+    # C5: artifact（chart HTML）磁盘缓存目录
+    trace_artifact_cache_path: str = "./git_ignore_folder/web_artifacts"
+
 
 UI_SETTING = UIBasePropSetting()

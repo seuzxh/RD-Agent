@@ -1,6 +1,6 @@
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
-import { controlTask, fetchTrace, fetchTraceIds, uploadTask } from './api'
+import { controlTask, fetchTrace, fetchTraceIds, fetchTraceStatuses, uploadTask } from './api'
 import { buildTraceView, deriveTraceStatus } from './trace-model'
 import type { TaskMethod, TraceMessage, TraceStatus, TraceTask } from './types'
 
@@ -9,7 +9,7 @@ const CACHE_LIMIT = 5
 export function useMultiAlpha() {
   const traceIds = ref<string[]>([])
   const currentTraceId = ref('')
-  const messages = ref<TraceMessage[]>([])
+  const messages = shallowRef<TraceMessage[]>([])
   const loading = ref(false)
   const listLoading = ref(false)
   const listError = ref('')
@@ -36,11 +36,36 @@ export function useMultiAlpha() {
     while (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value as string)
   }
 
+  let listGeneration = 0
+
   async function loadTraceIds() {
     listLoading.value = true; listError.value = ''
-    try { traceIds.value = await fetchTraceIds() }
+    const generation = ++listGeneration
+    try {
+      traceIds.value = await fetchTraceIds()
+      if (generation !== listGeneration) return  // 被新一轮刷新取代
+      // Use cached statuses immediately so the list renders without blocking.
+      for (const id of traceIds.value) {
+        const cached = cache.get(id)
+        if (cached) statuses.value[id] = deriveTraceStatus(cached)
+      }
+      // C2: 批量获取所有 trace 状态（单次请求，替代 N+1 全量拉取）
+      loadStatusesBatch(generation)
+    }
     catch (error) { listError.value = error instanceof Error ? error.message : '任务列表加载失败'; ElMessage.error(listError.value) }
     finally { listLoading.value = false }
+  }
+
+  async function loadStatusesBatch(generation: number) {
+    try {
+      const items = await fetchTraceStatuses()
+      if (generation !== listGeneration) return  // 旧请求过期，丢弃
+      for (const item of items) {
+        statuses.value[item.id] = item.status
+      }
+    } catch {
+      // /traces/status 不可用：状态保持默认（idle），不影响列表展示
+    }
   }
 
   function stopPolling() {
@@ -58,7 +83,7 @@ export function useMultiAlpha() {
       const updates = await fetchTrace({ id, all: false, reset: false, cursor: messages.value.length }, pollController.signal)
       if (currentTraceId.value !== id) return
       if (updates.length) {
-        messages.value.push(...updates)
+        messages.value = [...messages.value, ...updates]
         if (selectedLoop.value == null) {
           const loops = messages.value.map(message => Number(message.loop_id)).filter(Number.isFinite)
           if (loops.length) selectedLoop.value = Math.max(...loops)
@@ -120,12 +145,13 @@ export function useMultiAlpha() {
     currentTraceId.value = ''; messages.value = []; selectedLoop.value = null; loading.value = false
   }
 
-  async function createTask(payload: { method: TaskMethod; description: string; scenario: string; loops: number; modelSelector?: string; files: File[] }) {
+  async function createTask(payload: { method: TaskMethod; description: string; scenario: string; loops: number; modelSelector?: string; autoMode?: boolean; files: File[] }) {
     const data = new FormData()
     const scenario = payload.method === 'pdf' ? 'Finance Data Building (Reports)' : payload.method === 'optimize' ? 'Finance Data Building' : payload.scenario
     data.append('scenario', scenario); data.append('loops', String(payload.loops))
     if (payload.description) data.append('description', payload.description)
     if (payload.modelSelector && payload.modelSelector !== 'lgbm') data.append('model_selector', payload.modelSelector)
+    data.append('auto_mode', String(payload.autoMode ?? true))
     payload.files.forEach(file => data.append('files', file))
     const result = await uploadTask(data)
     if (!result.id) throw new Error(result.error || '任务启动失败')

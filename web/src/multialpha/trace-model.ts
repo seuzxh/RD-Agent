@@ -1,9 +1,8 @@
-import type { CodeFile,FactorItem,FeedbackSummary,MetricItem,TraceMessage,TraceStatus,TraceViewModel } from './types'
+import type { ChartRef,CodeFile,FactorItem,FeedbackSummary,MetricItem,TraceMessage,TraceStatus,TraceViewModel,UserInput } from './types'
 
 function objectValue(value:unknown):Record<string,unknown>|null{if(value&&typeof value==='object'&&!Array.isArray(value))return value as Record<string,unknown>;if(typeof value!=='string')return null;try{return objectValue(JSON.parse(value))}catch{return null}}
 function arrayValue(value:unknown):unknown[]{if(Array.isArray(value))return value;if(typeof value!=='string')return[];try{const parsed=JSON.parse(value);return Array.isArray(parsed)?parsed:[]}catch{return[]}}
 function textValue(value:unknown):string{if(typeof value==='string')return value;if(value==null)return'';try{return JSON.stringify(value,null,2)}catch{return String(value)}}
-function latest(messages:TraceMessage[],tag:string){for(let i=messages.length-1;i>=0;i--){if(messages[i].tag===tag)return messages[i]}return undefined}
 
 export function deriveTraceStatus(messages:TraceMessage[]):TraceStatus{
   let hasEnd=false,hasFinalFeedback=false,hasMetric=false,hasError=false
@@ -22,25 +21,56 @@ function parseFeedback(value:unknown):FeedbackSummary{const data=objectValue(val
 function parseConfig(value:unknown){const data=objectValue(value);const raw=textValue(data?.config||value);const lines=raw.split('\n').map(line=>line.trim()).filter(line=>line.startsWith('|')&&line.endsWith('|'));if(lines.length>=3){const keys=lines[0].slice(1,-1).split('|').map(item=>item.trim()),values=lines[2].slice(1,-1).split('|').map(item=>item.trim());return keys.map((key,index)=>({key,value:values[index]||''})).filter(item=>item.value)}return data?Object.entries(data).filter(([,item])=>['string','number'].includes(typeof item)).map(([key,item])=>({key,value:String(item)})):[]}
 
 export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceViewModel{
-  const scoped=loop==null?messages:messages.filter(message=>message.loop_id==null||Number(message.loop_id)===loop)
-  const tokenMessages=scoped.filter(message=>message.tag==='token_cost').map(message=>objectValue(message.content)||{}),token=tokenMessages[tokenMessages.length-1]||{}
-  const hypothesis=objectValue(latest(scoped,'research.hypothesis')?.content),tasks=parseFactors(latest(scoped,'research.tasks')?.content),codes=parseCodes(latest(scoped,'evolving.codes')?.content)
-  const metricData=parseMetrics(latest(scoped,'feedback.metric')?.content),feedback=parseFeedback(latest(scoped,'feedback.hypothesis_feedback')?.content)
-  const chartData=objectValue(latest(scoped,'feedback.return_chart')?.content)
-  // Single-pass collection: loops, hasEnd, hasError, firstConfig, firstTasksLoop0, loopMetrics
+  // C7: 单遍扫描，合并 latest() 查找 + loop/end/error/config/tasks/metric 收集
   const loopSet=new Set<number>(),loopMetricMap:Record<number,Record<string,number|string>>={}
-  let hasEnd=false,hasError=false,firstConfig:unknown,firstTasksLoop0:unknown
+  let hasEnd=false,hasError=false,firstConfig:unknown,firstTasksLoop0:unknown,userInputObj:Record<string,unknown>|null=null
+  let token:Record<string,unknown>={}
+  // latest-by-tag（仅限 selectedLoop 范围内）
+  let latHypothesis:TraceMessage|undefined,latTasks:TraceMessage|undefined,latCodes:TraceMessage|undefined
+  let latMetric:TraceMessage|undefined,latFeedback:TraceMessage|undefined,latChart:TraceMessage|undefined
   for(let i=0;i<messages.length;i++){
-    const m=messages[i],lid=Number(m.loop_id)
+    const m=messages[i],lid=Number(m.loop_id),tag=m.tag
+    // loop/end/error/config/tasks 收集（全量 messages，不受 loop 过滤）
     if(Number.isFinite(lid))loopSet.add(lid)
-    if(m.tag==='END')hasEnd=true
-    else if(/error/i.test(m.tag||''))hasError=true
-    else if(m.tag==='feedback.config'&&firstConfig===undefined)firstConfig=m.content
-    else if(m.tag==='research.tasks'&&lid===0&&firstTasksLoop0===undefined)firstTasksLoop0=m.content
-    else if(m.tag==='feedback.metric'&&Number.isFinite(lid)){loopMetricMap[lid]=parseMetricValues(m.content)}
+    if(tag==='END')hasEnd=true
+    else if(/error/i.test(tag||''))hasError=true
+    else if(tag==='feedback.config'&&firstConfig===undefined)firstConfig=m.content
+    else if(tag==='research.tasks'&&lid===0&&firstTasksLoop0===undefined)firstTasksLoop0=m.content
+    else if(tag==='feedback.metric'&&Number.isFinite(lid)){loopMetricMap[lid]=parseMetricValues(m.content)}
+    // 用户原始输入：无 loop_id，全局只取首条（不受 loop 过滤）
+    else if(tag==='task.user_input'&&userInputObj===null)userInputObj=objectValue(m.content)
+    // latest-by-tag（仅限 loop 范围内）
+    if(loop==null||lid==null||lid===loop){
+      if(tag==='token_cost')token=objectValue(m.content)||{}
+      else if(tag==='research.hypothesis')latHypothesis=m
+      else if(tag==='research.tasks')latTasks=m
+      else if(tag==='evolving.codes')latCodes=m
+      else if(tag==='feedback.metric')latMetric=m
+      else if(tag==='feedback.hypothesis_feedback')latFeedback=m
+      else if(tag==='feedback.return_chart')latChart=m
+    }
   }
+  const hypothesis=objectValue(latHypothesis?.content)
+  const tasks=parseFactors(latTasks?.content)
+  const codes=parseCodes(latCodes?.content)
+  const metricData=parseMetrics(latMetric?.content)
+  const feedback=parseFeedback(latFeedback?.content)
+  const chartData=objectValue(latChart?.content)
   const loops=[...loopSet].sort((a,b)=>a-b)
   const loopMetrics:Record<number,string>={}
   for(const loopId of loops){const metric=loopMetricMap[loopId];if(metric&&metric.IC!=null)loopMetrics[loopId]=`IC=${Number(metric.IC).toFixed(3)}`}
-  return{hasEnd,hasError,loops,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens:Number(token.accumulated_prompt_tokens||token.prompt_tokens||0),completionTokens:Number(token.accumulated_completion_tokens||token.completion_tokens||0),totalTokens:Number(token.total_tokens||Number(token.accumulated_prompt_tokens||0)+Number(token.accumulated_completion_tokens||0)),callCount:Number(token.call_count||tokenMessages.length),loopMetrics}
+  const promptTokens=Number(token.accumulated_prompt_tokens||token.prompt_tokens||0)
+  const completionTokens=Number(token.accumulated_completion_tokens||token.completion_tokens||0)
+  // C6 防御：chartRef 仅当 trace_id 是非空字符串时才有效，否则走 chartHtml fallback。
+  // 历史 trace 走老的 _obj_to_json 时可能仍内联 chart_html（没有 chart_ref），不能把
+  // {chart_html: "..."} 误判为 ChartRef，否则 iframe 会拼出 id=undefined 的 URL。
+  const rawChartRef=objectValue(chartData?.chart_ref)
+  const chartRef:ChartRef|null=rawChartRef&&typeof rawChartRef.trace_id==='string'&&rawChartRef.trace_id.trim()!==''?rawChartRef as unknown as ChartRef:null
+  const userInput:UserInput|null=userInputObj?{
+    description:textValue(userInputObj.description),
+    scenario:typeof userInputObj.scenario==='string'?userInputObj.scenario:undefined,
+    loops:userInputObj.loops==null?undefined:Number(userInputObj.loops),
+    autoMode:typeof userInputObj.auto_mode==='boolean'?userInputObj.auto_mode:userInputObj.auto_mode===undefined?undefined:String(userInputObj.auto_mode)==='true',
+  }:null
+  return{hasEnd,hasError,loops,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:Number(token.total_tokens||promptTokens+completionTokens),callCount:Number(token.call_count||0),loopMetrics,userInput}
 }

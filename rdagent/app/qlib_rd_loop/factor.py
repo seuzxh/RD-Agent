@@ -57,14 +57,24 @@ def main(
         factor_loop = FactorRDLoop.load(path, checkout=checkout)
 
     factor_loop._init_base_features(base_features_path)
-    if description:
-        # User provided a description via the webUI -> use the framework's native
-        # user_instruction channel (LLMHypothesisGen.gen reads plan["user_instruction"])
-        # and skip the interactive initial-params flow.
-        factor_loop.plan["user_instruction"] = description
-    elif "user_interaction_queues" in kwargs and kwargs["user_interaction_queues"] is not None:
+
+    # Determine interaction mode:
+    # - auto_mode=True → fully autonomous, no interaction at all (CLI-style)
+    # - auto_mode=False (default) → interactive: user can review/edit
+    #   hypothesis and feedback each loop
+    auto_mode = kwargs.get("auto_mode", False)
+    has_queues = "user_interaction_queues" in kwargs and kwargs["user_interaction_queues"] is not None
+
+    if not auto_mode and has_queues:
         factor_loop._set_interactor(*kwargs["user_interaction_queues"])
+
+    # description only affects init: if provided, use it as user_instruction
+    # (skip the "what's your goal?" question); otherwise ask interactively
+    if description:
+        factor_loop.plan["user_instruction"] = description
+    elif not auto_mode and hasattr(factor_loop, "user_request_q"):
         factor_loop._interact_init_params()
+
     asyncio.run(factor_loop.run(step_n=step_n, loop_n=loop_n, all_duration=all_duration))
 
 

@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import random
@@ -18,10 +19,58 @@ from werkzeug.utils import secure_filename
 from rdagent.log.storage import FileStorage
 from rdagent.log.ui.conf import UI_SETTING
 from rdagent.log.ui.storage import WebStorage
+from rdagent.log.utils import extract_loopid_func_name
 
 app = Flask(__name__, static_folder=str(Path(UI_SETTING.static_path).resolve()))
 CORS(app)
 app.config["UI_SERVER_PORT"] = 19899
+
+# ==================== 性能观测中间件 ====================
+# 记录每个 API 请求的耗时 + 响应大小，控制台输出，用于性能优化前后对比。
+# 通过环境变量 PERF_LOG 关闭（默认开启）。
+import time as _perf_time
+from flask import g as _perf_g
+
+@app.before_request
+def _perf_start_timer() -> None:
+    _perf_g._perf_start = _perf_time.perf_counter()
+
+
+def _fmt_bytes(n: int) -> str:
+    if n < 1024:
+        return f"{n}B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f}KB"
+    return f"{n / (1024 * 1024):.2f}MB"
+
+
+@app.after_request
+def _perf_log_response(response):
+    import os as _perf_os
+    if _perf_os.environ.get("PERF_LOG", "1") == "0":
+        return response
+    start = getattr(_perf_g, "_perf_start", None)
+    if start is None:
+        return response
+    duration_ms = (_perf_time.perf_counter() - start) * 1000
+    resp_size = response.calculate_content_length() or 0
+    # 静态资源（CSS/JS/字体）和 /favicon 不记录，只关注 API
+    path = request.path
+    if path.endswith(('.css', '.js', '.woff2', '.woff', '.ttf', '.ico', '.png', '.svg', '.jpg')) and not path.startswith('/api/'):
+        return response
+    # 颜色：>1s 红，>200ms 黄，否则绿
+    color = '\033[31m' if duration_ms > 1000 else '\033[33m' if duration_ms > 200 else '\033[32m'
+    reset = '\033[0m'
+    # 用 sys.stderr 直接输出，避免 Flask logger 配置导致吞日志
+    import sys as _perf_sys
+    print(
+        f"{color}[PERF]{reset} {request.method} {path} → {response.status_code} "
+        f"{duration_ms:.0f}ms {_fmt_bytes(resp_size)}",
+        file=_perf_sys.stderr,
+        flush=True,
+    )
+    return response
+# ==================== 性能观测中间件 END ====================
 
 _YELLOW = "\033[33m"
 _RESET = "\033[0m"
@@ -46,7 +95,7 @@ def _configure_app_logger() -> None:
 _configure_app_logger()
 
 
-_TARGETS_WITHOUT_USER_INTERACTION = {"fin_factor_report"}
+_TARGETS_WITHOUT_USER_INTERACTION = {"fin_factor_report", "fin_predict"}
 
 
 class RDAgentTask:
@@ -84,6 +133,7 @@ class RDAgentTask:
             )
         self.messages: list[dict] = []
         self.pointers: defaultdict[str, int] = defaultdict(int)
+        self.last_access: float = _perf_time.time()  # C3 LRU 驱逐用
 
     def start(self) -> None:
         if self.process is not None:
@@ -114,6 +164,16 @@ class RDAgentTask:
                 pass
 
     def _run(self) -> None:
+        import os as _os
+        # Ensure critical env vars survive into the forked subprocess.
+        # Some environments (nohup, systemd) don't propagate these properly.
+        if not _os.environ.get("CONDA_DEFAULT_ENV"):
+            _os.environ["CONDA_DEFAULT_ENV"] = "rdagent4qlib"
+        if not _os.environ.get("MLFLOW_ALLOW_FILE_STORE"):
+            _os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
+        # Clear empty CONDA_ENV_NAME that pydantic-settings reads (overrides init kwargs)
+        if _os.environ.get("CONDA_ENV_NAME") == "":
+            del _os.environ["CONDA_ENV_NAME"]
         from rdagent.log.conf import LOG_SETTINGS
 
         LOG_SETTINGS.set_ui_server_port(self.ui_server_port)
@@ -152,6 +212,10 @@ class RDAgentTask:
                         from rdagent.app.qlib_rd_loop.quant import main as fin_quant
 
                         fin_quant(**self.kwargs)
+                    elif self.target_name == "fin_predict":
+                        from rdagent.app.qlib_rd_loop.predict import main as fin_predict
+
+                        fin_predict(**self.kwargs)
                     else:
                         raise ValueError(f"Unknown target: {self.target_name}")
                 except Exception:
@@ -160,6 +224,112 @@ class RDAgentTask:
 
 rdagent_processes: dict[str, RDAgentTask] = {}
 log_folder_path = Path(UI_SETTING.trace_folder).absolute()
+
+# ==================== Catalog 状态投影层（C1）====================
+# 轻量读模型：trace_id → 状态快照，由事件流投影而来，列表/状态查询只读这里。
+trace_states: dict[str, dict] = {}
+# 结构：{"Finance Data Building/plain-transformation": {
+#   "status": "running|done|error",
+#   "loops": set(),
+#   "created_at": "ISO-8601",   # 首次设置后不变，用于列表排序
+#   "updated_at": "ISO-8601",   # 每次消息更新
+#   "has_chart": bool,
+# }}
+
+
+def _derive_status_from_tags(tags_seen: set[str]) -> str:
+    """从已观察的 tag 集合推导 trace 状态（复用前端 deriveTraceStatus 逻辑）。"""
+    if "END" in tags_seen:
+        return "done"
+    has_final_feedback = "feedback.hypothesis_feedback" in tags_seen
+    has_metric = "feedback.metric" in tags_seen
+    if has_final_feedback and has_metric:
+        return "done"
+    if any("error" in t.lower() for t in tags_seen):
+        return "error"
+    return "running"
+
+
+def _resolve_trace_status(external_id: str, catalog_status: str) -> str:
+    """结合 catalog 状态 + 进程存活状态，给出最终对外状态。
+
+    - catalog 已判 done/error → 直接采用（完成信号可靠，无需检查进程）
+    - catalog 判 running → 检查进程是否真的存活：
+        存活 → running；已死/不存在 → error（异常终止）
+
+    注意：直接用 catalog 已存的 status（由 _index_trace_catalog_from_files
+    或 _update_trace_state 推导），不重新调 _derive_status_from_tags——
+    因为 catalog 路径的 _tags_seen 存的是路径关键字（'feedback'/'hypothesis'），
+    粒度与 _derive_status_from_tags 要求的完整 tag 名不一致。
+    """
+    if catalog_status != "running":
+        return catalog_status
+
+    internal_id = str(log_folder_path / external_id)
+    task = rdagent_processes.get(internal_id)
+    if task is not None and task.is_alive():
+        return "running"
+    return "error"
+
+
+def _update_trace_state(trace_id: str, msg: dict) -> None:
+    """事件投影：从单条消息增量更新状态读模型。
+
+    trace_id 是对外 id（如 "Finance Data Building/plain-transformation"）。
+    """
+    state = trace_states.get(trace_id)
+    if state is None:
+        state = {
+            "status": "running",
+            "loops": set(),
+            "created_at": msg.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+            "updated_at": None,
+            "has_chart": False,
+            "_tags_seen": set(),
+        }
+        trace_states[trace_id] = state
+
+    tag = msg.get("tag", "")
+    loop_id = msg.get("loop_id")
+    ts = msg.get("timestamp")
+
+    if tag:
+        state["_tags_seen"].add(tag)
+    if loop_id is not None:
+        try:
+            state["loops"].add(int(loop_id))
+        except (ValueError, TypeError):
+            pass
+    if tag == "feedback.return_chart":
+        state["has_chart"] = True
+    if ts:
+        state["updated_at"] = ts
+
+    state["status"] = _derive_status_from_tags(state["_tags_seen"])
+
+
+def _trace_state_public(state: dict) -> dict:
+    """投影内部 state 为对外 JSON（隐藏 _tags_seen，转 loops set 为排序列表）。"""
+    return {
+        "status": state["status"],
+        "loops": sorted(state["loops"]),
+        "created_at": state["created_at"],
+        "updated_at": state["updated_at"],
+        "has_chart": state["has_chart"],
+    }
+
+
+def _trace_id_to_external(trace_path_id: str) -> str:
+    """把内部绝对路径 id 转为对外相对 id。
+
+    内部：/abs/traces/Finance Data Building/plain-transformation
+    外部：Finance Data Building/plain-transformation
+    """
+    try:
+        return str(Path(trace_path_id).relative_to(log_folder_path))
+    except (ValueError, TypeError):
+        return trace_path_id
+
 
 
 def _drain_user_requests_into_messages(task: RDAgentTask) -> None:
@@ -200,21 +370,111 @@ def _normalize_static_request_path(fn: str) -> str:
     return fn
 
 
-def _get_or_create_task(trace_id: str) -> RDAgentTask:
+def _get_running_task(trace_id: str) -> RDAgentTask | None:
+    """只读：返回运行中的 task 或 None（C10：拒绝隐式创建幽灵 task）。"""
+    return rdagent_processes.get(trace_id)
+
+
+def _get_or_load_task(trace_id: str) -> RDAgentTask:
+    """显式加载：首次访问历史 trace 时按需 read_trace（C3 按需加载）。"""
     task = rdagent_processes.get(trace_id)
-    if task is None:
-        task = RDAgentTask(
-            target_name="",
-            kwargs={},
-            stdout_path="",
-            log_trace_path=trace_id,
-            scenario="",
-            trace_name="",
-            ui_server_port=None,
-            create_process=False,
-        )
-        rdagent_processes[trace_id] = task
+    if task is not None:
+        task.last_access = _perf_time.time()
+        return task
+
+    task = RDAgentTask(
+        target_name="",
+        kwargs={},
+        stdout_path="",
+        log_trace_path=trace_id,
+        scenario="",
+        trace_name="",
+        ui_server_port=None,
+        create_process=False,
+    )
+    task.last_access = _perf_time.time()
+    rdagent_processes[trace_id] = task
+
+    # 按需加载历史消息
+    trace_dir = Path(trace_id)
+    if trace_dir.exists() and trace_dir.is_dir():
+        try:
+            _read_trace_into(trace_dir, task)
+        except Exception:
+            app.logger.exception("Failed to lazy-load trace from %s", trace_id)
+
+    _evict_if_needed()
     return task
+
+
+def _evict_if_needed() -> None:
+    """C3 LRU 驱逐：超出 UI_MAX_INMEMORY_TRACES 时淘汰最久未访问的历史 trace。
+
+    关键约束：is_alive() 为真的运行任务永不驱逐。
+    """
+    max_traces = getattr(UI_SETTING, 'max_inmemory_traces', 20)
+    while len(rdagent_processes) > max_traces:
+        candidates = [
+            (tid, t) for tid, t in rdagent_processes.items()
+            if t.process is None or not t.is_alive()
+        ]
+        if not candidates:
+            break
+        evict_id = min(candidates, key=lambda x: getattr(x[1], 'last_access', 0))[0]
+        del rdagent_processes[evict_id]
+
+
+def _read_trace_into(log_path: Path, task: RDAgentTask) -> None:
+    """把历史 trace 的 pkl 读入给定 task 的 messages（不污染 registry）。
+
+    read_trace 的无副作用版本——不调 _get_or_create_task/_get_or_load_task。
+
+    C4 一致性：对 feedback.return_chart 消息做 descriptor 替换（与 /receive 实时路径一致），
+    避免历史 trace 仍内联 5MB chart_html。
+    """
+    external_id = _trace_id_to_external(str(log_path))
+    fs = FileStorage(log_path)
+    ws = WebStorage(port=1, path=log_path)
+    task.messages = []
+    last_timestamp = None
+    for msg in fs.iter_msg():
+        # C4 历史路径补齐：chart tag 不走 _obj_to_json（避免 plotly.io.to_html 生成 5MB inline），
+        # 直接生成轻量 descriptor。原 pickle 仍保留在磁盘上，C5 artifact 端点会按需读取。
+        if "Quantitative Backtesting Chart" in msg.tag:
+            loop_id, _ = extract_loopid_func_name(msg.tag)
+            descriptor = _make_chart_descriptor(
+                trace_id=external_id,
+                loop_id=loop_id,
+                timestamp=msg.timestamp.isoformat(),
+            )
+            task.messages.append(descriptor)
+            last_timestamp = msg.timestamp
+            continue
+
+        data = ws._obj_to_json(obj=msg.content, tag=msg.tag, id=str(log_path), timestamp=msg.timestamp.isoformat())
+        if data:
+            if isinstance(data, list):
+                for d in data:
+                    task.messages.append(d["msg"])
+                    last_timestamp = msg.timestamp
+            else:
+                task.messages.append(data["msg"])
+                last_timestamp = msg.timestamp
+
+    now = datetime.now(timezone.utc)
+    if last_timestamp and (now - last_timestamp).total_seconds() > 1800:
+        task.messages.append(
+            {
+                "tag": "END",
+                "timestamp": now.isoformat(),
+                "content": {"error_msg": "Trace session has ended.", "end_code": 0},
+            }
+        )
+
+
+# 兼容旧调用：保持 _get_or_create_task 可用，但内部改为 _get_or_load_task
+def _get_or_create_task(trace_id: str) -> RDAgentTask:
+    return _get_or_load_task(trace_id)
 
 
 def _resolve_stdout_path(trace_id: str) -> Path | None:
@@ -324,64 +584,255 @@ def _sota_from_messages(messages: list[dict]) -> dict:
 
 
 def read_trace(log_path: Path, id: str = "") -> None:
-    fs = FileStorage(log_path)
-    ws = WebStorage(port=1, path=log_path)
-    task = _get_or_create_task(id)
-    task.messages = []
-    last_timestamp = None
-    for msg in fs.iter_msg():
-        data = ws._obj_to_json(obj=msg.content, tag=msg.tag, id=id, timestamp=msg.timestamp.isoformat())
-        if data:
-            if isinstance(data, list):
-                for d in data:
-                    task.messages.append(d["msg"])
-                    last_timestamp = msg.timestamp
-            else:
-                task.messages.append(data["msg"])
-                last_timestamp = msg.timestamp
-
-    now = datetime.now(timezone.utc)
-    if last_timestamp and (now - last_timestamp).total_seconds() > 1800:
-        task.messages.append(
-            {
-                "tag": "END",
-                "timestamp": now.isoformat(),
-                "content": {"error_msg": "Trace session has ended.", "end_code": 0},
-            }
-        )
+    """读取历史 trace 到 registry（兼容旧调用）。C3 后推荐用 _get_or_load_task。"""
+    task = _get_or_load_task(id or str(log_path))
+    _read_trace_into(log_path, task)
 
 
 def _collect_existing_trace_ids(trace_root: Path) -> list[str]:
-    """Return trace ids that should be visible in the UI history panel."""
+    """Return trace ids that should be visible in the UI history panel.
 
-    if not trace_root.exists():
-        return []
+    合并两个数据源：
+    - 文件系统扫描（已落盘、含 .pkl 的历史任务）
+    - 内存 trace_states 中 status=running 的任务（/upload 后子进程尚未写出 .pkl，
+      否则新建任务在看板里会缺失，Bug 1）
+    """
+    trace_ids: set[str] = set()
 
-    trace_ids: list[str] = []
-    for trace_dir in sorted(trace_root.glob("*/*"), key=lambda p: str(p)):
-        if not trace_dir.is_dir():
-            continue
-        if "uploads" in trace_dir.relative_to(trace_root).parts:
-            continue
-        if not any(trace_dir.rglob("*.pkl")):
-            continue
+    if trace_root.exists():
+        for trace_dir in sorted(trace_root.glob("*/*"), key=lambda p: str(p)):
+            if not trace_dir.is_dir():
+                continue
+            if "uploads" in trace_dir.relative_to(trace_root).parts:
+                continue
+            if not any(trace_dir.rglob("*.pkl")):
+                continue
+            trace_ids.add(trace_dir.relative_to(trace_root).as_posix())
 
-        trace_ids.append(trace_dir.relative_to(trace_root).as_posix())
+    # 合并内存 catalog 中尚未落盘的 running 任务（/upload 已同步初始化 trace_states）
+    for tid, state in trace_states.items():
+        if state.get("status") == "running":
+            trace_ids.add(tid)
 
-    return trace_ids
+    return sorted(trace_ids)
+
+
+def _index_trace_catalog_from_files(trace_dir: Path, trace_id: str) -> None:
+    """C3: 从 pkl 文件名（不反序列化对象）推导 trace 的 catalog 状态。
+
+    pkl 文件名格式：{tag}.{pid_chain}.{YYYY-MM-DD_HH-MM-SS-FFFFFF}.pkl
+    - created_at = 最早 pkl 时间戳
+    - updated_at = 最晚 pkl 时间戳
+    - status = 从文件名含的 tag 推导（END/feedback/Quantitative Backtesting Chart）
+    - loops = 从文件名含的 Loop_N 提取
+    - has_chart = 是否含 Quantitative Backtesting Chart 目录
+    """
+    import re as _re
+    pkls = list(trace_dir.rglob("*.pkl"))
+    if not pkls:
+        return
+
+    timestamps = []
+    tags_seen: set[str] = set()
+    loops: set[int] = set()
+    has_chart = bool(list(trace_dir.rglob("*Chart*")))
+
+    ts_pattern = _re.compile(r'(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{6})\.pkl$')
+    loop_pattern = _re.compile(r'Loop_(\d+)\.')
+
+    for pkl in pkls:
+        name = pkl.name
+        m = ts_pattern.search(name)
+        if m:
+            parts = m.group(1).split('_')
+            if len(parts) == 2:
+                date_part = parts[0]
+                time_part = parts[1].replace('-', ':')
+                timestamps.append(f"{date_part}T{time_part}Z")
+        full_path = str(pkl.relative_to(trace_dir))
+        path_parts = full_path.replace('\\', '/').split('/')
+        for part in path_parts:
+            for tag_keyword in ['END', 'feedback', 'Quantitative Backtesting Chart', 'hypothesis']:
+                if tag_keyword.lower() in part.lower():
+                    tags_seen.add(tag_keyword)
+            lm = loop_pattern.match(part)
+            if lm:
+                loops.add(int(lm.group(1)))
+
+    created_at = min(timestamps) if timestamps else None
+    updated_at = max(timestamps) if timestamps else None
+
+    if 'END' in tags_seen or ('feedback' in tags_seen and 'hypothesis' in tags_seen):
+        status = 'done'
+    else:
+        status = 'running'
+
+    trace_states[trace_id] = {
+        "status": status,
+        "loops": loops,
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "has_chart": has_chart,
+        "_tags_seen": tags_seen,
+    }
 
 
 def _load_existing_traces(trace_root: Path) -> None:
-    """Load persisted traces into memory so the UI survives a server restart."""
+    """C3: 启动时只建 catalog 索引（扫文件名，不反序列化对象，不阻塞启动）。"""
 
     for trace_id in _collect_existing_trace_ids(trace_root):
         trace_dir = trace_root / trace_id
-
         try:
-            read_trace(trace_dir, id=str(trace_dir))
+            _index_trace_catalog_from_files(trace_dir, trace_id)
         except Exception:
-            app.logger.exception("Failed to load trace from %s", trace_dir)
+            app.logger.exception("Failed to index trace catalog from %s", trace_id)
 
+
+# ==================== Chart Artifact（C4/C5）====================
+# C4: /receive 收到 feedback.return_chart 时，把 5MB chart_html 替换为轻量 descriptor。
+# C5: GET /api/v2/trace/artifact 按 trace_id + loop_id 按需生成 chart HTML。
+
+# plotly.js CDN URL（bootcdn 国内镜像）。
+# 注意：bootcdn 同步自 cdnjs，plotly.js 在 cdnjs 上最高只到 3.1.1（6.x 未同步，会 404）。
+# 2.35.3 是 cdnjs/bootcdn 上稳定可用的最高 2.x 版本，覆盖 report_figure 用到的全部
+# trace/layout 特性；Python 后端仍可用任意版本生成 figure JSON（仅作为数据源）。
+_PLOTLY_VERSION = "2.35.3"
+_PLOTLY_CDN_URL = f"https://cdn.bootcdn.net/ajax/libs/plotly.js/{_PLOTLY_VERSION}/plotly.min.js"
+
+
+def _find_chart_pkl(trace_dir: Path, loop_id: int | None) -> Path | None:
+    """在 trace 目录中找到指定 loop 的最新 chart pkl。
+
+    路径模式：Loop_N/running/Quantitative Backtesting Chart/<pid_chain>/<timestamp>.pkl
+    多个时取时间戳最新的一份（tie-breaker：规范化相对路径字典序）。
+    """
+    if loop_id is not None:
+        pattern = f"Loop_{loop_id}/running/Quantitative Backtesting Chart/**/*.pkl"
+    else:
+        pattern = "**/Quantitative Backtesting Chart/**/*.pkl"
+    pkls = sorted(trace_dir.glob(pattern), reverse=True)
+    return pkls[0] if pkls else None
+
+
+def _generate_chart_html(df_pkl_path: Path) -> str:
+    """从 chart pkl（DataFrame）生成 chart HTML（bootcdn CDN 加载 plotly.js，不内联）。
+
+    落盘到 artifact cache 目录，后续请求直接 send_file。
+    """
+    import pickle as _pickle
+    import plotly
+    from rdagent.log.ui.qlib_report_figure import report_figure
+
+    with open(df_pkl_path, 'rb') as f:
+        obj = _pickle.load(f)
+
+    # 兼容 dict（新格式 {'ret':..,'group':..}）和 DataFrame（历史 trace）
+    if isinstance(obj, dict) and "ret" in obj:
+        fig = report_figure(obj["ret"], group_df=obj.get("group"))
+    else:
+        fig = report_figure(obj)
+    html = plotly.io.to_html(fig, include_plotlyjs=False, full_html=True)
+    # 注入 bootcdn script（include_plotlyjs=False 只留占位，需手动加 script 标签）
+    html = html.replace(
+        '</head>',
+        f'<script src="{_PLOTLY_CDN_URL}"></script></head>',
+    ) if '</head>' in html else html
+    return html
+
+
+def _get_or_create_artifact_html(trace_id: str, loop_id: int | None) -> tuple[str | None, str | None]:
+    """获取或生成 chart HTML，落盘缓存。返回 (html_path, etag) 或 (None, None)。"""
+    trace_dir = log_folder_path / trace_id
+    if not trace_dir.exists():
+        return None, None
+
+    chart_pkl = _find_chart_pkl(trace_dir, loop_id)
+    if chart_pkl is None:
+        return None, None
+
+    import hashlib
+    # artifact 缓存路径
+    loop_str = str(loop_id) if loop_id is not None else 'latest'
+    cache_key = f"{trace_id.replace('/', '__')}_{loop_str}"
+    cache_dir = Path(UI_SETTING.trace_artifact_cache_path).resolve()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    html_path = cache_dir / f"{cache_key}.html"
+
+    # ETag 基于 chart pkl 的内容 hash
+    pkl_content = chart_pkl.read_bytes()
+    etag = hashlib.sha256(pkl_content).hexdigest()[:16]
+
+    # 如果缓存 HTML 不存在或 pkl 变了，重新生成
+    meta_path = html_path.with_suffix('.etag')
+    if not html_path.exists() or not meta_path.exists() or meta_path.read_text().strip() != etag:
+        try:
+            html = _generate_chart_html(chart_pkl)
+            html_path.write_text(html, encoding='utf-8')
+            meta_path.write_text(etag, encoding='utf-8')
+        except Exception:
+            app.logger.exception("Failed to generate chart artifact for %s loop %s", trace_id, loop_id)
+            return None, None
+
+    return str(html_path), etag
+
+
+def _make_chart_descriptor(trace_id: str, loop_id, timestamp: str) -> dict:
+    """C4: 生成轻量 chart descriptor（替代 5MB chart_html）。"""
+    return {
+        "tag": "feedback.return_chart",
+        "timestamp": timestamp,
+        "loop_id": loop_id,
+        "content": {
+            "chart_ref": {"trace_id": trace_id, "loop_id": loop_id},
+            "available": True,
+        },
+    }
+
+
+@app.route("/api/v2/trace/artifact", methods=["GET"])
+def get_chart_artifact():
+    """C5: 按 trace_id + loop_id 按需返回 chart HTML。
+
+    支持 If-None-Match → 304。HTML 通过 bootcdn CDN 加载 plotly.js（不内联 2.7MB）。
+    """
+    from werkzeug.utils import secure_filename
+
+    trace_id = request.args.get('id', '')
+    loop_str = request.args.get('loop', '')
+    if not trace_id:
+        return jsonify({"error": "Missing 'id' parameter"}), 400
+
+    # 路径越界校验
+    try:
+        trace_dir = (log_folder_path / trace_id).resolve()
+        if os.path.commonpath([str(trace_dir), str(log_folder_path)]) != str(log_folder_path):
+            return jsonify({"error": "Invalid trace id"}), 422
+    except (ValueError, OSError):
+        return jsonify({"error": "Invalid trace id"}), 422
+
+    try:
+        loop_id = int(loop_str) if loop_str else None
+    except ValueError:
+        return jsonify({"error": "Invalid loop parameter"}), 422
+
+    html_path_str, etag = _get_or_create_artifact_html(trace_id, loop_id)
+    if html_path_str is None:
+        return jsonify({"error": "Chart not found for this trace/loop"}), 404
+
+    # ETag / 304 支持
+    if_none_match = request.headers.get('If-None-Match', '')
+    if etag and if_none_match and etag in if_none_match:
+        return '', 304
+
+    html_path = Path(html_path_str)
+    response = send_file(html_path, mimetype='text/html')
+    if etag:
+        response.headers['ETag'] = etag
+    response.headers['Cache-Control'] = 'private, max-age=0, must-revalidate'
+    return response
+
+
+# ==================== Chart Artifact END ============================
 
 @app.route("/trace", methods=["POST"])
 def update_trace():
@@ -412,6 +863,7 @@ def update_trace():
                     },
                 }
             )
+            _update_trace_state(_trace_id_to_external(trace_id), task.messages[-1])
             app.logger.warning(f"Process for {trace_id} has ended.")
 
     total = len(task.messages)
@@ -467,22 +919,34 @@ def list_traces():
     return jsonify(trace_ids), 200
 
 
+@app.route("/traces/status", methods=["GET"])
+def list_trace_statuses():
+    """Return lightweight status snapshots for all traces (C1 catalog read model).
+
+    Single bulk request replacing N+1 full-trace fetches on the homepage.
+    Response is sorted by created_at DESC, id ASC.
+    """
+    items = [
+        {"id": tid, **_trace_state_public({
+            **state,
+            "status": _resolve_trace_status(tid, state["status"]),
+        })}
+        for tid, state in trace_states.items()
+    ]
+    items.sort(key=lambda x: (x.get("created_at") or "", x["id"]), reverse=True)
+    return jsonify(items), 200
+
+
 @app.route("/upload", methods=["POST"])
 def upload_file():
     # 获取请求体中的字段
     global rdagent_processes
     scenario = request.form.get("scenario")
     files = request.files.getlist("files")
-    competition = request.form.get("competition")
     loop_n = request.form.get("loops")
     all_duration = request.form.get("all_duration")
 
-    # scenario = "Data Science Loop"
-    if scenario == "Data Science":
-        competition = competition[10:]  # Eg. MLE-Bench:aerial-cactus-competition
-        trace_name = f"{competition}-{randomname.get_name()}"
-    else:
-        trace_name = randomname.get_name()
+    trace_name = randomname.get_name()
     trace_files_path = log_folder_path / "uploads" / scenario / trace_name
 
     log_trace_path = (log_folder_path / scenario / trace_name).absolute()
@@ -504,10 +968,19 @@ def upload_file():
             else:
                 return jsonify({"error": "Invalid file path"}), 400
 
+    # 并发限制：运行中任务达上限时拒绝新建
+    max_concurrent = getattr(UI_SETTING, 'max_concurrent_tasks', 10)
+    running_count = sum(1 for t in rdagent_processes.values() if t.is_alive())
+    if running_count >= max_concurrent:
+        return jsonify({
+            "error": f"当前有 {running_count} 个任务正在运行（上限 {max_concurrent}），请等待部分任务完成后再新建"
+        }), 429
+
     target_name = None
     kwargs = {}
     loop_n_val = int(loop_n) if loop_n else None
     all_duration_val = f"{all_duration}h" if all_duration else None
+    auto_mode = request.form.get("auto_mode", "false").lower() in ("true", "1", "yes")
 
     if scenario == "Finance Data Building":
         target_name = "fin_factor"
@@ -516,6 +989,7 @@ def upload_file():
             "all_duration": all_duration_val,
             "base_features_path": str(trace_files_path),
             "description": request.form.get("description"),
+            "auto_mode": auto_mode,
         }
     if scenario == "Finance Model Implementation":
         target_name = "fin_model"
@@ -524,6 +998,7 @@ def upload_file():
             "all_duration": all_duration_val,
             "base_features_path": str(trace_files_path),
             "description": request.form.get("description"),
+            "auto_mode": auto_mode,
         }
     if scenario == "Finance Whole Pipeline":
         target_name = "fin_quant"
@@ -532,6 +1007,7 @@ def upload_file():
             "all_duration": all_duration_val,
             "base_features_path": str(trace_files_path),
             "description": request.form.get("description"),
+            "auto_mode": auto_mode,
         }
     if scenario == "Finance Data Building (Reports)":
         target_name = "fin_factor_report"
@@ -565,6 +1041,28 @@ def upload_file():
     task.start()
     app.logger.warning(f"Task {log_trace_path} started.")
     rdagent_processes[str(log_trace_path)] = task
+    # 记录用户原始输入，供前端 TaskBrief 展示（区别于 LLM 生成的 hypothesis）。
+    # 只进内存 messages（/trace 直接返回其切片），不调 _update_trace_state 以免污染 status/loops 投影。
+    task.messages.append({
+        "tag": "task.user_input",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "content": {
+            "description": request.form.get("description"),
+            "scenario": scenario,
+            "loops": loop_n_val,
+            "auto_mode": auto_mode,
+        },
+    })
+    # 初始化 catalog 状态投影（C1）
+    external_id = f"{scenario}/{trace_name}"
+    trace_states[external_id] = {
+        "status": "running",
+        "loops": set(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": None,
+        "has_chart": False,
+        "_tags_seen": set(),
+    }
     return (
         jsonify(
             {
@@ -586,13 +1084,34 @@ def receive_msgs():
 
     if isinstance(data, list):
         for d in data:
-            task = _get_or_create_task(d["id"])
-            task.messages.append(d["msg"])
+            _process_incoming_message(d["id"], d["msg"])
     else:
-        task = _get_or_create_task(data["id"])
-        task.messages.append(data["msg"])
+        _process_incoming_message(data["id"], data["msg"])
 
     return jsonify({"status": "success"}), 200
+
+
+def _process_incoming_message(internal_id: str, msg: dict) -> None:
+    """C4: 处理收到的消息——对 chart 消息做 descriptor 替换，然后 append + 投影。"""
+    tag = msg.get("tag", "")
+    external_id = _trace_id_to_external(internal_id)
+
+    # C4: chart 消息替换为轻量 descriptor（不 append 5MB chart_html）
+    if tag == "feedback.return_chart":
+        loop_id = msg.get("loop_id")
+        timestamp = msg.get("timestamp", datetime.now(timezone.utc).isoformat())
+        descriptor = _make_chart_descriptor(external_id, loop_id, timestamp)
+        task = _get_running_task(internal_id)
+        if task is not None:
+            task.messages.append(descriptor)
+        _update_trace_state(external_id, descriptor)
+        return
+
+    # 普通消息：正常 append + 投影
+    task = _get_running_task(internal_id)
+    if task is not None:
+        task.messages.append(msg)
+    _update_trace_state(external_id, msg)
 
 
 @app.route("/health", methods=["GET"])
@@ -623,15 +1142,30 @@ def health_check():
     # 2. Docker daemon
     docker_ok = False
     docker_detail = "未检测到 Docker"
+    # image_mlflow_flag 同时供 §5 MLflow 检查复用（避免重复 docker 调用）。
+    # 默认 None 表示「未知」（docker 不可用 / 镜像不存在时）。
+    image_mlflow_flag = None
     try:
         import docker as _docker
+        from rdagent.utils.env import QlibDockerConf
+
         client = _docker.from_env(timeout=3)
         client.ping()
         docker_ok = True
-        # Check local_qlib image
-        images = [tag for img in client.images.list() for tag in (img.tags or [])]
-        qlib_img = [i for i in images if "local_qlib" in i]
-        docker_detail = f"Docker 正常, 镜像: {qlib_img[0] if qlib_img else '无 local_qlib 镜像'}"
+        # 读 .env 配置的实际镜像（QLIB_DOCKER_IMAGE，默认 local_qlib:latest），
+        # 并校验本地是否存在。避免盲取 images.list() 第一个 tag 导致显示与运行时不一致。
+        configured_image = QlibDockerConf().image
+        try:
+            img = client.images.get(configured_image)
+            docker_detail = f"Docker 正常, 镜像: {configured_image} ✓"
+            # 从镜像 ENV 读 MLFLOW_ALLOW_FILE_STORE（容器内 qrun 实际依赖的就是这一层）。
+            image_env = img.attrs.get("Config", {}).get("Env", []) or []
+            for entry in image_env:
+                if entry.startswith("MLFLOW_ALLOW_FILE_STORE="):
+                    image_mlflow_flag = entry.split("=", 1)[1]
+                    break
+        except _docker.errors.ImageNotFound:
+            docker_detail = f"Docker 正常, 镜像: {configured_image} ✕ 本地不存在（首次运行会自动 pull）"
     except Exception as e:
         docker_detail = f"Docker 不可用: {str(e)[:80]}"
     checks.append({
@@ -670,17 +1204,157 @@ def health_check():
         "detail": f"CONDA_DEFAULT_ENV={conda_env or '未设置（因子代码验证可能失败）'}",
     })
 
-    # 5. MLflow file store (docker 内需要)
-    mlflow_flag = _os.environ.get("MLFLOW_ALLOW_FILE_STORE", "")
+    # 5. MLflow file store (docker 容器内 qrun 依赖)
+    # 真实生效层是 docker 镜像 ENV（容器内继承），其次才是 .env / 进程环境变量。
+    # 之前只读 os.environ 会在 server 父进程里误报「未设置」——
+    # 因为 _run() 的兜底注入只作用于任务子进程，不作用于 server 父进程。
+    if image_mlflow_flag is not None:
+        mlflow_detail = f"MLFLOW_ALLOW_FILE_STORE={image_mlflow_flag}（镜像 ENV）"
+        mlflow_status = "pass" if image_mlflow_flag == "true" else "warn"
+    else:
+        # 镜像不可用 / 不存在时，回退到进程环境变量（.env 或 _run 注入）
+        proc_flag = _os.environ.get("MLFLOW_ALLOW_FILE_STORE", "")
+        mlflow_detail = f"MLFLOW_ALLOW_FILE_STORE={proc_flag or '未设置（镜像不可读，无法确认容器内是否生效）'}"
+        mlflow_status = "pass" if proc_flag == "true" else "warn"
     checks.append({
         "name": "MLflow 配置",
         "icon": "📈",
-        "status": "pass" if mlflow_flag == "true" else "warn",
-        "detail": f"MLFLOW_ALLOW_FILE_STORE={mlflow_flag or '未设置（docker 内 qrun 可能报 mlflow 错误）'}",
+        "status": mlflow_status,
+        "detail": mlflow_detail,
     })
 
     all_pass = all(c["status"] == "pass" for c in checks)
     return jsonify({"overall": "pass" if all_pass else "issues", "checks": checks}), 200
+
+
+# ==================== 设置页面 ====================
+
+@app.route("/settings/schema", methods=["GET"])
+def get_settings_schema():
+    """返回配置 schema + 当前值（密钥脱敏），供设置页动态渲染表单。"""
+    from rdagent.log.server.settings_schema import build_schema_response
+    return jsonify(build_schema_response()), 200
+
+
+@app.route("/settings", methods=["POST"])
+def save_settings():
+    """保存配置到 .env 文件。需重启服务生效。
+
+    - 密钥保护：值匹配脱敏格式（含 ***）视为未修改，跳过
+    - model_map 类型：dict 序列化为单行 JSON 写入
+    - 用 python-dotenv.set_key 原子写，保留 .env 原有注释和格式
+    - 写前备份 .env → .env.bak
+    """
+    import json as _json
+    from rdagent.log.server.settings_schema import is_masked
+    from dotenv import set_key
+
+    data = request.get_json(silent=True) or {}
+    fields = data.get("fields", {})
+    if not isinstance(fields, dict) or not fields:
+        return jsonify({"error": "fields 为空或格式错误"}), 400
+
+    env_path = Path(".env").resolve()
+    if not env_path.exists():
+        return jsonify({"error": ".env 文件不存在，请先复制 .env.example"}), 404
+
+    import shutil
+    bak_path = env_path.with_name(".env.bak")
+    try:
+        shutil.copy2(env_path, bak_path)
+    except Exception as e:
+        app.logger.warning(f"备份 .env 失败: {e}")
+
+    written = []
+    skipped = []
+    for key, value in fields.items():
+        if value is None:
+            continue
+        # dict/list 序列化为单行 JSON（如 CHAT_MODEL_MAP）
+        if isinstance(value, (dict, list)):
+            str_value = _json.dumps(value, ensure_ascii=False)
+        else:
+            str_value = str(value)
+        # 密钥保护：脱敏格式的值视为未修改
+        if is_masked(str_value):
+            skipped.append(key)
+            continue
+        try:
+            set_key(str(env_path), key, str_value)
+            written.append(key)
+        except Exception as e:
+            return jsonify({"error": f"写入 {key} 失败: {e}"}), 500
+
+    return jsonify({
+        "status": "saved",
+        "written": written,
+        "skipped": skipped,
+        "restart_required": True,
+    }), 200
+
+
+@app.route("/settings/test-model", methods=["POST"])
+def test_model_connection():
+    """测试 LLM/Embedding 模型连通性。
+
+    mode='chat'(默认)：发 max_tokens=1 的最小 completion 请求
+    mode='embedding'：发 input=['test'] 的最小 embedding 请求
+
+    支持测试表单输入的值（未保存也能测）。密钥为空时回退到 .env 现有值。
+    脱敏值（含 ***）视为未提供，回退到 .env。
+    """
+    from rdagent.log.server.settings_schema import is_masked
+    import litellm
+    from dotenv import dotenv_values
+
+    data = request.get_json(silent=True) or {}
+    model = data.get("model", "").strip()
+    api_key = data.get("api_key", "").strip()
+    api_base = data.get("api_base", "").strip()
+    mode = data.get("mode", "chat")  # chat | embedding
+
+    if not model:
+        return jsonify({"ok": False, "error": "模型名不能为空"}), 200
+
+    # 密钥/base 回退：脱敏或空 → 读 .env 现有值
+    env_values = dotenv_values(".env")
+    if mode == "embedding":
+        # embedding 优先用 embedding 专用 key，回退通用 key
+        if not api_key or is_masked(api_key):
+            api_key = (env_values.get("EMBEDDING_OPENAI_API_KEY")
+                       or env_values.get("LITELLM_PROXY_API_KEY")
+                       or env_values.get("OPENAI_API_KEY") or "")
+        if not api_base or is_masked(api_base):
+            api_base = (env_values.get("EMBEDDING_OPENAI_API_BASE")
+                        or env_values.get("LITELLM_PROXY_API_BASE")
+                        or env_values.get("OPENAI_API_BASE") or "")
+    else:
+        # chat 优先用聊天专用 key，回退通用 key
+        if not api_key or is_masked(api_key):
+            api_key = env_values.get("OPENAI_API_KEY") or env_values.get("CHAT_OPENAI_API_KEY") or ""
+        if not api_base or is_masked(api_base):
+            api_base = env_values.get("OPENAI_API_BASE") or env_values.get("CHAT_OPENAI_BASE_URL") or ""
+
+    kwargs = {"timeout": 10}
+    if api_key:
+        kwargs["api_key"] = api_key
+    if api_base:
+        kwargs["api_base"] = api_base
+
+    import time
+    start = time.time()
+    try:
+        if mode == "embedding":
+            litellm.embedding(model=model, input=["test"], **kwargs)
+        else:
+            litellm.completion(model=model, messages=[{"role": "user", "content": "hi"}], max_tokens=1, **kwargs)
+        latency = int((time.time() - start) * 1000)
+        return jsonify({"ok": True, "latency_ms": latency, "error": ""}), 200
+    except Exception as e:
+        latency = int((time.time() - start) * 1000)
+        err_type = type(e).__name__
+        err_msg = str(e)[:200]
+        return jsonify({"ok": False, "latency_ms": latency, "error": f"{err_type}: {err_msg}"}), 200
 
 
 @app.route("/user_interaction/submit", methods=["POST"])
@@ -740,6 +1414,7 @@ def control_process():
                     "content": {"error_msg": "RD-Agent process was stopped by user.", "end_code": -1},
                 }
             )
+            _update_trace_state(_trace_id_to_external(id), task.messages[-1])
             app.logger.warning(f"Process for {id} has been stopped.")
         return jsonify({"status": "stopped"}), 200
     except Exception as e:
@@ -803,6 +1478,162 @@ def get_sota(trace_name: str):
         "detail": f"No session or message stream matching '{trace_name}'",
         "hint": "Try GET /traces to list available trace ids, or pass ?log_path=<path>",
     }), 404
+
+
+# ==================== Prediction Dashboard APIs ====================
+
+
+@app.route("/predict/experiments", methods=["GET"])
+def list_predict_experiments():
+    """List fin_factor experiments that have SOTA + params.pkl, for the prediction dashboard."""
+    from rdagent.log.sota_query import query_sota as _query_sota
+
+    experiments = []
+    seen_workspaces = set()
+
+    # Source 1: webUI traces (trace_folder)
+    trace_ids = _collect_existing_trace_ids(log_folder_path)
+    for tid in trace_ids:
+        if not tid.startswith("Finance Data Building/"):
+            continue
+        sota_response = get_sota(tid)
+        if sota_response[1] != 200:
+            continue
+        result = sota_response[0].get_json()
+        if not result or not result.get("sota_factors"):
+            continue
+        wp = result.get("experiment_workspace_path")
+        if not wp or not Path(wp).exists() or wp in seen_workspaces:
+            continue
+        import glob as _glob
+        if not _glob.glob(str(Path(wp) / "mlruns/*/*/artifacts/params.pkl")):
+            continue
+        seen_workspaces.add(wp)
+        experiments.append(_build_exp_entry(tid, result, wp))
+
+    # Source 2: CLI sessions (log/ directory)
+    log_root = Path("log")
+    if log_root.exists():
+        for ts_dir in sorted(log_root.iterdir()):
+            if not (ts_dir / "__session__").is_dir():
+                continue
+            try:
+                result = _query_sota(ts_dir)
+            except Exception:
+                continue
+            if "error" in result or not result.get("sota_factors"):
+                continue
+            wp = result.get("experiment_workspace_path")
+            if not wp or not Path(wp).exists() or wp in seen_workspaces:
+                continue
+            import glob as _glob
+            if not _glob.glob(str(Path(wp) / "mlruns/*/*/artifacts/params.pkl")):
+                continue
+            seen_workspaces.add(wp)
+            tid = f"CLI/{ts_dir.name}"
+            experiments.append(_build_exp_entry(tid, result, wp))
+
+    return jsonify({"experiments": experiments})
+
+
+def _build_exp_entry(tid: str, result: dict, wp: str) -> dict:
+    """Build an experiment entry for the predict API response."""
+    metrics = result.get("sota_metrics", {})
+    return {
+        "trace_id": tid,
+        "name": tid.split("/")[-1],
+        "created_at": tid,
+        "factor_count": len(result.get("sota_factors", [])),
+        "metrics": {
+            "IC": round(metrics.get("IC", 0), 4) if isinstance(metrics.get("IC"), (int, float)) else None,
+            "annualized_return": round(metrics.get("1day.excess_return_with_cost.annualized_return", 0), 4)
+            if isinstance(metrics.get("1day.excess_return_with_cost.annualized_return"), (int, float))
+            else None,
+            "max_drawdown": round(metrics.get("1day.excess_return_with_cost.max_drawdown", 0), 4)
+            if isinstance(metrics.get("1day.excess_return_with_cost.max_drawdown"), (int, float))
+            else None,
+        },
+        "has_model": True,
+        "workspace_path": wp,
+        "sota_factors": [(f["name"], f.get("code", "")) for f in result.get("sota_factors", [])],
+    }
+
+
+@app.route("/predict/run", methods=["POST"])
+def run_predict():
+    """Trigger an async prediction task for a given experiment."""
+    data = request.get_json(silent=True) or {}
+    trace_id = data.get("trace_id")
+    if not trace_id:
+        return jsonify({"error": "trace_id is required"}), 400
+
+    # Resolve experiment details
+    import glob as _glob
+    if trace_id.startswith("CLI/"):
+        # CLI session: query_sota directly
+        from rdagent.log.sota_query import query_sota as _qs
+        log_path = Path("log") / trace_id.split("/", 1)[1]
+        result = _qs(log_path)
+        if "error" in result or not result.get("sota_factors"):
+            return jsonify({"error": "no SOTA for this trace"}), 404
+    else:
+        # webUI trace: use get_sota
+        sota_response = get_sota(trace_id)
+        if sota_response[1] != 200:
+            return jsonify({"error": f"trace not found or no SOTA: {trace_id}"}), 404
+        result = sota_response[0].get_json()
+        if not result or not result.get("sota_factors"):
+            return jsonify({"error": "no SOTA for this trace"}), 404
+    wp = result.get("experiment_workspace_path")
+    if not wp or not Path(wp).exists():
+        return jsonify({"error": "workspace not found"}), 404
+    params_files = _glob.glob(str(Path(wp) / "mlruns/*/*/artifacts/params.pkl"))
+    if not params_files:
+        return jsonify({"error": "params.pkl not found"}), 404
+    sota_factors = [(f["name"], f.get("code", "")) for f in result.get("sota_factors", [])]
+
+    # Create prediction task (reuse RDAgentTask infrastructure)
+    trace_name = f"{randomname.get_name()}-{datetime.now().strftime('%Y%m%d')}"
+    scenario = "Finance Prediction"
+    log_trace_path = log_folder_path / scenario / trace_name
+    stdout_path = log_folder_path / scenario / f"{trace_name}.log"
+    log_trace_path.mkdir(parents=True, exist_ok=True)
+
+    kwargs = {
+        "trace_id": trace_id,
+        "workspace_path": wp,
+        "sota_factors": sota_factors,
+    }
+    task = RDAgentTask(
+        target_name="fin_predict",
+        kwargs=kwargs,
+        stdout_path=str(stdout_path),
+        log_trace_path=str(log_trace_path),
+        scenario=scenario,
+        trace_name=trace_name,
+        ui_server_port=app.config.get("UI_SERVER_PORT", 19899),
+    )
+    task.start()
+    rdagent_processes[str(log_trace_path)] = task
+    return jsonify({"task_id": f"{scenario}/{trace_name}"})
+
+
+@app.route("/predict/history", methods=["GET"])
+def predict_history():
+    """List historical prediction records."""
+    trace_id = request.args.get("trace_id")
+    history_dir = log_folder_path / "Prediction History"
+    records = []
+    if history_dir.exists():
+        for f in sorted(history_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+            try:
+                rec = json.loads(f.read_text())
+                if trace_id and rec.get("source_trace_id") != trace_id:
+                    continue
+                records.append(rec)
+            except Exception:
+                continue
+    return jsonify({"records": records})
 
 
 @app.route("/", methods=["GET"])

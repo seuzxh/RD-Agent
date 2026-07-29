@@ -44,16 +44,6 @@
               </template>
             </el-table-column>
 
-            <el-table-column
-              label="组件"
-              width="200"
-              prop="component"
-              v-if="scenarioName == 'Data Science'"
-            >
-              <template #header="scope">
-                <span class="text-color-blue">组件</span>
-              </template>
-            </el-table-column>
             <el-table-column label="状态" width="140">
               <template #header="scope">
                 <span class="text-color-blue">状态</span>

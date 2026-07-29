@@ -179,7 +179,7 @@ watch(() => props.messages, (msgs) => {
   lastOpenedTimestamp = latestTs
   const payload = (latest.content && typeof latest.content === 'object' ? latest.content : {}) as Record<string, unknown>
   openUserInteraction(payload)
-}, { deep: true })
+})
 
 function openUserInteraction(payload: Record<string, unknown>) {
   const hasUserInstruction = Object.prototype.hasOwnProperty.call(payload, 'user_instruction')

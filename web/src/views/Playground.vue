@@ -378,7 +378,6 @@ import loadingSvg from "../components/loading-dot.vue";
 import markdown from "../components/markdown.vue";
 import playgroundPage from "./PlaygroundPage.vue";
 import { useRouter } from "vue-router";
-import { kaggleCompetitions } from "../constants/mle-competitions";
 const router = useRouter();
 const completedTraceStorageKey = "completedTraceIdList";
 const showPanel = ref(1);
@@ -545,37 +544,9 @@ const continuousScenarioList = [
   → ...下一轮♾️... `,
     },
   },
-  {
-    name: "Data Science",
-    icon: "Graph-Dot",
-    color: "#a858ff",
-    upload: false,
-    developer: true,
-    editLoop: true,
-    loopRadio: "20",
-    loopNumber: 20,
-    hourRadio: "24",
-    hourNumber: 24,
-    introduce: {
-      "简介": `R&D-Agent 自动化 Kaggle 特征工程、模型调优与迭代开发，帮助参赛者提升数据科学竞赛中的表现。`,
-      "数据说明": `R&D-Agent 适用于 Kaggle 竞赛中的各种数据集，支持回归、分类等任务，包含结构化与非结构化数据。
-  在此场景中，具体任务为利用 USFS 和美国地质调查局的地形变量预测森林覆盖类型。`,
-      "评估方法": `模型与特征基于测试集或 Kaggle 排行榜上的表现进行评估，目标是获得尽可能高的排行榜得分。
-  在此场景中，解决方案需提升森林覆盖类型识别的准确率。`,
-      "场景分解": `... 第♾️ N 轮：
-  	→ [🔍研究以生成假设] → (假设)
-  	→ [🔍设计实验，如特征工程、模型调优] → (实验任务)
-  	→ [🛠️实验实现] → (工作区迭代实现)
-  	→ [📝评估与分析] → (反馈)
-  → ...下一轮♾️...`,
-    },
-    child: kaggleCompetitions,
-  },
 ];
 
-const visibleContinuousScenarioList = continuousScenarioList.filter(
-  (scenario) => scenario.name !== "Data Science"
-);
+const visibleContinuousScenarioList = continuousScenarioList;
 
 const guidedScenarioList = [
   {

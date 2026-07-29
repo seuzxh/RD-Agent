@@ -41,14 +41,18 @@ def main(
     else:
         model_loop = ModelRDLoop.load(path, checkout=checkout)
     model_loop._init_base_features(base_features_path)
-    if description:
-        # User provided a description via the webUI -> use the framework's native
-        # user_instruction channel (LLMHypothesisGen.gen reads plan["user_instruction"])
-        # and skip the interactive initial-params flow.
-        model_loop.plan["user_instruction"] = description
-    elif "user_interaction_queues" in kwargs and kwargs["user_interaction_queues"] is not None:
+
+    auto_mode = kwargs.get("auto_mode", False)
+    has_queues = "user_interaction_queues" in kwargs and kwargs["user_interaction_queues"] is not None
+
+    if not auto_mode and has_queues:
         model_loop._set_interactor(*kwargs["user_interaction_queues"])
+
+    if description:
+        model_loop.plan["user_instruction"] = description
+    elif not auto_mode and hasattr(model_loop, "user_request_q"):
         model_loop._interact_init_params()
+
     asyncio.run(model_loop.run(step_n=step_n, loop_n=loop_n, all_duration=all_duration))
 
 

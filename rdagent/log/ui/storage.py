@@ -220,7 +220,13 @@ class WebStorage(Storage):
                     "tag": "feedback.return_chart",
                     "timestamp": timestamp,
                     "loop_id": li,
-                    "content": {"chart_html": plotly.io.to_html(report_figure(obj))},
+                    "content": {
+                        "chart_html": plotly.io.to_html(
+                            report_figure(obj["ret"], group_df=obj.get("group"))
+                            if isinstance(obj, dict) and "ret" in obj
+                            else report_figure(obj)
+                        )
+                    },
                 },
             }
         elif "running" in tag:

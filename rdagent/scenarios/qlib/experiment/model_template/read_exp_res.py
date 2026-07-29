@@ -53,3 +53,18 @@ else:
 
     ret_data_frame = latest_recorder.load_object("portfolio_analysis/report_normal_1day.pkl")
     ret_data_frame.to_pickle("ret.pkl")
+
+    # 加载 pred/label，计算分组收益（Group1-5 + long-short 累计净值）
+    try:
+        from rdagent.log.ui.qlib_report_figure import _calc_group_returns
+
+        pred = latest_recorder.load_object("pred.pkl")
+        label = latest_recorder.load_object("label.pkl")
+        pred_label = pd.DataFrame(
+            {"score": pred.stack(), "label": label.stack()}
+        )
+        group_df = _calc_group_returns(pred_label, n_groups=5)
+        group_df.to_pickle("ret_group.pkl")
+        print("Group returns saved to ret_group.pkl")
+    except Exception as e:
+        print(f"Warning: group returns not available: {e}")

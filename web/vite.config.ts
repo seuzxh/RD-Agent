@@ -19,6 +19,8 @@ export default defineConfig({
       input: {
         // main: pathResolve('./index.html'),
         multialpha: pathResolve('./multialpha.html'),
+        predict: pathResolve('./predict.html'),
+        anaAgents: pathResolve('./ana-agents.html'),
       },
     },
   },
@@ -47,12 +49,14 @@ export default defineConfig({
       interval: 1000 // 监听的间隔时间(ms)
     },
     proxy: {
-      '/traces': 'http://127.0.0.1:19899',
-      '/trace': 'http://127.0.0.1:19899',
-      '/upload': 'http://127.0.0.1:19899',
-      '/control': 'http://127.0.0.1:19899',
-      '/logs': 'http://127.0.0.1:19899',
-      '/stdout': 'http://127.0.0.1:19899',
+      '/traces': 'http://localhost:19899',
+      '/trace': 'http://localhost:19899',
+      '/predict': 'http://localhost:19899',
+      '/upload': 'http://localhost:19899',
+      '/control': 'http://localhost:19899',
+      '/logs': 'http://localhost:19899',
+      '/stdout': 'http://localhost:19899',
+      '/health': 'http://localhost:19899',
     },
   },
   resolve: {

@@ -5,7 +5,7 @@
       <div class="hero-grid">
         <div class="hero-copy-block">
           <p class="eyebrow">FACTOR MINING · ◯V · GUOXIN SECURITIES</p>
-          <h1>Multi<span>α</span>1pha</h1>
+          <h1>Multi<span>α</span>lpha</h1>
           <h2>量化因子挖掘终端 · V.4</h2>
           <p class="hero-copy">5 个智能体协作，10 轮自动迭代，把一句策略构想转化为可执行、可回测的 α 因子。</p>
           <div class="hero-actions"><el-button type="primary" size="large" @click="$emit('create','text')"><kbd>N</kbd> 新建任务</el-button><el-button size="large" text @click="$emit('history')">查看历史任务 →</el-button></div>

@@ -25,6 +25,19 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 export const fetchTraceIds = (signal?: AbortSignal) => fetch('/traces', { signal }).then(response => parseResponse<string[]>(response))
+
+export interface TraceStatusItem {
+  id: string
+  status: 'running' | 'done' | 'error' | 'idle'
+  loops: number[]
+  created_at: string | null
+  updated_at: string | null
+  has_chart: boolean
+}
+
+/** C1 catalog: 批量获取所有 trace 状态（替代 N+1 全量拉取） */
+export const fetchTraceStatuses = (signal?: AbortSignal) =>
+  fetch('/traces/status', { signal }).then(response => parseResponse<TraceStatusItem[]>(response))
 export const fetchTrace = (data: TraceRequest, signal?: AbortSignal) => fetch('/trace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal }).then(response => parseResponse<TraceMessage[]>(response))
 export const uploadTask = (data: FormData, signal?: AbortSignal) => fetch('/upload', { method: 'POST', body: data, signal }).then(response => parseResponse<{ id?: string; error?: string }>(response))
 export const controlTask = (id: string, action: string, signal?: AbortSignal) => fetch('/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action }), signal }).then(response => parseResponse<unknown>(response))
@@ -83,3 +96,66 @@ export async function fetchStdoutRange(id: string, offset: number, signal?: Abor
   const len = Number(response.headers.get('Content-Length')) || text.length
   return { text, nextOffset: len }
 }
+
+// ==================== Prediction Dashboard ====================
+
+export interface PredictExperiment {
+  trace_id: string
+  name: string
+  created_at: string
+  factor_count: number
+  metrics: { IC: number | null; annualized_return: number | null; max_drawdown: number | null }
+  has_model: boolean
+}
+
+export interface Top20Item { rank: number; instrument: string; score: number }
+export interface Top20Result { predict_date: string; top20: Top20Item[] }
+export interface PredictRecord {
+  date: string
+  source_trace_id: string
+  top20: Top20Item[]
+  created_at: string
+}
+
+export const fetchPredictExperiments = (signal?: AbortSignal) =>
+  fetch('/predict/experiments', { signal }).then(r => parseResponse<{ experiments: PredictExperiment[] }>(r))
+
+export const runPredict = (traceId: string) =>
+  fetch('/predict/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trace_id: traceId }) })
+    .then(r => parseResponse<{ task_id: string }>(r))
+
+export const fetchPredictHistory = (traceId?: string, signal?: AbortSignal) =>
+  fetch(`/predict/history${traceId ? '?trace_id=' + encodeURIComponent(traceId) : ''}`, { signal })
+    .then(r => parseResponse<{ records: PredictRecord[] }>(r))
+
+// ==================== Settings ====================
+
+export type ConfigFieldType = 'string' | 'number' | 'boolean' | 'select' | 'json' | 'password' | 'model_map'
+
+export interface ConfigField {
+  key: string
+  label: string
+  type: ConfigFieldType
+  value: unknown
+  default?: unknown
+  options?: string[]
+  sensitive?: boolean
+  help?: string
+}
+
+export interface ConfigCard { id: string; title: string; fields: ConfigField[] }
+export interface ConfigGroup { id: string; label: string; icon: string; cards: ConfigCard[] }
+export interface SettingsSchema { groups: ConfigGroup[] }
+
+export const fetchSettingsSchema = (signal?: AbortSignal) =>
+  fetch('/settings/schema', { signal }).then(r => parseResponse<SettingsSchema>(r))
+
+export const saveSettings = (fields: Record<string, unknown>) =>
+  fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) })
+    .then(r => parseResponse<{ status: string; written: string[]; skipped: string[]; restart_required: boolean }>(r))
+
+export interface TestModelResult { ok: boolean; latency_ms: number; error: string }
+
+export const testModel = (model: string, apiKey?: string, apiBase?: string, mode: 'chat' | 'embedding' = 'chat') =>
+  fetch('/settings/test-model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, api_key: apiKey || '', api_base: apiBase || '', mode }) })
+    .then(r => parseResponse<TestModelResult>(r))
