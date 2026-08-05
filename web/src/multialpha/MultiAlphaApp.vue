@@ -8,15 +8,47 @@
       <SettingsPage v-else-if="isSettings" @home="navigateHome"/>
       <section v-else-if="invalidTrace" class="invalid-trace"><span>404 · TRACE NOT FOUND</span><h2>未找到该任务</h2><p>{{ requestedTraceId }}</p><el-button type="primary" @click="navigateHome">返回终端首页</el-button></section>
       <template v-else>
-        <section class="workspace"><DetailHeader :name="currentTask?.name||currentTraceId" :scenario="currentTask?.scenario||''" :status="currentTask?.status||'idle'" :loop="selectedLoop" @stop="stopCurrentTask"/><PipelineStages :messages="scopedMessages"/><TaskBrief :hypothesis="view.hypothesis" :config="view.config" :factors="view.initialTasks" :user-input="view.userInput"/><AgentFlow :messages="scopedMessages" :factors="view.factors" :codes="view.codes" :metric-values="view.metricValues" :feedback="view.feedback" :hypothesis="view.hypothesis" :status="currentTask?.status||'idle'"/><LoopSwitcher v-model="selectedLoop" :loops="view.loops" :metrics="view.loopMetrics"/><TokenDashboard :total="view.totalTokens" :prompt="view.promptTokens" :completion="view.completionTokens" :calls="view.callCount"/><ResultWorkspace :trace-id="currentTraceId" :factors="view.factors" :codes="view.codes" :chart-ref="view.chartRef" :chart-html="view.chartHtml" :metrics="view.metrics" :feedback="view.feedback" @download="downloadResult"/><TraceLoading :visible="loading" :name="loadingName"/></section>
-        <MetricsPanel :metrics="view.metrics" :factors="view.factors" :hypothesis="view.hypothesis" :feedback="view.feedback" @download="downloadResult"/>
+        <section class="workspace">
+          <DetailHeader :name="currentTask?.name||currentTraceId" :scenario="currentTask?.scenario||''" :status="currentTask?.status||'idle'" :loop="selectedLoop" @stop="stopCurrentTask"/>
+          <el-tabs type="border-card" class="artifact-tabs">
+            <el-tab-pane label="📊 Strategy Dashboard">
+              <StrategyDashboard :trace-id="currentTraceId" @retry="loadTraceIds"/>
+            </el-tab-pane>
+            <el-tab-pane label="🔬 Alpha Lab">
+              <AlphaLabPanel :trace-id="currentTraceId" @retry="loadTraceIds"/>
+            </el-tab-pane>
+            <el-tab-pane label="🤖 Model Lab">
+              <ModelLabPanel :trace-id="currentTraceId" @retry="loadTraceIds"/>
+            </el-tab-pane>
+            <el-tab-pane label="⚡ Live Lab">
+              <PipelineStages :messages="scopedMessages"/>
+              <TaskBrief :hypothesis="view.hypothesis" :config="view.config" :factors="view.initialTasks" :user-input="view.userInput"/>
+              <AgentFlow :messages="scopedMessages" :factors="view.factors" :codes="view.codes" :metric-values="view.metricValues" :feedback="view.feedback" :hypothesis="view.hypothesis" :status="currentTask?.status||'idle'"/>
+              <LoopSwitcher v-model="selectedLoop" :loops="view.loops" :metrics="view.loopMetrics"/>
+              <TokenDashboard :total="view.totalTokens" :prompt="view.promptTokens" :completion="view.completionTokens" :calls="view.callCount"/>
+            </el-tab-pane>
+            <el-tab-pane label="📋 Report">
+              <ReportPanel :trace-id="currentTraceId" @retry="loadTraceIds"/>
+            </el-tab-pane>
+          </el-tabs>
+          <ResultWorkspace :trace-id="currentTraceId" :factors="view.factors" :codes="view.codes" :chart-ref="view.chartRef" :chart-html="view.chartHtml" :metrics="view.metrics" :feedback="view.feedback" @download="downloadResult"/>
+          <MetricsPanel :metrics="view.metrics" :factors="view.factors" :hypothesis="view.hypothesis" :feedback="view.feedback" @download="downloadResult"/>
+          <TraceLoading :visible="loading" :name="loadingName"/>
+        </section>
       </template>
     </main>
     <LogConsole :trace-id="currentTraceId" :status="currentTask?.status||'idle'"/><NewTaskDialog ref="dialogRef" v-model="dialogOpen" @submit="handleCreate"/><UserInteractionDialog :messages="messages" :trace-id="currentTraceId"/>
   </div>
 </template>
 <script setup lang="ts">
-import { computed,onMounted,ref,watch } from 'vue';import { useRoute,useRouter } from 'vue-router';import { ElMessage } from 'element-plus';import { useMultiAlpha } from './use-multialpha';import TopBar from './components/TopBar.vue';import TaskSidebar from './components/TaskSidebar.vue';import LandingTerminal from './components/LandingTerminal.vue';import DetailHeader from './components/DetailHeader.vue';import PipelineStages from './components/PipelineStages.vue';import TaskBrief from './components/TaskBrief.vue';import AgentFlow from './components/AgentFlow.vue';import LoopSwitcher from './components/LoopSwitcher.vue';import TokenDashboard from './components/TokenDashboard.vue';import ResultWorkspace from './components/ResultWorkspace.vue';import MetricsPanel from './components/MetricsPanel.vue';import LogConsole from './components/LogConsole.vue';import TraceLoading from './components/TraceLoading.vue';import NewTaskDialog from './components/NewTaskDialog.vue';import UserInteractionDialog from './components/UserInteractionDialog.vue';import SettingsPage from './components/SettingsPage.vue';import type { TaskMethod } from './types'
+import { computed,onMounted,ref,watch } from 'vue';import { useRoute,useRouter } from 'vue-router';import { ElMessage } from 'element-plus';import { useMultiAlpha } from './use-multialpha'
+import TopBar from './components/TopBar.vue';import TaskSidebar from './components/TaskSidebar.vue';import LandingTerminal from './components/LandingTerminal.vue';import DetailHeader from './components/DetailHeader.vue'
+import PipelineStages from './components/PipelineStages.vue';import TaskBrief from './components/TaskBrief.vue';import AgentFlow from './components/AgentFlow.vue';import LoopSwitcher from './components/LoopSwitcher.vue'
+import TokenDashboard from './components/TokenDashboard.vue';import ResultWorkspace from './components/ResultWorkspace.vue';import MetricsPanel from './components/MetricsPanel.vue'
+import LogConsole from './components/LogConsole.vue';import TraceLoading from './components/TraceLoading.vue';import NewTaskDialog from './components/NewTaskDialog.vue'
+import UserInteractionDialog from './components/UserInteractionDialog.vue';import SettingsPage from './components/SettingsPage.vue'
+import StrategyDashboard from './components/StrategyDashboard.vue';import AlphaLabPanel from './components/AlphaLabPanel.vue';import ModelLabPanel from './components/ModelLabPanel.vue';import ReportPanel from './components/ReportPanel.vue'
+import type { TaskMethod } from './types'
 const route=useRoute(),router=useRouter();const {tasks,currentTraceId,messages,loading,loadingName,listLoading,listError,selectedLoop,view,loadTraceIds,selectTrace,goHome,createTask,stopCurrentTask}=useMultiAlpha();const dialogOpen=ref(false);const dialogRef=ref<InstanceType<typeof NewTaskDialog>|null>(null)
 const requestedTraceId=computed(()=>typeof route.params.traceId==='string'?route.params.traceId:'');const isHome=computed(()=>route.name==='multialpha-home');const isPredict=computed(()=>route.name==='multialpha-predict');const isSettings=computed(()=>route.name==='multialpha-settings');const currentTask=computed(()=>tasks.value.find(task=>task.id===currentTraceId.value));const invalidTrace=computed(()=>!isHome.value&&!isPredict.value&&!isSettings.value&&!listLoading.value&&!tasks.value.some(task=>task.id===requestedTraceId.value))
 const scopedMessages=computed(()=>selectedLoop.value==null?messages.value:messages.value.filter(message=>message.loop_id==null||Number(message.loop_id)===selectedLoop.value))
@@ -29,4 +61,5 @@ function downloadResult(){const data={traceId:currentTraceId.value,loop:selected
 <style scoped>
 .predict-entry-btn{position:fixed;bottom:20px;left:290px;z-index:100;padding:8px 16px;border:none;border-radius:20px;background:var(--ma-gold);color:#fff;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15);transition:opacity .2s}
 .predict-entry-btn:hover{opacity:.85}
+.artifact-tabs { margin-top: 8px; }
 </style>

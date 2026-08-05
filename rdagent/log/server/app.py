@@ -25,6 +25,22 @@ app = Flask(__name__, static_folder=str(Path(UI_SETTING.static_path).resolve()))
 CORS(app)
 app.config["UI_SERVER_PORT"] = 19899
 
+# 注册 Artifact API Blueprint
+try:
+    from rdagent.log.server.artifact_api import artifact_bp
+    app.register_blueprint(artifact_bp)
+except Exception as _artifact_bp_err:
+    import sys
+    print(f"[WARN] Artifact blueprint 注册失败: {_artifact_bp_err}", file=sys.stderr)
+
+# 注册 HiAgent 智能体对话 Blueprint
+try:
+    from rdagent.log.server.hiagent import hiagent_bp
+    app.register_blueprint(hiagent_bp)
+except Exception as _hiagent_bp_err:
+    import sys
+    print(f"[WARN] HiAgent blueprint 注册失败（不影响主服务）: {_hiagent_bp_err}", file=sys.stderr)
+
 # ==================== 性能观测中间件 ====================
 # 记录每个 API 请求的耗时 + 响应大小，控制台输出，用于性能优化前后对比。
 # 通过环境变量 PERF_LOG 关闭（默认开启）。
@@ -1061,6 +1077,7 @@ def upload_file():
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": None,
         "has_chart": False,
+        "description": request.form.get("description", ""),
         "_tags_seen": set(),
     }
     return (
@@ -1478,6 +1495,105 @@ def get_sota(trace_name: str):
         "detail": f"No session or message stream matching '{trace_name}'",
         "hint": "Try GET /traces to list available trace ids, or pass ?log_path=<path>",
     }), 404
+
+
+# ==================== Artifact Aggregation APIs ====================
+
+
+def _resolve_trace_path(trace_name: str) -> str | None:
+    """Resolve trace_name to a log directory path."""
+    from rdagent.log.sota_query import find_session_by_trace_name
+
+    log_path = request.args.get("log_path")
+    if log_path:
+        return log_path
+    candidate = Path(trace_name)
+    if candidate.is_dir() and (candidate / "__session__").exists():
+        return str(candidate)
+    resolved = find_session_by_trace_name(trace_name)
+    return str(resolved) if resolved else None
+
+
+def _artifact_response(trace_name: str, extractor):
+    """Common pattern: resolve trace, load strategy, extract data, return JSON."""
+    lp = _resolve_trace_path(trace_name)
+    if lp is None:
+        return jsonify({"error": "Trace not found", "trace_name": trace_name}), 404
+    from rdagent.log.sota_query import load_strategy
+    strategy = load_strategy(lp)
+    if "error" in strategy:
+        return jsonify(strategy), 404
+    return jsonify(extractor(strategy))
+
+
+@app.route("/traces/<path:trace_name>/alpha-lab", methods=["GET"])
+def get_alpha_lab(trace_name: str):
+    """Return the factor library (SignalPool) for a trace."""
+    return _artifact_response(trace_name, lambda s: s.get("alpha_pool", {}))
+
+
+@app.route("/traces/<path:trace_name>/model-lab", methods=["GET"])
+def get_model_lab(trace_name: str):
+    """Return the model registry (ModelRegistry) for a trace."""
+    return _artifact_response(trace_name, lambda s: s.get("model_registry", {}))
+
+
+@app.route("/traces/<path:trace_name>/strategy", methods=["GET"])
+def get_strategy_dashboard(trace_name: str):
+    """Return the strategy overview (experiments, hypotheses, metrics trend)."""
+    def extract(s):
+        experiments = s.get("experiments", [])
+        hypotheses = [{
+            "round": e.get("round_number"),
+            "text": (e.get("hypothesis_text") or "")[:80],
+            "decision": e.get("decision", False),
+        } for e in experiments]
+        return {
+            "description": s.get("description", ""),
+            "status": s.get("status", ""),
+            "total_rounds": len(experiments),
+            "experiments": experiments,
+            "hypotheses": hypotheses,
+            "alpha_pool": s.get("alpha_pool", {}),
+            "model_registry": s.get("model_registry", {}),
+        }
+    return _artifact_response(trace_name, extract)
+
+
+@app.route("/traces/<path:trace_name>/report", methods=["GET"])
+def get_report(trace_name: str):
+    """Return a structured report snapshot for a trace."""
+    def extract(s):
+        experiments = s.get("experiments", [])
+        # Build metrics trend from experiments
+        metrics_trend = []
+        for exp in experiments:
+            fm = exp.get("factor_metrics") or {}
+            sm = exp.get("strategy_metrics") or {}
+            metrics_trend.append({
+                "round": exp.get("round_number"),
+                "type": exp.get("type"),
+                "decision": exp.get("decision"),
+                **({k: v for k, v in fm.items() if v} if fm else {}),
+                **({k: v for k, v in sm.items() if v} if sm else {}),
+            })
+        # Build summary_metrics from the latest experiment
+        latest = metrics_trend[-1] if metrics_trend else {}
+        summary_metrics = {
+            "IC": latest.get("ic"),
+            "ICIR": latest.get("icir"),
+            "annualized_return": latest.get("annualized_return"),
+            "max_drawdown": latest.get("max_drawdown"),
+            "information_ratio": latest.get("information_ratio"),
+        }
+        return {
+            "summary_metrics": summary_metrics,
+            "metrics_trend": metrics_trend,
+            "alpha_pool_snapshot": s.get("alpha_pool", {}),
+            "model_snapshot": s.get("model_registry", {}),
+            "total_rounds": len(experiments),
+        }
+    return _artifact_response(trace_name, extract)
 
 
 # ==================== Prediction Dashboard APIs ====================

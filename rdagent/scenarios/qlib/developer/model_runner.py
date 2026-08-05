@@ -7,8 +7,12 @@ from rdagent.core.exception import ModelEmptyError
 from rdagent.core.utils import cache_with_pickle
 from rdagent.log import rdagent_logger as logger
 from rdagent.scenarios.qlib.developer.utils import process_factor_data
+from rdagent.scenarios.qlib.domain import CompositeModel, SignalStatus, StrategyMetrics
+from rdagent.scenarios.qlib.evaluation import QlibBacktestExecutor
 from rdagent.scenarios.qlib.experiment.factor_experiment import QlibFactorExperiment
 from rdagent.scenarios.qlib.experiment.model_experiment import QlibModelExperiment
+
+executor = QlibBacktestExecutor()
 
 
 class QlibModelRunner(CachedRunner[QlibModelExperiment]):
@@ -22,56 +26,52 @@ class QlibModelRunner(CachedRunner[QlibModelExperiment]):
     https://github.com/microsoft/qlib/blob/main/qlib/contrib/model/pytorch_nn.py
     - pt_model_uri:  hard-code `model.py:Net` in the config
     - let LLM modify model.py
+
+    Optionally accepts a ``strategy`` (domain.Strategy) to manage the
+    model registry explicitly, replacing the based_experiments[-1] pattern.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.strategy = None  # set by the loop; used for SignalPool / ModelRegistry
 
     @cache_with_pickle(CachedRunner.get_cache_key, CachedRunner.assign_cached_result)
     def develop(self, exp: QlibModelExperiment) -> QlibModelExperiment:
-        if exp.based_experiments and exp.based_experiments[-1].result is None:
-            exp.based_experiments[-1] = self.develop(exp.based_experiments[-1])
+        executor.ensure_baseline_executed(exp, self.develop)
 
         exist_sota_factor_exp = False
-        if exp.based_experiments:
-            SOTA_factor = None
-            # Filter and retain only QlibFactorExperiment instances
-            sota_factor_experiments_list = [
-                base_exp for base_exp in exp.based_experiments if isinstance(base_exp, QlibFactorExperiment)
-            ]
-            if len(sota_factor_experiments_list) > 1:
-                logger.info(f"SOTA factor processing ...")
-                SOTA_factor = process_factor_data(sota_factor_experiments_list)
+        sota_factor_df = None
+        if self.strategy is not None and self.strategy.alpha_pool.sota_count > 0:
+            logger.info("SOTA factor processing (from SignalPool) ...")
+            if len(exp.based_experiments) > 0:
+                sota_exps = [
+                    be for be in exp.based_experiments
+                    if isinstance(be, QlibFactorExperiment) and be.result is not None
+                ]
+                if len(sota_exps) > 0:
+                    sota_factor_df = process_factor_data(sota_exps)
 
-            if SOTA_factor is not None and not SOTA_factor.empty:
-                exist_sota_factor_exp = True
-                combined_factors = SOTA_factor
-                combined_factors = combined_factors.sort_index()
-                combined_factors = combined_factors.loc[:, ~combined_factors.columns.duplicated(keep="last")]
-                new_columns = pd.MultiIndex.from_product([["feature"], combined_factors.columns])
-                combined_factors.columns = new_columns
-                num_features = str(len(exp.base_features) + len(combined_factors.columns))
-
-                target_path = exp.experiment_workspace.workspace_path / "combined_factors_df.parquet"
-
-                # Save the combined factors to the workspace
-                combined_factors.to_parquet(target_path, engine="pyarrow")
+        if sota_factor_df is not None and not sota_factor_df.empty:
+            exist_sota_factor_exp = True
+            combined_factors = sota_factor_df
+            executor.save_combined_factors(exp.experiment_workspace, combined_factors)
+            num_features = str(len(exp.base_features) + len(combined_factors.columns))
 
         if exp.sub_workspace_list[0].file_dict.get("model.py") is None:
             raise ModelEmptyError("model.py is empty")
-        # to replace & inject code
         exp.experiment_workspace.inject_files(**{"model.py": exp.sub_workspace_list[0].file_dict["model.py"]})
 
         mbps = ModelBasePropSetting()
-        env_to_use = {
-            "PYTHONPATH": "./",
-            "train_start": mbps.train_start,
-            "train_end": mbps.train_end,
-            "valid_start": mbps.valid_start,
-            "valid_end": mbps.valid_end,
-            "test_start": mbps.test_start,
-            "feature_names": str(list(exp.base_features.keys())),
-            "feature_expressions": str(list(exp.base_features.values())),
-        }
-        if mbps.test_end is not None:
-            env_to_use.update({"test_end": mbps.test_end})
+        env_to_use = executor.build_env_to_use(
+            train_start=mbps.train_start,
+            train_end=mbps.train_end,
+            valid_start=mbps.valid_start,
+            valid_end=mbps.valid_end,
+            test_start=mbps.test_start,
+            test_end=mbps.test_end,
+            feature_names=list(exp.base_features.keys()),
+            feature_expressions=list(exp.base_features.values()),
+        )
 
         training_hyperparameters = exp.sub_tasks[0].training_hyperparameters
         if training_hyperparameters:
@@ -91,24 +91,32 @@ class QlibModelRunner(CachedRunner[QlibModelExperiment]):
                 env_to_use.update(
                     {"dataset_cls": "TSDatasetH", "num_features": num_features, "step_len": 20, "num_timesteps": 20}
                 )
-                result, stdout = exp.experiment_workspace.execute(
-                    qlib_config_name="conf_sota_factors_model.yaml", run_env=env_to_use
+                result, stdout = executor.execute_and_parse(
+                    exp.experiment_workspace,
+                    qlib_config_name="conf_sota_factors_model.yaml",
+                    run_env=env_to_use,
                 )
             else:
                 env_to_use.update({"dataset_cls": "TSDatasetH", "step_len": 20, "num_timesteps": 20})
-                result, stdout = exp.experiment_workspace.execute(
-                    qlib_config_name="conf_baseline_factors_model.yaml", run_env=env_to_use
+                result, stdout = executor.execute_and_parse(
+                    exp.experiment_workspace,
+                    qlib_config_name="conf_baseline_factors_model.yaml",
+                    run_env=env_to_use,
                 )
         elif exp.sub_tasks[0].model_type == "Tabular":
             if exist_sota_factor_exp:
                 env_to_use.update({"dataset_cls": "DatasetH", "num_features": num_features})
-                result, stdout = exp.experiment_workspace.execute(
-                    qlib_config_name="conf_sota_factors_model.yaml", run_env=env_to_use
+                result, stdout = executor.execute_and_parse(
+                    exp.experiment_workspace,
+                    qlib_config_name="conf_sota_factors_model.yaml",
+                    run_env=env_to_use,
                 )
             else:
                 env_to_use.update({"dataset_cls": "DatasetH"})
-                result, stdout = exp.experiment_workspace.execute(
-                    qlib_config_name="conf_baseline_factors_model.yaml", run_env=env_to_use
+                result, stdout = executor.execute_and_parse(
+                    exp.experiment_workspace,
+                    qlib_config_name="conf_baseline_factors_model.yaml",
+                    run_env=env_to_use,
                 )
 
         exp.result = result
@@ -117,5 +125,24 @@ class QlibModelRunner(CachedRunner[QlibModelExperiment]):
         if result is None:
             logger.error(f"Failed to run {exp.sub_tasks[0].name}, because {stdout}")
             raise ModelEmptyError(f"Failed to run {exp.sub_tasks[0].name} model, because {stdout}")
+
+        # ── Register new model into ModelRegistry (if strategy is available) ──
+        if self.strategy is not None and exp.sub_tasks:
+            task = exp.sub_tasks[0]
+            sm = StrategyMetrics.from_result_dict(result)
+            model = CompositeModel(
+                name=task.name,
+                description=task.description,
+                status=SignalStatus.SOTA,
+                strategy_metrics=sm,
+                model_type=task.model_type,
+                features=list(exp.base_features.keys()),
+                hyperparameters=task.hyperparameters if hasattr(task, 'hyperparameters') else {},
+                training_hyperparameters=task.training_hyperparameters if hasattr(task, 'training_hyperparameters') else {},
+                code=exp.sub_workspace_list[0].file_dict.get("model.py", "") if exp.sub_workspace_list else "",
+                round_number=len(self.strategy.experiments) + 1,
+            )
+            self.strategy.model_registry.register(model)
+            self.strategy.model_registry.mark_sota(task.name)
 
         return exp

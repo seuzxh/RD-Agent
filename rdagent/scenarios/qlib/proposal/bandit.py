@@ -6,6 +6,9 @@ from typing import List, Literal, Tuple
 
 import numpy as np
 
+from rdagent.scenarios.qlib.domain import FactorMetrics, StrategyMetrics
+from rdagent.scenarios.qlib.orchestrator.scheduler import LinearThompsonTwoArm
+
 
 @dataclass
 class Metrics:
@@ -34,65 +37,30 @@ class Metrics:
 
 
 def extract_metrics_from_experiment(experiment) -> Metrics:
-    """Extract metrics from experiment feedback"""
+    """Extract metrics from experiment feedback using structured domain models."""
     try:
         result = experiment.result
-        ic = result.get("IC", 0.0)
-        icir = result.get("ICIR", 0.0)
-        rank_ic = result.get("Rank IC", 0.0)
-        rank_icir = result.get("Rank ICIR", 0.0)
-        arr = result.get("1day.excess_return_with_cost.annualized_return ", 0.0)
-        ir = result.get("1day.excess_return_with_cost.information_ratio", 0.0)
-        mdd = result.get("1day.excess_return_with_cost.max_drawdown", 1.0)  # Avoid division by zero
-        sharpe = arr / -mdd if mdd != 0 else 0.0
+        fm = FactorMetrics.from_result_dict(result)
+        sm = StrategyMetrics.from_result_dict(result)
+        sharpe = sm.annualized_return / max(-sm.max_drawdown, 1e-6) if sm.max_drawdown < 0 else 0.0
 
-        return Metrics(ic=ic, icir=icir, rank_ic=rank_ic, rank_icir=rank_icir, arr=arr, ir=ir, mdd=mdd, sharpe=sharpe)
+        return Metrics(
+            ic=fm.ic, icir=fm.icir, rank_ic=fm.rank_ic, rank_icir=fm.rank_icir,
+            arr=sm.annualized_return, ir=sm.information_ratio,
+            mdd=sm.max_drawdown, sharpe=sharpe,
+        )
     except Exception as e:
         print(f"Error extracting metrics: {e}")
         return Metrics()
 
 
-class LinearThompsonTwoArm:
-    def __init__(self, dim: int, prior_var: float = 1.0, noise_var: float = 1.0):
-        self.dim = dim
-        self.noise_var = noise_var
-        # Each arm has its own posterior: mean & inverse of covariance (precision matrix)
-        self.mean = {
-            "factor": np.zeros(dim),
-            "model": np.zeros(dim),
-        }
-        self.precision = {
-            "factor": np.eye(dim) / prior_var,
-            "model": np.eye(dim) / prior_var,
-        }
-
-    def sample_reward(self, arm: str, x: np.ndarray) -> float:
-        P = self.precision[arm]
-        P = 0.5 * (P + P.T)
-
-        eps = 1e-6
-        try:
-            cov = np.linalg.inv(P + eps * np.eye(self.dim))
-            L = np.linalg.cholesky(cov)
-            z = np.random.randn(self.dim)
-            w_sample = self.mean[arm] + L @ z
-        except np.linalg.LinAlgError:
-            w_sample = self.mean[arm]
-
-        return float(np.dot(w_sample, x))
-
-    def update(self, arm: str, x: np.ndarray, r: float) -> None:
-        P = self.precision[arm]
-        P += np.outer(x, x) / self.noise_var
-        self.precision[arm] = P
-        self.mean[arm] = np.linalg.solve(P, P @ self.mean[arm] + (r / self.noise_var) * x)
-
-    def next_arm(self, x: np.ndarray) -> str:
-        scores = {arm: self.sample_reward(arm, x) for arm in ("factor", "model")}
-        return max(scores, key=scores.get)
-
-
 class EnvController:
+    """
+    Deprecated: Use BanditScheduler from `rdagent.scenarios.qlib.orchestrator` instead.
+
+    Kept for backward compatibility with existing pickle/session files.
+    """
+
     def __init__(self, weights: Tuple[float, ...] = None) -> None:
         self.weights = np.asarray(weights or (0.1, 0.1, 0.05, 0.05, 0.25, 0.15, 0.1, 0.2))
         self.bandit = LinearThompsonTwoArm(dim=8, prior_var=10.0, noise_var=0.5)

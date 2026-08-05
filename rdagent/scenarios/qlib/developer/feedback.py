@@ -8,37 +8,38 @@ from rdagent.core.experiment import Experiment
 from rdagent.core.proposal import Experiment2Feedback, HypothesisFeedback, Trace
 from rdagent.log import rdagent_logger as logger
 from rdagent.oai.llm_utils import APIBackend
+from rdagent.scenarios.qlib.domain import FactorMetrics, StrategyMetrics
 from rdagent.scenarios.qlib.experiment.quant_experiment import QlibQuantScenario
 from rdagent.utils import convert2bool
 from rdagent.utils.agent.tpl import T
 
 DIRNAME = Path(__file__).absolute().resolve().parent
 
-IMPORTANT_METRICS = [
-    "IC",
-    "1day.excess_return_with_cost.annualized_return",
-    "1day.excess_return_with_cost.max_drawdown",
-]
-
 
 def process_results(current_result, sota_result):
-    # Convert the results to dataframes
+    """
+    Format current vs SOTA metrics as a readable string for the LLM prompt.
+
+    Uses StrategyMetrics.important_metrics_keys() to determine which metrics
+    to include, ensuring consistency with the domain model schema.
+    """
+    important_keys = StrategyMetrics.important_metrics_keys()
+
     current_df = pd.DataFrame(current_result)
     sota_df = pd.DataFrame(sota_result)
 
-    # Set the metric as the index
     current_df.index.name = "metric"
     sota_df.index.name = "metric"
 
-    # Rename the value column to reflect the result type
     current_df.rename(columns={"0": "Current Result"}, inplace=True)
     sota_df.rename(columns={"0": "SOTA Result"}, inplace=True)
 
-    # Combine the dataframes on the Metric index
     combined_df = pd.concat([current_df, sota_df], axis=1)
-
-    # Filter the combined DataFrame to retain only the important metrics
-    filtered_combined_df = combined_df.loc[IMPORTANT_METRICS]
+    available = [k for k in important_keys if k in combined_df.index]
+    if available:
+        filtered_combined_df = combined_df.loc[available]
+    else:
+        filtered_combined_df = combined_df
 
     def format_filtered_combined_df(filtered_combined_df: pd.DataFrame) -> str:
         results = []
@@ -150,10 +151,10 @@ class QlibModelExperiment2Feedback(Experiment2Feedback):
             sota_hypothesis=SOTA_hypothesis,
             sota_task=SOTA_experiment.sub_tasks[0].get_task_information() if SOTA_hypothesis else None,
             sota_code=SOTA_experiment.sub_workspace_list[0].file_dict.get("model.py") if SOTA_hypothesis else None,
-            sota_result=SOTA_experiment.result.loc[IMPORTANT_METRICS] if SOTA_hypothesis else None,
+            sota_result=SOTA_experiment.result.loc[StrategyMetrics.important_metrics_keys()] if SOTA_hypothesis else None,
             hypothesis=hypothesis,
             exp=exp,
-            exp_result=exp.result.loc[IMPORTANT_METRICS] if exp.result is not None else "execution failed",
+            exp_result=exp.result.loc[StrategyMetrics.important_metrics_keys()] if exp.result is not None else "execution failed",
         )
 
         # Call the APIBackend to generate the response for hypothesis feedback

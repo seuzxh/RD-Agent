@@ -19,6 +19,17 @@ from typing import Any
 
 from rdagent.core.experiment import Experiment, FBWorkspace
 from rdagent.core.proposal import Hypothesis, HypothesisFeedback, Trace
+from rdagent.scenarios.qlib.domain import (
+    CompositeModel,
+    Experiment as ExpRecord,
+    FactorMetrics,
+    RawFactor,
+    SignalStatus,
+    Strategy,
+    StrategyMetrics,
+)
+from rdagent.scenarios.qlib.experiment.factor_experiment import QlibFactorExperiment
+from rdagent.scenarios.qlib.experiment.model_experiment import QlibModelExperiment
 
 logger = logging.getLogger(__name__)
 
@@ -283,6 +294,106 @@ def _extract_workspace_code(exp: Experiment, sub_idx: int) -> tuple[str | None, 
         if fname.endswith(".py") and content:
             return content, ws_path
     return None, ws_path
+
+
+# ---------------------------------------------------------------------------
+# Public API: Load Strategy from session
+# ---------------------------------------------------------------------------
+
+def load_strategy(log_path: str | Path) -> dict[str, Any] | None:
+    """Load the latest LoopBase session and convert to a Strategy dict.
+
+    Args:
+        log_path: Path to the log directory containing ``__session__/``.
+
+    Returns:
+        ``Strategy.to_dict()`` if successful, or a dict with ``"error"`` key.
+    """
+    log_path = Path(log_path)
+    session_dir = log_path / "__session__"
+    if not session_dir.exists():
+        return {"error": "No session found", "detail": f"__session__/ not found under {log_path}"}
+
+    try:
+        from rdagent.utils.workflow import LoopBase
+
+        loop = LoopBase.load(log_path, checkout=False)
+    except Exception as exc:
+        logger.exception("Failed to load session from %s", log_path)
+        return {"error": "Session load failed", "detail": f"{type(exc).__name__}: {exc}"}
+
+    trace: Trace = getattr(loop, "trace", None)
+    if trace is None or not trace.hist:
+        return {"error": "Empty trace", "detail": "No completed experiments in trace"}
+
+    strategy = Strategy(description=f"Imported from {log_path.name}")
+    for round_number, (experiment, feedback) in enumerate(trace.hist, start=1):
+        exp_type = "alpha" if isinstance(experiment, QlibFactorExperiment) else "model"
+        hypothesis = getattr(experiment, "hypothesis", None)
+        hypothesis_text = str(hypothesis) if hypothesis else ""
+        decision = feedback.decision if feedback else False
+        result = getattr(experiment, "result", None)
+
+        if exp_type == "alpha":
+            for i, task in enumerate(getattr(experiment, "sub_tasks", [])):
+                name = getattr(task, "factor_name", None) or getattr(task, "name", "")
+                code = _extract_workspace_code(experiment, i)[0] or ""
+                alpha = RawFactor(
+                    name=name,
+                    description=getattr(task, "factor_description", "") or getattr(task, "description", ""),
+                    formulation=getattr(task, "factor_formulation", ""),
+                    variables=getattr(task, "variables", {}),
+                    code=code,
+                    round_number=round_number,
+                    status=SignalStatus.SOTA if decision else SignalStatus.ACTIVE,
+                )
+                if result is not None:
+                    try:
+                        alpha.factor_metrics = FactorMetrics.from_result_dict(result)
+                    except Exception:
+                        pass
+                strategy.alpha_pool.add(alpha)
+                if decision:
+                    strategy.alpha_pool.mark_sota(name)
+        elif exp_type == "model":
+            tasks = getattr(experiment, "sub_tasks", [])
+            if tasks:
+                task = tasks[0]
+                name = getattr(task, "name", "")
+                code = _extract_workspace_code(experiment, 0)[0] or ""
+                features = list(getattr(experiment, "base_features", {}).keys())
+                # Mark used_by_models on alpha pool
+                for fname in features:
+                    existing = strategy.alpha_pool.get(fname)
+                    if existing:
+                        existing.used_by_models.append(name) if name not in existing.used_by_models else None
+                model = CompositeModel(
+                    name=name,
+                    description=getattr(task, "description", ""),
+                    model_type=getattr(task, "model_type", ""),
+                    features=features,
+                    hyperparameters=getattr(task, "hyperparameters", {}),
+                    training_hyperparameters=getattr(task, "training_hyperparameters", {}),
+                    code=code,
+                    round_number=round_number,
+                    status=SignalStatus.SOTA if decision else SignalStatus.ACTIVE,
+                )
+                if result is not None:
+                    try:
+                        model.strategy_metrics = StrategyMetrics.from_result_dict(result)
+                    except Exception:
+                        pass
+                strategy.model_registry.register(model)
+                if decision:
+                    strategy.model_registry.mark_sota(name)
+
+        strategy.experiments.append(ExpRecord(
+            round_number=round_number, type=exp_type,
+            hypothesis_text=hypothesis_text,
+            decision=decision,
+        ))
+
+    return strategy.to_dict()
 
 
 def _is_numeric(val: Any) -> bool:

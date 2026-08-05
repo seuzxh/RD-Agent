@@ -55,8 +55,8 @@ class QlibQuantScenario(Scenario):
             )
         )
 
-    def background(self, tag=None) -> str:
-        assert tag in [None, "factor", "model"]
+    def background(self) -> str:
+        """Combined background for quant scenario (factor + model)."""
         quant_background = "The background of the scenario is as follows:\n" + T(".prompts:qlib_quant_background").r(
             runtime_environment=self.get_runtime_environment(),
         )
@@ -70,61 +70,36 @@ class QlibQuantScenario(Scenario):
         ).r(
             runtime_environment=self.get_runtime_environment(tag="model"),
         )
-
-        # TODO: There are some issues here
-        if tag is None:
-            return quant_background + "\n" + factor_background + "\n" + model_background
-        elif tag == "factor":
-            return factor_background
-        else:
-            return model_background
+        return quant_background + "\n" + factor_background + "\n" + model_background
 
     def get_source_data_desc(self) -> str:
         return self._source_data
 
-    def output_format(self, tag=None) -> str:
-        assert tag in [None, "factor", "model"]
+    def output_format(self) -> str:
+        """Combined output format (factor + model)."""
         factor_output_format = (
             "The factor code should output the following format:\n" + T(".prompts:qlib_factor_output_format").r()
         )
         model_output_format = (
             "The model code should output the following format:\n" + T(".prompts:qlib_model_output_format").r()
         )
+        return factor_output_format + "\n" + model_output_format
 
-        if tag is None:
-            return factor_output_format + "\n" + model_output_format
-        elif tag == "factor":
-            return factor_output_format
-        else:
-            return model_output_format
-
-    def interface(self, tag=None) -> str:
-        assert tag in [None, "factor", "model"]
+    def interface(self) -> str:
+        """Combined interface description (factor + model)."""
         factor_interface = (
             "The factor code should be written in the following interface:\n" + T(".prompts:qlib_factor_interface").r()
         )
         model_interface = (
             "The model code should be written in the following interface:\n" + T(".prompts:qlib_model_interface").r()
         )
+        return factor_interface + "\n" + model_interface
 
-        if tag is None:
-            return factor_interface + "\n" + model_interface
-        elif tag == "factor":
-            return factor_interface
-        else:
-            return model_interface
-
-    def simulator(self, tag=None) -> str:
-        assert tag in [None, "factor", "model"]
+    def simulator(self) -> str:
+        """Combined simulator description (factor + model)."""
         factor_simulator = "The factor code will be sent to the simulator:\n" + T(".prompts:qlib_factor_simulator").r()
         model_simulator = "The model code will be sent to the simulator:\n" + T(".prompts:qlib_model_simulator").r()
-
-        if tag is None:
-            return factor_simulator + "\n" + model_simulator
-        elif tag == "factor":
-            return factor_simulator
-        else:
-            return model_simulator
+        return factor_simulator + "\n" + model_simulator
 
     @property
     def rich_style_description(self) -> str:
@@ -141,9 +116,9 @@ class QlibQuantScenario(Scenario):
         simple_background: bool | None = None,
         action: str | None = None,
     ) -> str:
-        def common_description(action: str | None = None) -> str:
+        def common_description() -> str:
             return f"""\n------Background of the scenario------
-{self.background(action)}
+{self.background()}
 ------The source dataset you can use------
 {self.get_source_data_desc()}
 """
@@ -155,34 +130,34 @@ class QlibQuantScenario(Scenario):
 {self.get_source_data_desc()}
 """
 
-        def interface(tag: str | None) -> str:
+        def interface_desc() -> str:
             return f"""
 ------The interface you should follow to write the runnable code------
-{self.interface(tag)}
+{self.interface()}
 """
 
-        def output(tag: str | None) -> str:
+        def output_desc() -> str:
             return f"""
 ------The output of your code should be in the format------
-{self.output_format(tag)}
+{self.output_format()}
 """
 
-        def simulator(tag: str | None) -> str:
+        def simulator_desc() -> str:
             return f"""
 ------The simulator user can use to test your solution------
-{self.simulator(tag)}
+{self.simulator()}
 """
 
         if simple_background:
             return common_description()
-        elif filtered_tag == "hypothesis_and_experiment" or filtered_tag == "feedback":
-            return common_description() + simulator(None)
-        elif filtered_tag == "factor" or filtered_tag == "feature" or filtered_tag == "factors":
-            return common_description("factor") + interface("factor") + output("factor") + simulator("factor")
-        elif filtered_tag == "model" or filtered_tag == "model tuning":
-            return common_description("model") + interface("model") + output("model") + simulator("model")
-        elif action == "factor" or action == "model":
-            return common_description(action) + interface(action) + output(action) + simulator(action)
+        elif filtered_tag in ("hypothesis_and_experiment", "feedback"):
+            return common_description() + simulator_desc()
+        elif filtered_tag in ("factor", "feature", "factors"):
+            return common_description() + interface_desc() + output_desc() + simulator_desc()
+        elif filtered_tag in ("model", "model tuning"):
+            return common_description() + interface_desc() + output_desc() + simulator_desc()
+        elif action in ("factor", "model"):
+            return common_description() + interface_desc() + output_desc() + simulator_desc()
 
     def get_runtime_environment(self, tag: str = None) -> str:
         assert tag in [None, "factor", "model"]

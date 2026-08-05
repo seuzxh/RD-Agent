@@ -14,6 +14,8 @@ from rdagent.core.exception import FactorEmptyError
 from rdagent.log import rdagent_logger as logger
 from rdagent.oai.llm_utils import md5_hash
 from rdagent.scenarios.qlib.developer.utils import process_factor_data
+from rdagent.scenarios.qlib.domain import FactorMetrics, RawFactor, SignalStatus
+from rdagent.scenarios.qlib.evaluation import QlibBacktestExecutor
 from rdagent.scenarios.qlib.experiment.factor_experiment import QlibFactorExperiment
 from rdagent.scenarios.qlib.experiment.model_experiment import QlibModelExperiment
 
@@ -21,6 +23,8 @@ DIRNAME = Path(__file__).absolute().resolve().parent
 DIRNAME_local = Path.cwd()
 
 # TODO: supporting multiprocessing and keep previous results
+
+executor = QlibBacktestExecutor()
 
 
 class QlibFactorRunner(CachedRunner[QlibFactorExperiment]):
@@ -31,7 +35,15 @@ class QlibFactorRunner(CachedRunner[QlibFactorExperiment]):
     - price-volume data dumper
     - `data.py` + Adaptor to Factor implementation
     - results in `mlflow`
+
+    Optionally accepts a ``strategy`` (domain.Strategy) to manage the
+    factor pool and model registry explicitly, replacing the
+    based_experiments[-1] magic index pattern.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.strategy = None  # set by the loop; used for SignalPool / ModelRegistry
 
     def calculate_information_coefficient(
         self, concat_feature: pd.DataFrame, SOTA_feature_column_size: int, new_feature_columns_size: int
@@ -45,10 +57,6 @@ class QlibFactorRunner(CachedRunner[QlibFactorExperiment]):
         return res
 
     def deduplicate_new_factors(self, SOTA_feature: pd.DataFrame, new_feature: pd.DataFrame) -> pd.DataFrame:
-        # calculate the IC between each column of SOTA_feature and new_feature
-        # if the IC is larger than a threshold, remove the new_feature column
-        # return the new_feature
-
         concat_feature = pd.concat([SOTA_feature, new_feature], axis=1)
         IC_max = (
             concat_feature.groupby("datetime")
@@ -62,153 +70,131 @@ class QlibFactorRunner(CachedRunner[QlibFactorExperiment]):
         return new_feature.iloc[:, IC_max[IC_max < 0.99].index]
 
     def _develop_cache_key(self, exp: QlibFactorExperiment) -> str:
-        """Cache key that also incorporates model_selector, so that the same
-        factors evaluated with different model selectors don't hit the same cache.
-
-        Note: we cannot simply override CachedRunner.get_cache_key because the
-        @cache_with_pickle decorator on develop() binds the base-class function
-        reference at class-definition time. Instead we compose the base key with
-        the selector here and use this method as the decorator's hash_func.
-        """
         base_key = CachedRunner.get_cache_key(self, exp)
         selector = FactorBasePropSetting().model_selector
         return md5_hash(f"{base_key}\nmodel_selector={selector}")
 
     @cache_with_pickle(_develop_cache_key, CachedRunner.assign_cached_result)
     def develop(self, exp: QlibFactorExperiment) -> QlibFactorExperiment:
-        """
-        Generate the experiment by processing and combining factor data,
-        then passing the combined data to Docker for backtest results.
-        """
-        if exp.based_experiments and exp.based_experiments[-1].result is None:
-            logger.info(f"Baseline experiment execution ...")
-            exp.based_experiments[-1] = self.develop(exp.based_experiments[-1])
+        executor.ensure_baseline_executed(exp, self.develop)
 
         fbps = FactorBasePropSetting()
-        env_to_use = {
-            "PYTHONPATH": "./",
-            "train_start": fbps.train_start,
-            "train_end": fbps.train_end,
-            "valid_start": fbps.valid_start,
-            "valid_end": fbps.valid_end,
-            "test_start": fbps.test_start,
-            "feature_names": str(list(exp.base_features.keys())),
-            "feature_expressions": str(list(exp.base_features.values())),
-            # model_selector drives the {% if model_selector == ... %} branching in
-            # conf_baseline.yaml / conf_combined_factors.yaml (rendered by qrun inside
-            # the qlib container). Defaults to "lgbm" -> unchanged behavior.
-            "model_selector": fbps.model_selector,
-        }
-        if fbps.test_end is not None:
-            env_to_use.update({"test_end": fbps.test_end})
+        env_to_use = executor.build_env_to_use(
+            train_start=fbps.train_start,
+            train_end=fbps.train_end,
+            valid_start=fbps.valid_start,
+            valid_end=fbps.valid_end,
+            test_start=fbps.test_start,
+            test_end=fbps.test_end,
+            feature_names=list(exp.base_features.keys()),
+            feature_expressions=list(exp.base_features.values()),
+            extra={"model_selector": fbps.model_selector},
+        )
 
-        if exp.based_experiments:
-            SOTA_factor = None
-            # Filter and retain only QlibFactorExperiment instances
-            sota_factor_experiments_list = [
-                base_exp for base_exp in exp.based_experiments if isinstance(base_exp, QlibFactorExperiment)
-            ]
-            if len(sota_factor_experiments_list) > 1:
-                logger.info(f"SOTA factor processing ...")
-                SOTA_factor = process_factor_data(sota_factor_experiments_list)
+        # ── SOTA factors: from SignalPool ──
+        sota_factor_df = None
+        if self.strategy is not None and self.strategy.alpha_pool.sota_count > 0:
+            logger.info("SOTA factor processing (from SignalPool) ...")
+            if len(exp.based_experiments) > 0:
+                sota_exps = [
+                    be for be in exp.based_experiments
+                    if isinstance(be, QlibFactorExperiment) and be.result is not None
+                ]
+                if len(sota_exps) > 0:
+                    sota_factor_df = process_factor_data(sota_exps)
 
-            # Process the new factors data
-            logger.info(f"New factor processing ...")
-            new_factors = process_factor_data(exp)
-
-            if new_factors.empty:
-                raise FactorEmptyError("Factors failed to run on the full sample, this round of experiment failed.")
-
-            # Combine the SOTA factor and new factors if SOTA factor exists
-            if SOTA_factor is not None and not SOTA_factor.empty:
-                new_factors = self.deduplicate_new_factors(SOTA_factor, new_factors)
-                if new_factors.empty:
-                    raise FactorEmptyError(
-                        "The factors generated in this round are highly similar to the previous factors. Please change the direction for creating new factors."
-                    )
-                combined_factors = pd.concat([SOTA_factor, new_factors], axis=1).dropna()
-            else:
-                combined_factors = new_factors
-
-            # Sort and nest the combined factors under 'feature'
-            combined_factors = combined_factors.sort_index()
-            combined_factors = combined_factors.loc[:, ~combined_factors.columns.duplicated(keep="last")]
-            new_columns = pd.MultiIndex.from_product([["feature"], combined_factors.columns])
-            combined_factors.columns = new_columns
-            logger.info(f"Factor data processing completed.")
-
-            num_features = len(exp.base_features) + len(combined_factors.columns)
-
-            # Due to the rdagent and qlib docker image in the numpy version of the difference,
-            # the `combined_factors_df.pkl` file could not be loaded correctly in qlib dokcer,
-            # so we changed the file type of `combined_factors_df` from pkl to parquet.
-            target_path = exp.experiment_workspace.workspace_path / "combined_factors_df.parquet"
-
-            # Save the combined factors to the workspace
-            combined_factors.to_parquet(target_path, engine="pyarrow")
-
-            # If model exp exists in the previous experiment
-            exist_sota_model_exp = False
-            for base_exp in reversed(exp.based_experiments):
-                if isinstance(base_exp, QlibModelExperiment):
-                    sota_model_exp = base_exp
-                    exist_sota_model_exp = True
-                    break
-            logger.info(f"Experiment execution ...")
-            if exist_sota_model_exp:
-                exp.experiment_workspace.inject_files(
-                    **{"model.py": sota_model_exp.sub_workspace_list[0].file_dict["model.py"]}
-                )
-                sota_training_hyperparameters = sota_model_exp.sub_tasks[0].training_hyperparameters
-                if sota_training_hyperparameters:
-                    env_to_use.update(
-                        {
-                            "n_epochs": str(sota_training_hyperparameters.get("n_epochs", "100")),
-                            "lr": str(sota_training_hyperparameters.get("lr", "2e-4")),
-                            "early_stop": str(sota_training_hyperparameters.get("early_stop", 10)),
-                            "batch_size": str(sota_training_hyperparameters.get("batch_size", 256)),
-                            "weight_decay": str(sota_training_hyperparameters.get("weight_decay", 0.0001)),
-                        }
-                    )
-                sota_model_type = sota_model_exp.sub_tasks[0].model_type
-                if sota_model_type == "TimeSeries":
-                    env_to_use.update(
-                        {"dataset_cls": "TSDatasetH", "num_features": num_features, "step_len": 20, "num_timesteps": 20}
-                    )
-                elif sota_model_type == "Tabular":
-                    env_to_use.update({"dataset_cls": "DatasetH", "num_features": num_features})
-
-                # model + combined factors
-                result, stdout = exp.experiment_workspace.execute(
-                    qlib_config_name="conf_combined_factors_sota_model.yaml", run_env=env_to_use
-                )
-            else:
-                # LGBM + combined factors
-                result, stdout = exp.experiment_workspace.execute(
-                    qlib_config_name="conf_combined_factors.yaml",
-                    run_env=env_to_use,
-                )
-        else:
-            logger.info(f"Experiment execution ...")
-            if exp.base_feature_codes:
-                factors = process_factor_data(exp)
-                factors = factors.sort_index()
-                factors = factors.loc[:, ~factors.columns.duplicated(keep="last")]
-                new_columns = pd.MultiIndex.from_product([["feature"], factors.columns])
-                factors.columns = new_columns
-                target_path = exp.experiment_workspace.workspace_path / "combined_factors_df.parquet"
-                # Save the combined factors to the workspace
-                factors.to_parquet(target_path, engine="pyarrow")
-                logger.info(f"Factor data processing completed.")
-                result, stdout = exp.experiment_workspace.execute(
+        # ── Process new factors ──
+        # If the experiment has no custom sub-tasks (e.g. first-run baseline),
+        # skip custom factor processing and use the baseline config directly.
+        if not exp.sub_tasks or not exp.base_feature_codes:
+            logger.info("No custom factors to process, running baseline ...")
+            if exp.based_experiments:
+                # SOTA path: use combined factors config
+                result, stdout = executor.execute_and_parse(
+                    exp.experiment_workspace,
                     qlib_config_name="conf_combined_factors.yaml",
                     run_env=env_to_use,
                 )
             else:
-                result, stdout = exp.experiment_workspace.execute(
+                # Pure baseline: Alpha158 + LGBM, no custom factors
+                result, stdout = executor.execute_and_parse(
+                    exp.experiment_workspace,
                     qlib_config_name="conf_baseline.yaml",
                     run_env=env_to_use,
                 )
+            if result is not None:
+                exp.result = result
+                exp.stdout = stdout
+            return exp
+
+        logger.info("New factor processing ...")
+        new_factors = process_factor_data(exp)
+
+        if new_factors.empty:
+            raise FactorEmptyError("Factors failed to run on the full sample, this round of experiment failed.")
+
+        if sota_factor_df is not None and not sota_factor_df.empty:
+            new_factors = self.deduplicate_new_factors(sota_factor_df, new_factors)
+            if new_factors.empty:
+                raise FactorEmptyError(
+                    "The factors generated in this round are highly similar to the previous factors. Please change the direction for creating new factors."
+                )
+            combined_factors = pd.concat([sota_factor_df, new_factors], axis=1).dropna()
+        else:
+            combined_factors = new_factors
+
+        executor.save_combined_factors(exp.experiment_workspace, combined_factors)
+
+        num_features = len(exp.base_features) + len(combined_factors.columns) if hasattr(combined_factors, 'columns') else 0
+
+        # ── SOTA model: from ModelRegistry ──
+        exist_sota_model_exp = False
+        sota_model_exp = None
+        if self.strategy is not None:
+            sota_model = self.strategy.model_registry.get_sota_model()
+            if sota_model is not None:
+                for base_exp in exp.based_experiments:
+                    if isinstance(base_exp, QlibModelExperiment) and base_exp.sub_tasks:
+                        if base_exp.sub_tasks[0].name == sota_model.name:
+                            sota_model_exp = base_exp
+                            exist_sota_model_exp = True
+                            break
+
+        logger.info("Experiment execution ...")
+        if exist_sota_model_exp and sota_model_exp is not None:
+            exp.experiment_workspace.inject_files(
+                **{"model.py": sota_model_exp.sub_workspace_list[0].file_dict["model.py"]}
+            )
+            sota_training_hyperparameters = sota_model_exp.sub_tasks[0].training_hyperparameters
+            if sota_training_hyperparameters:
+                env_to_use.update(
+                    {
+                        "n_epochs": str(sota_training_hyperparameters.get("n_epochs", "100")),
+                        "lr": str(sota_training_hyperparameters.get("lr", "2e-4")),
+                        "early_stop": str(sota_training_hyperparameters.get("early_stop", 10)),
+                        "batch_size": str(sota_training_hyperparameters.get("batch_size", 256)),
+                        "weight_decay": str(sota_training_hyperparameters.get("weight_decay", 0.0001)),
+                    }
+                )
+            sota_model_type = sota_model_exp.sub_tasks[0].model_type
+            if sota_model_type == "TimeSeries":
+                env_to_use.update(
+                    {"dataset_cls": "TSDatasetH", "num_features": num_features, "step_len": 20, "num_timesteps": 20}
+                )
+            elif sota_model_type == "Tabular":
+                env_to_use.update({"dataset_cls": "DatasetH", "num_features": num_features})
+
+            result, stdout = executor.execute_and_parse(
+                exp.experiment_workspace,
+                qlib_config_name="conf_combined_factors_sota_model.yaml",
+                run_env=env_to_use,
+            )
+        else:
+            result, stdout = executor.execute_and_parse(
+                exp.experiment_workspace,
+                qlib_config_name="conf_combined_factors.yaml",
+                run_env=env_to_use,
+            )
 
         if result is None:
             logger.error(f"Failed to run this experiment, because {stdout}")
@@ -216,5 +202,22 @@ class QlibFactorRunner(CachedRunner[QlibFactorExperiment]):
 
         exp.result = result
         exp.stdout = stdout
+
+        # ── Register new factors into SignalPool (if strategy is available) ──
+        if self.strategy is not None:
+            fm = FactorMetrics.from_result_dict(result)
+            for task in exp.sub_tasks:
+                alpha = RawFactor(
+                    name=task.factor_name,
+                    description=task.factor_description,
+                    status=SignalStatus.SOTA,
+                    factor_metrics=fm,
+                    expression=task.factor_formulation,
+                    formulation=task.factor_formulation,
+                    variables=task.variables,
+                    code=task.factor_implementation if hasattr(task, 'factor_implementation') else "",
+                    round_number=len(self.strategy.experiments) + 1,
+                )
+                self.strategy.alpha_pool.add(alpha)
 
         return exp

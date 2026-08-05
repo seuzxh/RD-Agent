@@ -5,8 +5,6 @@ import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import path from 'path'
 import { createSvgIconsPlugin } from 'vite-plugin-svg-icons'
-// import commonjs from '@rollup/plugin-commonjs'
-// import nodePolyfills from 'rollup-plugin-node-polyfills'
 
 const pathResolve = (pathStr: string) => {
   return path.resolve(__dirname, pathStr)
@@ -17,10 +15,11 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        // main: pathResolve('./index.html'),
         multialpha: pathResolve('./multialpha.html'),
         predict: pathResolve('./predict.html'),
         anaAgents: pathResolve('./ana-agents.html'),
+        hiagentChat: pathResolve('./hiagent-chat.html'),
+        artifact: pathResolve('./artifact.html'),
       },
     },
   },
@@ -38,15 +37,15 @@ export default defineConfig({
     }),
   ],
   define: {
-    'global': 'window' // 设置 global 为 window 解决一些兼容问题
+    'global': 'window'
   },
   server: {
     host: true,
-    port: 8080, // 使用的端口号
-    open: 'multialpha.html', // 是否自动打开浏览器
+    port: 8080,
+    open: 'artifact.html',
     watch: {
-      usePolling: true, // 实时监听
-      interval: 1000 // 监听的间隔时间(ms)
+      usePolling: true,
+      interval: 1000
     },
     proxy: {
       '/traces': 'http://localhost:19899',
@@ -57,6 +56,8 @@ export default defineConfig({
       '/logs': 'http://localhost:19899',
       '/stdout': 'http://localhost:19899',
       '/health': 'http://localhost:19899',
+      '/api': 'http://localhost:19899',
+	      '/api/hiagent': 'http://localhost:19899',
     },
   },
   resolve: {

@@ -1,23 +1,35 @@
 import json
-import random
 from typing import Tuple
 
 from rdagent.app.qlib_rd_loop.conf import QUANT_PROP_SETTING
 from rdagent.components.proposal import FactorAndModelHypothesisGen
 from rdagent.core.proposal import Hypothesis, Scenario, Trace
-from rdagent.oai.llm_utils import APIBackend
-from rdagent.scenarios.qlib.proposal.bandit import (
-    EnvController,
-    extract_metrics_from_experiment,
+from rdagent.scenarios.qlib.orchestrator import (
+    BanditScheduler,
+    LLMScheduler,
+    RandomScheduler,
+    Scheduler,
 )
+from rdagent.scenarios.qlib.proposal.bandit import extract_metrics_from_experiment
 from rdagent.utils.agent.tpl import T
 
 
 class QuantTrace(Trace):
     def __init__(self, scen: Scenario) -> None:
         super().__init__(scen)
-        # Initialize the controller with default weights
-        self.controller = EnvController()
+
+
+def _create_scheduler() -> Scheduler:
+    """Factory: create the appropriate scheduler based on config."""
+    strategy = QUANT_PROP_SETTING.action_selection
+    if strategy == "bandit":
+        return BanditScheduler()
+    elif strategy == "llm":
+        return LLMScheduler()
+    elif strategy == "random":
+        return RandomScheduler()
+    else:
+        raise ValueError(f"Unknown action_selection: {strategy}")
 
 
 class QlibQuantHypothesis(Hypothesis):
@@ -46,45 +58,11 @@ Reason: {self.reason}
 class QlibQuantHypothesisGen(FactorAndModelHypothesisGen):
     def __init__(self, scen: Scenario) -> Tuple[dict, bool]:
         super().__init__(scen)
+        self.scheduler = _create_scheduler()
 
     def prepare_context(self, trace: Trace) -> Tuple[dict, bool]:
 
-        # ========= Bandit ==========
-        if QUANT_PROP_SETTING.action_selection == "bandit":
-            if len(trace.hist) > 0:
-                metric = extract_metrics_from_experiment(trace.hist[-1][0])
-                prev_action = trace.hist[-1][0].hypothesis.action
-                trace.controller.record(metric, prev_action)
-                action = trace.controller.decide(metric)
-            else:
-                action = "factor"
-        # ========= LLM ==========
-        elif QUANT_PROP_SETTING.action_selection == "llm":
-            hypothesis_and_feedback = (
-                T("scenarios.qlib.prompts:hypothesis_and_feedback").r(trace=trace)
-                if len(trace.hist) > 0
-                else "No previous hypothesis and feedback available since it's the first round."
-            )
-
-            last_hypothesis_and_feedback = (
-                T("scenarios.qlib.prompts:last_hypothesis_and_feedback").r(
-                    experiment=trace.hist[-1][0], feedback=trace.hist[-1][1]
-                )
-                if len(trace.hist) > 0
-                else "No previous hypothesis and feedback available since it's the first round."
-            )
-
-            system_prompt = T("scenarios.qlib.prompts:action_gen.system").r()
-            user_prompt = T("scenarios.qlib.prompts:action_gen.user").r(
-                hypothesis_and_feedback=hypothesis_and_feedback,
-                last_hypothesis_and_feedback=last_hypothesis_and_feedback,
-            )
-            resp = APIBackend().build_messages_and_create_chat_completion(user_prompt, system_prompt, json_mode=True)
-
-            action = json.loads(resp).get("action", "factor")
-        # ========= random ==========
-        elif QUANT_PROP_SETTING.action_selection == "random":
-            action = random.choice(["factor", "model"])
+        action = self.scheduler.decide(trace)
         self.targets = action
 
         qaunt_rag = None
