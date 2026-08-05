@@ -36,9 +36,6 @@
           </template>
         </el-table-column>
         <el-table-column prop="round_number" label="轮次" width="60"/>
-        <el-table-column prop="used_by_models" label="被模型使用" min-width="120">
-          <template #default="{ row }"><span>{{ row.used_by_models?.length ? row.used_by_models.join(', ') : '—' }}</span></template>
-        </el-table-column>
       </el-table>
     </template>
     <div v-else class="empty-state">暂无因子数据</div>
@@ -46,29 +43,17 @@
 </template>
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { fetchAlphaLab } from '../api'
+import { fetchStrategyFactors } from '../../services/research-api'
 
-const props = defineProps<{ traceId: string }>()
+const props = defineProps<{ strategyId: string }>()
 defineEmits<{ retry: [] }>()
 
 const loading = ref(false)
 const error = ref('')
-const rawData = ref<Record<string, any> | null>(null)
+const factors = ref<any[]>([])
 const statusFilter = ref('')
 const search = ref('')
 
-const factors = computed(() => {
-  const pool = rawData.value || {}
-  const factorMap: Record<string, any> = pool.factors || {}
-  return Object.values(factorMap).map((f: any) => ({
-    ...f,
-    ic: f.factor_metrics?.ic,
-    icir: f.factor_metrics?.icir,
-    rank_ic: f.factor_metrics?.rank_ic,
-    rank_icir: f.factor_metrics?.rank_icir,
-    formulation: f.formulation || f.factor_formulation,
-  })) as any[]
-})
 const filteredFactors = computed(() => {
   let list = [...factors.value]
   if (statusFilter.value) list = list.filter(f => f.status === statusFilter.value)
@@ -82,11 +67,11 @@ function statusLabel(s: string) {
 
 async function load() {
   loading.value = true; error.value = ''
-  try { rawData.value = await fetchAlphaLab(props.traceId) } catch (e: any) { error.value = e.message }
+  try { factors.value = await fetchStrategyFactors(props.strategyId) } catch (e: any) { error.value = e.message }
   finally { loading.value = false }
 }
 
-watch(() => props.traceId, () => load())
+watch(() => props.strategyId, () => load())
 onMounted(() => load())
 </script>
 <style scoped>

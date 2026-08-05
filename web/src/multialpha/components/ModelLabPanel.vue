@@ -5,7 +5,7 @@
       <el-button size="small" @click="$emit('retry')">重试</el-button>
     </div>
     <template v-else-if="models.length">
-      <el-table :data="models" size="small" @expand-change="onExpand">
+      <el-table :data="models" size="small">
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="model-detail">
@@ -17,14 +17,14 @@
         </el-table-column>
         <el-table-column prop="name" label="模型名" min-width="120"/>
         <el-table-column prop="model_type" label="类型" width="80"/>
-        <el-table-column prop="strategy_metrics.annualized_return" label="年化收益" width="100">
-          <template #default="{ row }"><span>{{ formatPct(row.strategy_metrics?.annualized_return) }}</span></template>
+        <el-table-column prop="annualized_return" label="年化收益" width="100">
+          <template #default="{ row }"><span>{{ formatPct(row.annualized_return) }}</span></template>
         </el-table-column>
-        <el-table-column prop="strategy_metrics.max_drawdown" label="最大回撤" width="100">
-          <template #default="{ row }"><span>{{ formatPct(row.strategy_metrics?.max_drawdown) }}</span></template>
+        <el-table-column prop="max_drawdown" label="最大回撤" width="100">
+          <template #default="{ row }"><span>{{ formatPct(row.max_drawdown) }}</span></template>
         </el-table-column>
-        <el-table-column prop="strategy_metrics.information_ratio" label="信息比率" width="90">
-          <template #default="{ row }"><span>{{ row.strategy_metrics?.information_ratio?.toFixed(4) ?? '—' }}</span></template>
+        <el-table-column prop="information_ratio" label="信息比率" width="90">
+          <template #default="{ row }"><span>{{ row.information_ratio?.toFixed(4) ?? '—' }}</span></template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
@@ -38,21 +38,15 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { fetchModelLab } from '../api'
+import { onMounted, ref, watch } from 'vue'
+import { fetchStrategyModels } from '../../services/research-api'
 
-const props = defineProps<{ traceId: string }>()
+const props = defineProps<{ strategyId: string }>()
 defineEmits<{ retry: [] }>()
 
 const loading = ref(false)
 const error = ref('')
-const rawData = ref<Record<string, any> | null>(null)
-
-const models = computed(() => {
-  const reg = rawData.value || {}
-  const modelMap: Record<string, any> = reg.models || {}
-  return Object.values(modelMap) as any[]
-})
+const models = ref<any[]>([])
 
 function formatPct(v: number | undefined | null) {
   if (v == null) return '—'
@@ -61,13 +55,11 @@ function formatPct(v: number | undefined | null) {
 
 async function load() {
   loading.value = true; error.value = ''
-  try { rawData.value = await fetchModelLab(props.traceId) } catch (e: any) { error.value = e.message }
+  try { models.value = await fetchStrategyModels(props.strategyId) } catch (e: any) { error.value = e.message }
   finally { loading.value = false }
 }
 
-function onExpand(row: any, expanded: boolean[]) {}
-
-watch(() => props.traceId, () => load())
+watch(() => props.strategyId, () => load())
 onMounted(() => load())
 </script>
 <style scoped>

@@ -25,9 +25,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
-import { fetchReport } from '../api'
+import { fetchStrategyReport } from '../../services/research-api'
 
-const props = defineProps<{ traceId: string }>()
+const props = defineProps<{ strategyId: string }>()
 defineEmits<{ retry: [] }>()
 
 const loading = ref(false)
@@ -37,8 +37,8 @@ const trendChartRef = ref<HTMLElement | null>(null)
 let trendChart: echarts.ECharts | null = null
 
 const summaryMetrics = computed(() => {
-  const trend: any[] = data.value?.metrics_trend || []
-  const latest = trend[trend.length - 1] || {}
+  const exps: any[] = data.value?.experiments || []
+  const latest = exps[exps.length - 1] || {}
   return [
     { label: 'IC', value: latest.ic?.toFixed(4) ?? '—' },
     { label: 'ICIR', value: latest.icir?.toFixed(4) ?? '—' },
@@ -50,30 +50,30 @@ const summaryMetrics = computed(() => {
 
 async function load() {
   loading.value = true; error.value = ''
-  try { data.value = await fetchReport(props.traceId) } catch (e: any) { error.value = e.message }
+  try { data.value = await fetchStrategyReport(props.strategyId) } catch (e: any) { error.value = e.message }
   finally { loading.value = false }
 }
 
 function downloadCsv() {
-  const trend: any[] = data.value?.metrics_trend || []
-  if (!trend.length) return
-  const keys = Object.keys(trend[0])
-  const csv = [keys.join(','), ...trend.map(r => keys.map(k => r[k] ?? '').join(','))].join('\n')
+  const exps: any[] = data.value?.experiments || []
+  if (!exps.length) return
+  const keys = ['loop_id', 'type', 'ic', 'icir', 'annualized_return', 'max_drawdown', 'information_ratio', 'decision']
+  const csv = [keys.join(','), ...exps.map(r => keys.map(k => r[k] ?? '').join(','))].join('\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'report.csv'
   link.click(); URL.revokeObjectURL(link.href)
 }
 
-watch(() => props.traceId, () => load())
+watch(() => props.strategyId, () => load())
 onMounted(() => load())
 
 watch([data, trendChartRef], () => {
   if (!trendChartRef.value || !data.value) return
   if (!trendChart) trendChart = echarts.init(trendChartRef.value)
-  const trend: any[] = data.value.metrics_trend || []
-  const rounds = trend.map((r: any) => `#${r.round}`)
-  const icData = trend.map((r: any) => r.ic ?? null)
-  const icirData = trend.map((r: any) => r.icir ?? null)
+  const exps: any[] = data.value.experiments || []
+  const rounds = exps.map((r: any) => `#${r.loop_id}`)
+  const icData = exps.map((r: any) => r.ic ?? null)
+  const icirData = exps.map((r: any) => r.icir ?? null)
   trendChart.setOption({
     tooltip: { trigger: 'axis' },
     legend: { data: ['IC', 'ICIR'], bottom: 0 },

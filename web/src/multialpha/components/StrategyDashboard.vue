@@ -32,45 +32,50 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
-import { fetchStrategyDashboard } from '../api'
+import { fetchStrategy, fetchStrategyFactors, fetchStrategyModels } from '../../services/research-api'
 
-const props = defineProps<{ traceId: string }>()
+const props = defineProps<{ strategyId: string }>()
 defineEmits<{ retry: [] }>()
 
 const loading = ref(false)
 const error = ref('')
 const data = ref<Record<string, any> | null>(null)
+const factors = ref<any[]>([])
+const models = ref<any[]>([])
 const chartRef = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
 
-const factorCount = computed(() => {
-  const pool = data.value?.alpha_pool || {}
-  return Object.keys(pool.factors || {}).length
-})
-const modelCount = computed(() => {
-  const reg = data.value?.model_registry || {}
-  return Object.keys(reg.models || {}).length
-})
+const factorCount = computed(() => factors.value.length)
+const modelCount = computed(() => models.value.length)
 const hypotheses = computed(() => {
   const exps: any[] = data.value?.experiments || []
-  return exps.map((e: any) => ({ round: e.round_number, text: e.hypothesis_text?.slice(0, 80) || '—', decision: e.decision }))
+  return exps.map((e: any) => ({ round: e.loop_id || e.round_number, text: (e.hypothesis_text || '—').slice(0, 80), decision: e.decision }))
 })
 
 async function load() {
   loading.value = true; error.value = ''
-  try { data.value = await fetchStrategyDashboard(props.traceId) } catch (e: any) { error.value = e.message }
+  try {
+    const [strategy, f, m] = await Promise.all([
+      fetchStrategy(props.strategyId),
+      fetchStrategyFactors(props.strategyId),
+      fetchStrategyModels(props.strategyId),
+    ])
+    data.value = strategy
+    factors.value = f
+    models.value = m
+  } catch (e: any) { error.value = e.message }
   finally { loading.value = false }
 }
 
-watch(() => props.traceId, () => load())
+watch(() => props.strategyId, () => load())
 onMounted(() => load())
 
 watch([data, chartRef], () => {
   if (!chartRef.value || !data.value) return
   if (!chart) chart = echarts.init(chartRef.value)
   const exps: any[] = data.value.experiments || []
-  const rounds = exps.map((e: any) => `#${e.round_number}`)
-  const icData = exps.map((e: any) => e.factor_metrics?.ic ?? null)
+  const rounds = exps.map((e: any) => `#${e.loop_id}`)
+  const icData = exps.map((e: any) => e.ic ?? null)
   chart.setOption({
     tooltip: { trigger: 'axis' },
     xAxis: { type: 'category', data: rounds },

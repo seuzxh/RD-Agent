@@ -306,6 +306,18 @@ class LoopBase:
                             # it has been executed successfully
                             self.dump(self.session_folder / f"{li}" / f"{si}_{name}")
 
+                        # Write step output to SQLite (ResearchDB) after checkpoint is saved.
+                        # This runs for every step_forward=True, regardless of whether the
+                        # step had output (success) or was skipped (None in loop_prev_out).
+                        try:
+                            self.tracker.on_step_complete(loop_id=li, step_name=name)
+                        except Exception:
+                            logger.exception(
+                                "SQLite write failed for %s loop %s step %s — strict mode, crashing",
+                                self.session_folder, li, name,
+                            )
+                            raise
+
                         self._check_exit_conditions_on_step(loop_id=li, step_id=si)
                     else:
                         logger.warning(f"Step forward {si} of loop {li} is skipped.")

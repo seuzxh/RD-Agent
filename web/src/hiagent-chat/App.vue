@@ -350,9 +350,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { nextTick, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Close, MoreFilled } from '@element-plus/icons-vue'
+import { MoreFilled } from '@element-plus/icons-vue'
 import {
   fetchAgents,
   addAgent,
@@ -415,20 +415,6 @@ const renameLoading = ref(false)
 const convInputs = reactive<Record<string, string>>({})
 
 // ==================== 工具函数 ====================
-
-function formatTime(timeStr: string): string {
-  if (!timeStr) return ''
-  try {
-    const d = new Date(timeStr)
-    if (isNaN(d.getTime())) return timeStr
-    const now = new Date()
-    const isToday = d.toDateString() === now.toDateString()
-    if (isToday) return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
-  } catch {
-    return timeStr
-  }
-}
 
 function renderMarkdown(text: string): string {
   if (!text) return ''
@@ -851,7 +837,6 @@ function handleStop() {
   }
   chatLoading.value = false
   if (streamingAnswer.value) {
-    const tempId = `temp-${Date.now()}`
     const idx = messages.value.findIndex((m) => m.id.startsWith('temp-') && m.status === 'sending')
     if (idx >= 0) {
       messages.value[idx].answer = streamingAnswer.value + '\n\n*[已停止]*'

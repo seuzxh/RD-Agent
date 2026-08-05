@@ -12,23 +12,23 @@
           <DetailHeader :name="currentTask?.name||currentTraceId" :scenario="currentTask?.scenario||''" :status="currentTask?.status||'idle'" :loop="selectedLoop" @stop="stopCurrentTask"/>
           <el-tabs type="border-card" class="artifact-tabs">
             <el-tab-pane label="📊 Strategy Dashboard">
-              <StrategyDashboard :trace-id="currentTraceId" @retry="loadTraceIds"/>
+              <StrategyDashboard :strategy-id="currentTraceId" @retry="loadTraceIds"/>
             </el-tab-pane>
             <el-tab-pane label="🔬 Alpha Lab">
-              <AlphaLabPanel :trace-id="currentTraceId" @retry="loadTraceIds"/>
+              <AlphaLabPanel :strategy-id="currentTraceId" @retry="loadTraceIds"/>
             </el-tab-pane>
             <el-tab-pane label="🤖 Model Lab">
-              <ModelLabPanel :trace-id="currentTraceId" @retry="loadTraceIds"/>
+              <ModelLabPanel :strategy-id="currentTraceId" @retry="loadTraceIds"/>
             </el-tab-pane>
             <el-tab-pane label="⚡ Live Lab">
-              <PipelineStages :messages="scopedMessages"/>
-              <TaskBrief :hypothesis="view.hypothesis" :config="view.config" :factors="view.initialTasks" :user-input="view.userInput"/>
-              <AgentFlow :messages="scopedMessages" :factors="view.factors" :codes="view.codes" :metric-values="view.metricValues" :feedback="view.feedback" :hypothesis="view.hypothesis" :status="currentTask?.status||'idle'"/>
-              <LoopSwitcher v-model="selectedLoop" :loops="view.loops" :metrics="view.loopMetrics"/>
-              <TokenDashboard :total="view.totalTokens" :prompt="view.promptTokens" :completion="view.completionTokens" :calls="view.callCount"/>
+              <PipelineStages :pipeline-nodes="pipelineNodes"/>
+              <TaskBrief :experiments="experiments"/>
+              <AgentFlow :experiments="experiments"/>
+              <LoopSwitcher v-model="selectedLoop" :experiments="experiments"/>
+              <TokenDashboard :nodes="pipelineNodes"/>
             </el-tab-pane>
             <el-tab-pane label="📋 Report">
-              <ReportPanel :trace-id="currentTraceId" @retry="loadTraceIds"/>
+              <ReportPanel :strategy-id="currentTraceId" @retry="loadTraceIds"/>
             </el-tab-pane>
           </el-tabs>
           <ResultWorkspace :trace-id="currentTraceId" :factors="view.factors" :codes="view.codes" :chart-ref="view.chartRef" :chart-html="view.chartHtml" :metrics="view.metrics" :feedback="view.feedback" @download="downloadResult"/>
@@ -49,9 +49,8 @@ import LogConsole from './components/LogConsole.vue';import TraceLoading from '.
 import UserInteractionDialog from './components/UserInteractionDialog.vue';import SettingsPage from './components/SettingsPage.vue'
 import StrategyDashboard from './components/StrategyDashboard.vue';import AlphaLabPanel from './components/AlphaLabPanel.vue';import ModelLabPanel from './components/ModelLabPanel.vue';import ReportPanel from './components/ReportPanel.vue'
 import type { TaskMethod } from './types'
-const route=useRoute(),router=useRouter();const {tasks,currentTraceId,messages,loading,loadingName,listLoading,listError,selectedLoop,view,loadTraceIds,selectTrace,goHome,createTask,stopCurrentTask}=useMultiAlpha();const dialogOpen=ref(false);const dialogRef=ref<InstanceType<typeof NewTaskDialog>|null>(null)
+const route=useRoute(),router=useRouter();const {tasks,currentTraceId,messages,loading,loadingName,listLoading,listError,selectedLoop,view,pipelineNodes,experiments,loadTraceIds,selectTrace,goHome,createTask,stopCurrentTask}=useMultiAlpha();const dialogOpen=ref(false);const dialogRef=ref<InstanceType<typeof NewTaskDialog>|null>(null)
 const requestedTraceId=computed(()=>typeof route.params.traceId==='string'?route.params.traceId:'');const isHome=computed(()=>route.name==='multialpha-home');const isPredict=computed(()=>route.name==='multialpha-predict');const isSettings=computed(()=>route.name==='multialpha-settings');const currentTask=computed(()=>tasks.value.find(task=>task.id===currentTraceId.value));const invalidTrace=computed(()=>!isHome.value&&!isPredict.value&&!isSettings.value&&!listLoading.value&&!tasks.value.some(task=>task.id===requestedTraceId.value))
-const scopedMessages=computed(()=>selectedLoop.value==null?messages.value:messages.value.filter(message=>message.loop_id==null||Number(message.loop_id)===selectedLoop.value))
 async function syncRoute(){if(isHome.value){goHome();return}if(requestedTraceId.value&&!invalidTrace.value&&currentTraceId.value!==requestedTraceId.value)await selectTrace(requestedTraceId.value)}
 watch(()=>route.fullPath,()=>void syncRoute());onMounted(async()=>{await loadTraceIds();await syncRoute()})
 const navigateHome=()=>void router.push({name:'multialpha-home'});const navigateTask=(id:string)=>void router.push({name:'multialpha-task',params:{traceId:id}});const navigatePredict=()=>{window.location.href='./predict.html'};const navigateSettings=()=>void router.push({name:'multialpha-settings'});function focusTasks(){document.querySelector('.task-sidebar')?.classList.add('attention');setTimeout(()=>document.querySelector('.task-sidebar')?.classList.remove('attention'),900)}function openDialog(method:TaskMethod){const runningCount=tasks.value.filter(t=>t.status==='running').length;if(runningCount>=10){ElMessage.warning(`当前有 ${runningCount} 个任务运行中（上限 10），请等待部分完成后再新建`);return}dialogOpen.value=true;requestAnimationFrame(()=>dialogRef.value?.open(method))}
