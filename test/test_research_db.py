@@ -250,3 +250,28 @@ class TestResearchDB:
         s = db.query_strategy("auto/s1")
         assert s is not None
         assert s["id"] == "auto/s1"
+
+    def test_experiments_have_chart_path_column(self):
+        """The experiments table exposes a chart_path column."""
+        db = get_db()
+        cols = [r[1] for r in db.conn.execute("PRAGMA table_info(experiments)").fetchall()]
+        assert "chart_path" in cols
+
+    def test_upsert_experiment_chart_path(self):
+        """upsert_experiment_chart_path persists chart_path and it is returned by query."""
+        db = get_db()
+        db.upsert_strategy("test/s1")
+        db.upsert_experiment("test/s1", 1)
+        db.upsert_experiment_chart_path("test/s1", 1, "/ws/loop_1/ret_chart.html")
+        exps = db.query_experiments("test/s1")
+        assert exps[0]["chart_path"] == "/ws/loop_1/ret_chart.html"
+
+    def test_upsert_experiment_chart_path_updates_in_place(self):
+        """Re-upserting chart_path for the same loop overwrites the previous value."""
+        db = get_db()
+        db.upsert_strategy("test/s1")
+        db.upsert_experiment("test/s1", 1)
+        db.upsert_experiment_chart_path("test/s1", 1, "/ws/loop_1/ret_chart.html")
+        db.upsert_experiment_chart_path("test/s1", 1, "/ws/loop_1/ret_chart_v2.html")
+        exps = db.query_experiments("test/s1")
+        assert exps[0]["chart_path"] == "/ws/loop_1/ret_chart_v2.html"

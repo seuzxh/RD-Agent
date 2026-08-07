@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS experiments (
     started_at TEXT,
     completed_at TEXT,
     error_message TEXT,
+    chart_path TEXT,
     UNIQUE(strategy_id, loop_id)
 );
 
@@ -344,6 +345,14 @@ class ResearchDB:
             )
             self.conn.commit()
 
+    def upsert_experiment_chart_path(self, strategy_id: str, loop_id: int, chart_path: str) -> None:
+        with _lock:
+            self.conn.execute(
+                "UPDATE experiments SET chart_path = ? WHERE strategy_id = ? AND loop_id = ?",
+                (chart_path, strategy_id, loop_id),
+            )
+            self.conn.commit()
+
     def finalize_experiment(
         self,
         strategy_id: str,
@@ -420,6 +429,31 @@ class ResearchDB:
             )
             self.conn.commit()
 
+    def update_factors_metrics_for_loop(
+        self,
+        strategy_id: str,
+        loop_id: int,
+        *,
+        ic: float | None = None,
+        icir: float | None = None,
+        annualized_return: float | None = None,
+        max_drawdown: float | None = None,
+        information_ratio: float | None = None,
+    ) -> None:
+        """Update metrics for all factors in a specific loop (round_number = loop_id)."""
+        with _lock:
+            self.conn.execute(
+                """UPDATE factors SET
+                       ic = COALESCE(?, ic),
+                       icir = COALESCE(?, icir),
+                       annualized_return = COALESCE(?, annualized_return),
+                       max_drawdown = COALESCE(?, max_drawdown),
+                       information_ratio = COALESCE(?, information_ratio)
+                   WHERE strategy_id = ? AND round_number = ?""",
+                (ic, icir, annualized_return, max_drawdown, information_ratio, strategy_id, loop_id),
+            )
+            self.conn.commit()
+
     # ── models ──
 
     def upsert_model(
@@ -474,6 +508,27 @@ class ResearchDB:
             self.conn.execute(
                 "UPDATE models SET status = ? WHERE strategy_id = ? AND name = ?",
                 (status, strategy_id, name),
+            )
+            self.conn.commit()
+
+    def update_models_metrics_for_loop(
+        self,
+        strategy_id: str,
+        loop_id: int,
+        *,
+        annualized_return: float | None = None,
+        max_drawdown: float | None = None,
+        information_ratio: float | None = None,
+    ) -> None:
+        """Update metrics for all models in a specific loop (round_number = loop_id)."""
+        with _lock:
+            self.conn.execute(
+                """UPDATE models SET
+                       annualized_return = COALESCE(?, annualized_return),
+                       max_drawdown = COALESCE(?, max_drawdown),
+                       information_ratio = COALESCE(?, information_ratio)
+                   WHERE strategy_id = ? AND round_number = ?""",
+                (annualized_return, max_drawdown, information_ratio, strategy_id, loop_id),
             )
             self.conn.commit()
 

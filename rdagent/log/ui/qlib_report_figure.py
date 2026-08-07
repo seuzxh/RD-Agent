@@ -1,5 +1,6 @@
 import importlib
 import math
+from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objs as go
@@ -511,3 +512,50 @@ def report_figure(df: pd.DataFrame, group_df: pd.DataFrame = None) -> list | tup
         sub_graph_layout=_subplot_layout,
     ).figure
     return figure
+
+
+# plotly.js CDN URL（bootcdn 国内镜像），与 app.py 的 chart 生成共用同一注入。
+_PLOTLY_VERSION = "2.35.3"
+_PLOTLY_CDN_URL = f"https://cdn.bootcdn.net/ajax/libs/plotly.js/{_PLOTLY_VERSION}/plotly.min.js"
+
+
+def generate_chart_html(ret_pkl: Path | str, group_pkl: Path | str | None = None) -> str:
+    """从 ret.pkl + 可选 group.pkl 生成策略回测 chart HTML。
+
+    plotly.js 通过 bootcdn CDN 加载（不内联），作为研究 API / 策略看板的数据源。
+
+    :param ret_pkl: 回测收益 pkl 路径。可为 DataFrame（含 return/cost/bench/turnover 列）
+                    或 dict（app.py 遗留格式：``{'ret': DataFrame, 'group': DataFrame}``）。
+    :param group_pkl: 可选分组累计净值 DataFrame 的 pkl 路径。
+    :return: HTML 字符串。
+    """
+    import pickle as _pickle
+
+    import plotly
+
+    ret_pkl = Path(ret_pkl)
+    with open(ret_pkl, "rb") as f:
+        obj = _pickle.load(f)
+
+    group_df = None
+    if isinstance(obj, dict) and "ret" in obj:
+        df = obj["ret"]
+        group_df = obj.get("group")
+    else:
+        df = obj
+
+    if group_pkl is not None:
+        group_pkl = Path(group_pkl)
+        if group_pkl.exists():
+            with open(group_pkl, "rb") as f:
+                loaded = _pickle.load(f)
+            if isinstance(loaded, pd.DataFrame) and not loaded.empty:
+                group_df = loaded
+
+    fig = report_figure(df, group_df=group_df)
+    html = plotly.io.to_html(fig, include_plotlyjs=False, full_html=True)
+    html = html.replace(
+        "</head>",
+        f'<script src="{_PLOTLY_CDN_URL}"></script></head>',
+    ) if "</head>" in html else html
+    return html

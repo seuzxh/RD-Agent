@@ -25,10 +25,11 @@ from __future__ import annotations
 
 import json
 import time
-import uuid
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Generator
 
-from flask import Blueprint, Response, jsonify, request, stream_with_context
+from flask import Blueprint, Response, jsonify, request, send_file, stream_with_context
 
 from rdagent.log.research_db import ResearchDB
 
@@ -70,6 +71,22 @@ def _json_resp(data: Any, status: int = 200):
 
 def _error(msg: str, status: int = 404):
     return jsonify({"error": msg}), status
+
+
+def _safe_json(obj: Any) -> Any:
+    """Recursively convert an object to JSON-safe types."""
+    if isinstance(obj, dict):
+        return {k: _safe_json(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_safe_json(item) for item in obj]
+    elif isinstance(obj, Path):
+        return str(obj)
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    elif obj is None or isinstance(obj, (bool, int, float, str)):
+        return obj
+    else:
+        return str(obj)
 
 
 # ── REST endpoints ──
@@ -123,6 +140,27 @@ def get_strategy_report(strategy_id: str):
     })
 
 
+@research_bp.route("/strategies/<path:strategy_id>/chart", methods=["GET"])
+def get_strategy_chart(strategy_id: str):
+    """Return the strategy's backtest chart HTML for a given loop (default latest).
+
+    Query params:
+        loop: loop_id to fetch; if omitted, the latest experiment with a chart is returned.
+    """
+    loop = request.args.get("loop")
+    exps = _db().query_experiments(strategy_id)
+    target = next(
+        (e for e in exps if (loop is None or str(e["loop_id"]) == loop) and e.get("chart_path")),
+        None,
+    )
+    if not target:
+        return _error("No chart available")
+    chart_path = Path(target["chart_path"])
+    if not chart_path.exists():
+        return _error("Chart file missing")
+    return send_file(str(chart_path), mimetype="text/html")
+
+
 @research_bp.route("/strategies/<path:strategy_id>", methods=["DELETE"])
 def delete_strategy(strategy_id: str):
     """Delete a strategy and all cascade data."""
@@ -146,14 +184,134 @@ def list_models():
 
 @research_bp.route("/reports", methods=["GET"])
 def list_reports():
-    """Cross-strategy report aggregation."""
-    return _json_resp({
-        "strategies": _db().query_reports(),
-        "total_strategies": len(set(r["strategy_id"] for r in _db().query_reports())),
-    })
+    """Cross-strategy report aggregation with per-strategy latest metrics."""
+    db = _db()
+    strategies = db.query_strategies()
+    summaries = []
+    for s in strategies:
+        sid = s["id"]
+        exps = db.query_experiments(sid)
+        trend = []
+        for e in exps:
+            trend.append({
+                "round": e.get("loop_id"),
+                "ic": e.get("ic"),
+                "icir": e.get("icir"),
+                "annualized_return": e.get("annualized_return"),
+                "max_drawdown": e.get("max_drawdown"),
+                "information_ratio": e.get("information_ratio"),
+            })
+        latest = trend[-1] if trend else {}
+        summaries.append({
+            "id": sid,
+            "total_rounds": len(exps),
+            "metrics_trend": trend,
+            "latest_metrics": latest,
+        })
+    return _json_resp({"strategies": summaries, "total_strategies": len(summaries)})
 
 
 # ── SSE endpoint ──
+
+
+@research_bp.route("/live", methods=["GET"])
+def get_live():
+    """Return all tasks (both running and completed) with their status."""
+    from flask import current_app
+
+    rdagent_processes = current_app.config.get("_RDAGENT_PROCESSES", {})
+    trace_states = current_app.config.get("_TRACE_STATES", {})
+    log_folder_path = Path(current_app.config.get("_LOG_FOLDER_PATH", "."))
+
+    tasks: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    # Running tasks from in-memory process registry
+    for proc_id, proc in rdagent_processes.items():
+        try:
+            ext_id = str(Path(proc_id).relative_to(log_folder_path))
+        except (ValueError, TypeError):
+            ext_id = proc_id
+        # Normalize path separators — trace_states uses forward slashes
+        ext_id = ext_id.replace("\\", "/")
+        seen_ids.add(ext_id)
+        state = trace_states.get(ext_id, {})
+        tasks.append({
+            "id": ext_id,
+            "status": "running" if proc.is_alive() else "completed",
+            "loops": sorted(state.get("loops", [])),
+            "created_at": state.get("created_at", ""),
+            "updated_at": state.get("updated_at", ""),
+            "description": state.get("description", ""),
+        })
+
+    # Also include tasks from trace_states that are not in rdagent_processes
+    # (e.g. tasks where the subprocess has already exited but catalog state remains)
+    for tid, state in trace_states.items():
+        if tid not in seen_ids:
+            seen_ids.add(tid)
+            tasks.append({
+                "id": tid,
+                "status": state.get("status", "running"),
+                "loops": sorted(state.get("loops", [])),
+                "created_at": state.get("created_at", ""),
+                "updated_at": state.get("updated_at", ""),
+                "description": state.get("description", ""),
+            })
+
+    return _json_resp({"tasks": tasks, "total": len(tasks)})
+
+
+@research_bp.route("/strategies/<path:strategy_id>/messages", methods=["GET"])
+def get_strategy_messages(strategy_id: str):
+    """Return trace messages for a strategy (replaces old POST /trace)."""
+    from flask import current_app
+    from rdagent.log.storage import FileStorage
+
+    log_folder_path = Path(current_app.config.get("_LOG_FOLDER_PATH", "."))
+    trace_dir = (log_folder_path / strategy_id).resolve()
+    trace_dir_str = str(trace_dir)
+    if not trace_dir.exists():
+        return _error("Strategy trace directory not found")
+
+    try:
+        msgs = []
+        for msg in FileStorage(trace_dir).iter_msg():
+            ts = msg.timestamp
+            if hasattr(ts, 'isoformat'):
+                ts_str = ts.isoformat()
+            elif isinstance(ts, str):
+                ts_str = ts
+            else:
+                ts_str = str(ts)
+            # Serialize content to JSON-safe format
+            content = msg.content
+            if isinstance(content, (dict, list)):
+                # Use a safe JSON serialization for content
+                content = _safe_json(content)
+            else:
+                content = str(content)[:200]
+            msgs.append({
+                "tag": msg.tag,
+                "content": content,
+                "timestamp": ts_str,
+            })
+        return _json_resp({"messages": msgs, "total": len(msgs), "trace_dir": trace_dir_str})
+    except Exception as e:
+        return _json_resp({"error": str(e), "trace_dir": trace_dir_str}, 500)
+
+
+@research_bp.route("/strategies/<path:strategy_id>/detail", methods=["GET"])
+def get_strategy_detail(strategy_id: str):
+    """Return strategy detail with experiments, factors, and models."""
+    s = _db().query_strategy(strategy_id)
+    if s is None:
+        return _error("Strategy not found in ResearchDB")
+
+    s["experiments"] = _db().query_experiments(strategy_id)
+    s["factors"] = _db().query_factors(strategy_id)
+    s["models"] = _db().query_models(strategy_id)
+    return _json_resp(s)
 
 
 @research_bp.route("/strategies/<path:strategy_id>/events", methods=["GET"])

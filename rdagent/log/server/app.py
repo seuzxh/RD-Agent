@@ -25,15 +25,7 @@ app = Flask(__name__, static_folder=str(Path(UI_SETTING.static_path).resolve()))
 CORS(app)
 app.config["UI_SERVER_PORT"] = 19899
 
-# 注册 Artifact API Blueprint
-try:
-    from rdagent.log.server.artifact_api import artifact_bp
-    app.register_blueprint(artifact_bp)
-except Exception as _artifact_bp_err:
-    import sys
-    print(f"[WARN] Artifact blueprint 注册失败: {_artifact_bp_err}", file=sys.stderr)
-
-# 注册 Research API Blueprint（SQLite 持久化层，双轨运行）
+# 注册 Research API Blueprint（SQLite 持久化层）
 try:
     from rdagent.log.server.research_api import research_bp
     app.register_blueprint(research_bp)
@@ -200,6 +192,10 @@ class RDAgentTask:
             del _os.environ["CONDA_ENV_NAME"]
         from rdagent.log.conf import LOG_SETTINGS
 
+        # Set trace_path so that LoopBase.session_folder points to the correct
+        # webUI trace directory (not the CLI default cwd/log/<timestamp>).
+        # This ensures WorkflowTracker writes the correct strategy_id to ResearchDB.
+        LOG_SETTINGS.trace_path = str(self.log_trace_path)
         LOG_SETTINGS.set_ui_server_port(self.ui_server_port)
 
         from rdagent.log import rdagent_logger
@@ -252,6 +248,12 @@ log_folder_path = Path(UI_SETTING.trace_folder).absolute()
 # ==================== Catalog 状态投影层（C1）====================
 # 轻量读模型：trace_id → 状态快照，由事件流投影而来，列表/状态查询只读这里。
 trace_states: dict[str, dict] = {}
+
+# Make module-level globals accessible via Flask app config
+# so that research_api.py can read them reliably across module boundaries
+app.config["_RDAGENT_PROCESSES"] = rdagent_processes
+app.config["_TRACE_STATES"] = trace_states
+app.config["_LOG_FOLDER_PATH"] = str(log_folder_path)
 # 结构：{"Finance Data Building/plain-transformation": {
 #   "status": "running|done|error",
 #   "loops": set(),
@@ -716,12 +718,11 @@ def _load_existing_traces(trace_root: Path) -> None:
 # C4: /receive 收到 feedback.return_chart 时，把 5MB chart_html 替换为轻量 descriptor。
 # C5: GET /api/v2/trace/artifact 按 trace_id + loop_id 按需生成 chart HTML。
 
-# plotly.js CDN URL（bootcdn 国内镜像）。
-# 注意：bootcdn 同步自 cdnjs，plotly.js 在 cdnjs 上最高只到 3.1.1（6.x 未同步，会 404）。
+# plotly.js CDN URL（bootcdn 国内镜像）的规范定义在
+# rdagent/log/ui/qlib_report_figure.py 的 _PLOTLY_VERSION/_PLOTLY_CDN_URL（共享生成器使用）。
+# 版本选择说明：bootcdn 同步自 cdnjs，plotly.js 在 cdnjs 上最高只到 3.1.1（6.x 未同步，会 404）。
 # 2.35.3 是 cdnjs/bootcdn 上稳定可用的最高 2.x 版本，覆盖 report_figure 用到的全部
 # trace/layout 特性；Python 后端仍可用任意版本生成 figure JSON（仅作为数据源）。
-_PLOTLY_VERSION = "2.35.3"
-_PLOTLY_CDN_URL = f"https://cdn.bootcdn.net/ajax/libs/plotly.js/{_PLOTLY_VERSION}/plotly.min.js"
 
 
 def _find_chart_pkl(trace_dir: Path, loop_id: int | None) -> Path | None:
@@ -742,26 +743,11 @@ def _generate_chart_html(df_pkl_path: Path) -> str:
     """从 chart pkl（DataFrame）生成 chart HTML（bootcdn CDN 加载 plotly.js，不内联）。
 
     落盘到 artifact cache 目录，后续请求直接 send_file。
+    委托给共享生成器 ``generate_chart_html``（兼容 DataFrame 与 dict 格式）。
     """
-    import pickle as _pickle
-    import plotly
-    from rdagent.log.ui.qlib_report_figure import report_figure
+    from rdagent.log.ui.qlib_report_figure import generate_chart_html
 
-    with open(df_pkl_path, 'rb') as f:
-        obj = _pickle.load(f)
-
-    # 兼容 dict（新格式 {'ret':..,'group':..}）和 DataFrame（历史 trace）
-    if isinstance(obj, dict) and "ret" in obj:
-        fig = report_figure(obj["ret"], group_df=obj.get("group"))
-    else:
-        fig = report_figure(obj)
-    html = plotly.io.to_html(fig, include_plotlyjs=False, full_html=True)
-    # 注入 bootcdn script（include_plotlyjs=False 只留占位，需手动加 script 标签）
-    html = html.replace(
-        '</head>',
-        f'<script src="{_PLOTLY_CDN_URL}"></script></head>',
-    ) if '</head>' in html else html
-    return html
+    return generate_chart_html(df_pkl_path)
 
 
 def _get_or_create_artifact_html(trace_id: str, loop_id: int | None) -> tuple[str | None, str | None]:
@@ -857,65 +843,6 @@ def get_chart_artifact():
 
 
 # ==================== Chart Artifact END ============================
-
-@app.route("/trace", methods=["POST"])
-def update_trace():
-    data = request.get_json()
-    trace_id = data.get("id")
-    return_all = data.get("all")
-    reset = data.get("reset")
-    cursor = data.get("cursor")  # frontend-managed cursor (message index)
-    log_folder_path = Path(UI_SETTING.trace_folder).absolute()
-    if not trace_id:
-        return jsonify({"error": "Trace ID is required"}), 400
-    trace_id = str(log_folder_path / trace_id)
-
-    task = _get_or_create_task(trace_id)
-
-    # Make sure any pending user-interaction requests are visible to the frontend.
-    _drain_user_requests_into_messages(task)
-
-    if task.process is not None and not task.is_alive():
-        if not task.messages or task.messages[-1].get("tag") != "END":
-            task.messages.append(
-                {
-                    "tag": "END",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "content": {
-                        "error_msg": "RD-Agent process has completed.",
-                        "end_code": task.get_end_code(),
-                    },
-                }
-            )
-            _update_trace_state(_trace_id_to_external(trace_id), task.messages[-1])
-            app.logger.warning(f"Process for {trace_id} has ended.")
-
-    total = len(task.messages)
-
-    # Cursor-based: frontend sends its current message count as cursor.
-    # Returns all messages from cursor to end (no random batching).
-    # Falls back to legacy pointer mode if cursor not provided.
-    if cursor is not None:
-        start = max(0, int(cursor))
-    else:
-        # Legacy pointer mode (backward compat for older frontends)
-        user_ip = request.remote_addr
-        if reset:
-            task.pointers[user_ip] = 0
-        start = task.pointers[user_ip]
-
-    if return_all:
-        start = 0
-
-    returned_msgs = task.messages[start:total]
-
-    # Update legacy pointer for backward compat
-    if cursor is None:
-        user_ip = request.remote_addr
-        task.pointers[user_ip] = total
-
-    return jsonify(returned_msgs), 200
-
 
 @app.route("/stdout", methods=["GET"])
 def download_stdout_file():
@@ -1088,6 +1015,26 @@ def upload_file():
         "description": request.form.get("description", ""),
         "_tags_seen": set(),
     }
+
+    # 同步写入 ResearchDB，使新建策略立即在 SQLite 查询中可见
+    try:
+        from rdagent.log.research_db import ResearchDB
+
+        ResearchDB().upsert_strategy(
+            external_id,
+            description=request.form.get("description", ""),
+            scenario=scenario,
+            source="webui",
+            status="running",
+            user_input_snapshot={
+                "description": request.form.get("description"),
+                "scenario": scenario,
+                "loops": loop_n_val,
+                "auto_mode": auto_mode,
+            },
+        )
+    except Exception:
+        app.logger.warning("Failed to upsert strategy to ResearchDB", exc_info=True)
     return (
         jsonify(
             {
@@ -1096,47 +1043,6 @@ def upload_file():
         ),
         200,
     )
-
-
-@app.route("/receive", methods=["POST"])
-def receive_msgs():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No JSON data received"}), 400
-    except Exception as e:
-        return jsonify({"error": "Internal Server Error"}), 500
-
-    if isinstance(data, list):
-        for d in data:
-            _process_incoming_message(d["id"], d["msg"])
-    else:
-        _process_incoming_message(data["id"], data["msg"])
-
-    return jsonify({"status": "success"}), 200
-
-
-def _process_incoming_message(internal_id: str, msg: dict) -> None:
-    """C4: 处理收到的消息——对 chart 消息做 descriptor 替换，然后 append + 投影。"""
-    tag = msg.get("tag", "")
-    external_id = _trace_id_to_external(internal_id)
-
-    # C4: chart 消息替换为轻量 descriptor（不 append 5MB chart_html）
-    if tag == "feedback.return_chart":
-        loop_id = msg.get("loop_id")
-        timestamp = msg.get("timestamp", datetime.now(timezone.utc).isoformat())
-        descriptor = _make_chart_descriptor(external_id, loop_id, timestamp)
-        task = _get_running_task(internal_id)
-        if task is not None:
-            task.messages.append(descriptor)
-        _update_trace_state(external_id, descriptor)
-        return
-
-    # 普通消息：正常 append + 投影
-    task = _get_running_task(internal_id)
-    if task is not None:
-        task.messages.append(msg)
-    _update_trace_state(external_id, msg)
 
 
 @app.route("/health", methods=["GET"])

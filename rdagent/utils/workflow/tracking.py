@@ -238,10 +238,21 @@ class WorkflowTracker:
 
     def _on_direct_exp_gen(self, db, strategy_id: str, loop_id: int, output: Any) -> None:
         """Handle direct_exp_gen step: extract hypothesis + experiment."""
-        if not isinstance(output, dict):
-            return
-        hypo = output.get("propose")
-        exp = output.get("exp_gen")
+        # Support both dict and object output
+        if isinstance(output, dict):
+            hypo = output.get("propose")
+            exp = output.get("exp_gen")
+        else:
+            # Try attribute access for non-dict output
+            hypo = getattr(output, "propose", None) if output is not None else None
+            exp = getattr(output, "exp_gen", None) if output is not None else None
+
+        # Always create an experiment record (even with partial data)
+        # This ensures pipeline continuity for subsequent steps (coding/running etc.)
+        if exp is None and hypo is None:
+            logger.info(f"direct_exp_gen loop {loop_id}: no exp/hypo extracted, creating empty experiment")
+        elif exp is None:
+            logger.info(f"direct_exp_gen loop {loop_id}: creating experiment with hypothesis only")
         hypothesis_text = str(hypo) if hypo else ""
         hypothesis_reason = getattr(hypo, "reason", None) if hypo else None
         hypothesis_assumption = getattr(hypo, "assumption", None) if hypo else None
@@ -270,6 +281,14 @@ class WorkflowTracker:
         sub_tasks = getattr(exp, "sub_tasks", [])
         sub_workspace_list = getattr(exp, "sub_workspace_list", [])
 
+        # Get experiment_id for this loop (created in direct_exp_gen step)
+        experiments = db.query_experiments(strategy_id)
+        experiment_id = None
+        for exp in experiments:
+            if exp["loop_id"] == loop_id:
+                experiment_id = exp["id"]
+                break
+
         for i, task in enumerate(sub_tasks):
             name = self._task_name(task, i)
             description = getattr(task, "factor_description", "") or getattr(task, "description", "")
@@ -284,6 +303,7 @@ class WorkflowTracker:
 
                 db.upsert_factor(
                     strategy_id, name,
+                    experiment_id=experiment_id,
                     description=description,
                     formulation=getattr(task, "factor_formulation", None),
                     variables=getattr(task, "variables", None),
@@ -301,6 +321,7 @@ class WorkflowTracker:
 
                 db.upsert_model(
                     strategy_id, name,
+                    experiment_id=experiment_id,
                     model_type=getattr(task, "model_type", None),
                     architecture=getattr(task, "architecture", None),
                     hyperparameters=getattr(task, "training_hyperparameters", None),
@@ -315,6 +336,9 @@ class WorkflowTracker:
             return
 
         exp = output
+        # Persist the backtest chart regardless of metrics availability.
+        self._persist_backtest_chart(db, strategy_id, loop_id, exp)
+
         result = getattr(exp, "result", None)
         if result is None:
             return
@@ -337,16 +361,57 @@ class WorkflowTracker:
                 except (TypeError, ValueError):
                     pass
 
+            ic_val = metrics.get("IC")
+            icir_val = metrics.get("ICIR")
+            annualized_return_val = metrics.get("1day.excess_return_with_cost.annualized_return")
+            max_drawdown_val = metrics.get("1day.excess_return_with_cost.max_drawdown")
+            information_ratio_val = metrics.get("1day.excess_return_with_cost.information_ratio")
+
             db.update_experiment_metrics(
                 strategy_id, loop_id,
-                ic=metrics.get("IC"),
-                icir=metrics.get("ICIR"),
-                annualized_return=metrics.get("1day.excess_return_with_cost.annualized_return"),
-                max_drawdown=metrics.get("1day.excess_return_with_cost.max_drawdown"),
-                information_ratio=metrics.get("1day.excess_return_with_cost.information_ratio"),
+                ic=ic_val,
+                icir=icir_val,
+                annualized_return=annualized_return_val,
+                max_drawdown=max_drawdown_val,
+                information_ratio=information_ratio_val,
+            )
+
+            # Sync metrics to factors table for frontend display
+            db.update_factors_metrics_for_loop(
+                strategy_id, loop_id,
+                ic=ic_val,
+                icir=icir_val,
+                annualized_return=annualized_return_val,
+                max_drawdown=max_drawdown_val,
+                information_ratio=information_ratio_val,
             )
         except Exception:
             logger.warning(f"on_step_complete(running): failed to extract metrics for {strategy_id} loop {loop_id}")
+
+    def _persist_backtest_chart(self, db, strategy_id: str, loop_id: int, exp: Any) -> None:
+        """Generate ``ret_chart.html`` from the experiment workspace's ``ret.pkl``
+        and persist its path into ``experiments.chart_path``.
+
+        Best-effort: a failure to generate must not break the running step.
+        """
+        try:
+            ws = getattr(exp, "experiment_workspace", None)
+            ws_path = getattr(ws, "workspace_path", None)
+            if not ws_path:
+                return
+            ret_pkl = Path(ws_path) / "ret.pkl"
+            if not ret_pkl.exists():
+                return
+
+            from rdagent.log.ui.qlib_report_figure import generate_chart_html
+
+            group_pkl = Path(ws_path) / "ret_group.pkl"
+            html = generate_chart_html(ret_pkl, group_pkl if group_pkl.exists() else None)
+            chart_file = Path(ws_path) / "ret_chart.html"
+            chart_file.write_text(html, encoding="utf-8")
+            db.upsert_experiment_chart_path(strategy_id, loop_id, str(chart_file))
+        except Exception:
+            logger.warning(f"_persist_backtest_chart: chart persist failed for {strategy_id} loop {loop_id}")
 
     def _on_feedback(self, db, strategy_id: str, loop_id: int, output: Any) -> None:
         """Handle feedback step: extract decision."""
