@@ -31,12 +31,12 @@ multialpha 的 R&D 循环由以下五个智能体组成，按执行顺序排列�
 │HypothesisGen │───▶│Hypothesis2Exp    │───▶│   CoSTEER    │───▶│    Runner    │
 │  (假设生成)   │    │  (假设转实验)     │    │  (编码进化)   │    │  (方案执行)   │
 │              │    │                  │    │              │    │              │
-│ minimax-m3   │    │ minimax-m3       │    │ kimi-k2.7-   │    │ deepseek-v4- │
-│ temp=0.7     │    │ temp=0.7         │    │ code         │    │ flash        │
-│              │    │                  │    │ temp=1.0     │    │ temp=0.0     │
-│ 输出:        │    │ 输出:            │    │ 输出:        │    │ 输出:        │
-│ Hypothesis   │    │ Experiment       │    │ 可运行代码    │    │ 回测结果/指标 │
-│ (方向+理由)  │    │ (Task列表+基线)  │    │ (factor.py)  │    │ (IC/收益等)  │
+│ minimax-m3   │    │ minimax-m3       │    │ deepseek-v4  │    │ deepseek-v4- │
+│ temp=0.7     │    │ temp=0.7         │    │ temp=0.5     │    │ flash        │
+│              │    │                  │    │              │    │ temp=0.0     │
+│ 核心能力:    │    │ 核心能力:        │    │ 核心能力:    │    │ 核心能力:    │
+│ 创意发散     │    │ 结构化映射       │    │ 代码生成+修复│    │ 纯代码执行   │
+│ 金融理解     │    │ 任务规格设计     │    │ JSON稳定输出 │    │ 无LLM调用    │
 └──────────────┘    └──────────────────┘    └──────┬───────┘    └──────┬───────┘
                                                    │                   │
                                                    ▼                   │
@@ -45,7 +45,12 @@ multialpha 的 R&D 循环由以下五个智能体组成，按执行顺序排列�
                                           │  (反馈总结)   │
                                           │              │
                                           │ glm-5.2      │
-                                          │ temp=0.6     │
+                                          │ temp=0.4     │
+                                          │              │
+                                          │ 核心能力:    │
+                                          │ 数值推理     │
+                                          │ 指标对比     │
+                                          │ 决策判断     │
                                           └──────┬───────┘
                                                  │
                                                  ▼
@@ -210,24 +215,68 @@ HypothesisFeedback(
 
 ## 多 LLM 模型配置
 
-multialpha 为不同智能体配置了不同的 LLM 模型，充分发挥各模型优势：
+multialpha 采用**多模型分工策略**，为不同特性的任务匹配最适合的 LLM，而非"一个模型打天下"。以下是推荐配置及选型理由：
 
-| R&D 步骤 | Logger Tag | LLM 模型 | Temperature | 选型理由 |
-|----------|-----------|----------|-------------|----------|
-| 假设生成 + 假设转实验 | `direct_exp_gen` | minimax-m3 | 0.7 | 创造性任务，需要多样性 |
-| 编码进化 | `coding` | kimi-k2.7-code | 1.0 | 代码生成专用模型，高随机性探索 |
-| 方案执行 | `running` | deepseek-v4-flash | 0.0 | 确定性任务，需要精确执行 |
-| 反馈总结 | `feedback` | glm-5.2 | 0.6 | 分析推理任务，平衡准确与灵活 |
+### 推荐配置
 
-配置方式（`.env`）：
+| R&D 步骤 | Logger Tag | LLM 模型 | Temperature | 核心能力需求 |
+|----------|-----------|----------|-------------|------------|
+| 假设生成 + 假设转实验 | `direct_exp_gen` | **minimax-m3** | **0.7** | 创意发散 + 金融领域理解 |
+| 编码进化 | `coding` | **deepseek-v4** | **0.5** | 代码生成 + Bug 修复 + JSON 稳定输出 |
+| 方案执行 | `running` | deepseek-v4-flash | 0.0 | 无 LLM 调用，配置保留 |
+| 反馈总结 | `feedback` | **glm-5.2** | **0.4** | 数值推理 + 指标对比 + 决策判断 |
+
 ```json
 CHAT_MODEL_MAP={
   "direct_exp_gen": {"model": "openai/minimax-m3", "temperature": "0.7"},
-  "coding": {"model": "openai/kimi-k2.7-code", "temperature": "1.0"},
+  "coding": {"model": "openai/deepseek-v4", "temperature": "0.5"},
   "running": {"model": "openai/deepseek-v4-flash", "temperature": "0.0"},
-  "feedback": {"model": "openai/glm-5.2", "temperature": "0.6"}
+  "feedback": {"model": "openai/glm-5.2", "temperature": "0.4"}
 }
 ```
+
+### 选型理由详解
+
+**① direct_exp_gen → minimax-m3 (temp=0.7)**
+
+假设生成与实验设计属于**创意探索型任务**：
+- 需要发散性思维，从历史反馈中发现新的研究方向
+- MiniMax-M3 中文理解和创意生成能力强，适合头脑风暴
+- temperature=0.7 在确定性和创造性之间取得平衡：既不会太随机产生无意义假设，也不会太保守陷入局部最优
+- 失败代价低：错误假设会被后续的反馈环节淘汰，不会浪费太多计算资源
+
+**② coding → deepseek-v4 (temp=0.5)**
+
+CoSTEER 编码进化是整个系统的**核心瓶颈**，也是 LLM 调用最频繁、上下文最长、失败代价最高的环节：
+- **代码能力顶尖**：DeepSeek-V4 在 Python/PyTorch/pandas 代码生成和修复上国内领先
+- **JSON 输出稳定**：代码生成要求严格 JSON 格式返回 `code` 字段，DeepSeek 的 JSON 遵循度高，减少解析失败重试
+- **数学/逻辑推理强**：因子公式实现涉及数值计算逻辑，需要强推理能力
+- **长上下文支持**：256K 窗口足够容纳历史代码+错误信息+RAG 检索结果
+- temperature=0.5 的考量：代码必须遵循严格接口（如必须有 `def calculate(df)` 函数），不宜像之前用 1.0 那样过于随机；但进化需要探索不同方案，也不宜低于 0.3 陷入重复
+- 备选：追求极致代码质量可用 gpt-4o（成本高）；超长上下文刚需可用 kimi-k2.5（需将 temp 降到 0.5）
+
+**③ running → deepseek-v4-flash (temp=0.0)**
+
+Runner（[factor_runner.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/factor_runner.py) / [model_runner.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/model_runner.py)）在当前版本中**不调用 LLM**，仅执行 Python 代码和计算回测指标。配置此条目是为了未来扩展（如动态代码调整），用最便宜快速的模型即可。
+
+**④ feedback → glm-5.2 (temp=0.4)**
+
+反馈总结属于**分析判断型任务**：
+- 需要理解 IC、年化收益、最大回撤、夏普比率等量化指标的含义
+- 要进行 SOTA 对比，权衡"年化提升但 IC 下降"这类复杂判断
+- 智谱 GLM-5.2 在中文金融领域适配好，结构化输出稳定
+- temperature=0.4：决策判断（是否更新 SOTA）应尽量确定，但新假设方向建议需要一定创意；0.6 偏高可能导致同一组结果产生不一致判断
+
+### 选型原则
+
+| 维度 | 假设生成 | 编码进化 | 反馈总结 |
+|------|---------|---------|---------|
+| 任务类型 | 创意发散 | 精确执行 | 分析推理 |
+| 温度策略 | 高（0.7）探索多样性 | 中（0.5）平衡探索与规范 | 低（0.4）保证决策一致 |
+| 模型导向 | 通用强模型 | 代码专用模型 | 推理强模型 |
+| 关键约束 | JSON 输出稳定 | 长上下文+接口遵循 | 金融指标理解 |
+| 失败代价 | 低（反馈环节淘汰） | **高**（浪费进化轮次） | 中（影响迭代方向） |
+| 调用频率 | 每轮1次 | **每轮多次**（最多N次进化） | 每轮1-2次 |
 
 ---
 
