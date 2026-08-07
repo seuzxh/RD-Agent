@@ -40,10 +40,10 @@ dotenv run -- python rdagent/app/qlib_rd_loop/factor_from_report.py $LOG_PATH/__
 |------|------|------|------|
 | `path` | str | None | 断点恢复路径 |
 | `report_folder` | str | None | PDF 文件夹路径（与默认 JSON 二选一） |
-| `loop_n` | int | None | 最大轮数 |
-| `step_n` | int | None | 最大步数 |
 | `all_duration` | str | None | 最大运行时长 |
 | `checkout` | bool | True | 恢复时是否截断后续记录 |
+
+> ⚠️ 注意：研报场景的 `main()` 不接受 `loop_n`/`step_n` 参数（与因子/模型/全流程场景不同）。循环份数由构造函数中的 `min(len(pdfs), QLIB_FACTOR_REPORT_LIMIT)` 固定。
 
 ---
 
@@ -280,5 +280,5 @@ Loader(ABC)                              # rdagent/core/experiment.py
 | PDF加载器(NLP管道) | [rdagent/scenarios/qlib/factor_experiment_loader/pdf_loader.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/factor_experiment_loader/pdf_loader.py) |
 | 字典加载器 | [rdagent/scenarios/qlib/factor_experiment_loader/json_loader.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/factor_experiment_loader/json_loader.py) |
 | 研报场景定义 | [rdagent/scenarios/qlib/experiment/factor_from_report_experiment.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/experiment/factor_from_report_experiment.py) |
-| PDF文档读取 | [rdagent/components/loader/document_reader.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/loader/document_reader.py) |
+| PDF文档读取 | [rdagent/components/document_reader/document_reader.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/document_reader/document_reader.py) |
 | CoSTEER/Runner/Summarizer | 复用因子场景组件（参见 [01-factor.md](01-factor.md)） |

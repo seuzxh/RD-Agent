@@ -320,11 +320,11 @@ exp.tasks = unique_tasks
 
 遍历所有基线实验的子任务，若新任务的 `factor_name` 已存在，则跳过。模型实验被排除在去重检查之外（`isinstance(based_exp, QlibModelExperiment)` 时 continue）。
 
-> ⚠️ **`exp.tasks` vs `exp.sub_tasks`**：去重结果赋值给的是 `exp.tasks`（[factor_proposal.py#L130](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/factor_proposal.py#L130)），这是一个**动态挂载的属性**，并非 `Experiment` 基类构造函数中声明的字段。`Experiment.sub_tasks` 才是构造时传入、由基类正式声明的任务列表（[experiment.py#L411](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/experiment.py#L411)）。在 `QlibFactorHypothesis2Experiment.convert_response` 中，`exp = QlibFactorExperiment(tasks, hypothesis=hypothesis)` 把 LLM 生成的**全部**任务作为 `sub_tasks` 传入，因此去重后：
+> ⚠️ **`exp.tasks` vs `exp.sub_tasks`**：去重结果赋值给的是 `exp.tasks`（[factor_proposal.py#L131](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/factor_proposal.py#L131)），这是一个**动态挂载的属性**，并非 `Experiment` 基类构造函数中声明的字段。`Experiment.sub_tasks` 才是构造时传入、由基类正式声明的任务列表（[experiment.py#L411](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/experiment.py#L411)）。在 `QlibFactorHypothesis2Experiment.convert_response` 中，`exp = QlibFactorExperiment(tasks, hypothesis=hypothesis)` 把 LLM 生成的**全部**任务作为 `sub_tasks` 传入，因此去重后：
 > - `exp.sub_tasks`：仍保留 LLM 本轮生成的全部任务（包括与历史重名的）；
-> - `exp.tasks`：去重后的唯一任务列表，供下游 CoSTEER 实际编码使用。
+> - `exp.tasks`：去重后的唯一任务列表。
 >
-> 注意：`Experiment` 基类本身没有定义 `tasks` 属性，这里是子类动态添加的，阅读代码时不要与 `sub_tasks` 混淆。
+> **需要特别注意**：下游 CoSTEER 实际编码时读取的是 `exp.sub_tasks`（见 [evolvable_subjects.py#L29](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/evolvable_subjects.py#L29) `cls(sub_tasks=exp.sub_tasks)`），并**不读取 `exp.tasks`**。全仓库中 `exp.tasks` 仅在日志记录（`research.tasks` tag）处被引用。因此这里的名称去重结果当前并未实际阻止重复因子进入 CoSTEER 编码流程——真正防止重复因子进入回测的是 Runner 阶段的 IC 去重（`deduplicate_new_factors`）。阅读代码时不要误以为 `exp.tasks` 会替换 `sub_tasks`。
 
 ---
 

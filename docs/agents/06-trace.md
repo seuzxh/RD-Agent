@@ -503,4 +503,4 @@ GET /traces/{trace_name}/sota
 | FileStorage pickle存储 | [rdagent/log/storage.py#L28-L115](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/log/storage.py#L28-L115) |
 | 日志配置(trace_path) | [rdagent/log/conf.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/log/conf.py) |
 | SOTA 查询工具 | [rdagent/log/sota_query.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/log/sota_query.py) |
-| 存储路径详细规则 | [doc/architecture/trace-storage-paths.md](file:///home/zxh/projects/1.multialphaV/RD-Agent/doc/architecture/trace-storage-paths.md) |
+| 存储路径详细规则 | [docs/architecture/trace-storage-paths.md](file:///home/zxh/projects/1.multialphaV/RD-Agent/docs/architecture/trace-storage-paths.md) |

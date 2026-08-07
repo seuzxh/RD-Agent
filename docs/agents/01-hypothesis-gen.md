@@ -639,8 +639,10 @@ HypothesisGen 有三个具体子类，分别对应三种场景：`QlibFactorHypo
 
 **targets 值**：`"model tuning"`
 
+> ⚠️ **代码 bug：SOTA 键名大小写不匹配**：`prepare_context` 返回字典中使用大写 `SOTA_hypothesis_and_feedback`（[model_proposal.py#L53](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/model_proposal.py#L53)），但基类 `gen()` 读取时用的是小写 `sota_hypothesis_and_feedback`（[components/proposal/__init__.py#L53-L55](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L53-L55)）。由于 `"sota_hypothesis_and_feedback" in context_dict` 判断为 `False`，基类会取默认值 `""`，导致 user prompt 中 `{% if sota_hypothesis_and_feedback != "" %}` 分支**永远不渲染**——即模型场景虽然计算了 SOTA 文本，但实际上并未发送给 LLM。同样的问题也存在于全流程场景（[quant_proposal.py#L157](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/quant_proposal.py#L157)）。这是代码缺陷，不是预期行为。
+
 **关键特点**：
-- 模型场景额外提供 SOTA 引用，因为模型架构变更成本高，需要明确参考 SOTA 结构
+- 模型场景**意图**额外提供 SOTA 引用（但受上述大小写 bug 影响，当前实际未送达 LLM）
 - RAG 引导是**硬约束**而非渐进式——模型训练成本高，不鼓励早期尝试复杂模型
 - `last_hypothesis_and_feedback` 特别包含了 `training_log`（stdout），帮助 LLM 分析训练问题（过拟合/欠拟合/梯度消失等）
 
