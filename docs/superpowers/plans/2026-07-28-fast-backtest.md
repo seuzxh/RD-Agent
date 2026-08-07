@@ -1,3 +1,4 @@
+{% raw %}
 # 快速回测(Fast Backtest)实现计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -1466,3 +1467,5 @@ git commit -m "test(fast-backtest): end-to-end integration verification" --allow
 **已知风险(实现时注意)**:
 - `LoopBase.__new__` 绕过 `__init__` 后,dump 是否能被 `pickle.load` 正确恢复并让 `query_sota` 读 `loop.trace` —— Task 3 Step 5/6 的测试覆盖了这点,但真实 `query_sota` 调用链需 Task 9 Step 4 最终验证。若失败,备选:dump 前补设 `loop.loop_idx=0, loop.step_idx={}, loop.loop_n=None, loop.step_n=None` 等 `__init__` 中的字段。
 - `QlibFBWorkspace` 的 `extra_vars` 注入 Jinja 的方式需确认 —— 现有代码用 `inject_code_from_folder` 渲染模板,Task 3 假设可通过 `extra_vars` 传参。实现时检查 `FBWorkspace.inject_code_from_folder` 是否接受额外变量;若不接受,改为渲染后字符串替换或直接构造 yaml。
+
+{% endraw %}

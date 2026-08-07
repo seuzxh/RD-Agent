@@ -83,31 +83,59 @@ class FBWorkspace(Workspace):
 
 ### 3.3 ExperimentFeedback（实验反馈）
 
-反馈分为两类：通用反馈和因子/模型场景专用反馈：
+multialpha 系统中有**两个层级**的反馈，分别对应 R&D 循环的不同阶段：
 
-**基类**：`ExperimentFeedback`
+#### 3.3.1 编码阶段反馈：CoSTEERSingleFeedback（CoSTEER 评估器）
 
-**因子场景反馈**（`QlibFactorFeedback`）包含三级管线的评估结果：
+由 [FactorEvaluatorForCoder](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/factor_coder/evaluators.py#L20) / ModelEvaluatorForCoder 在**编码-演化循环**中生成，存储在 EvolvingItem 中而非直接存入 Trace.hist。它通过三级管线评估单个子任务（因子/模型）的代码实现：
 
-| 评估级 | 对应字段 | 评估内容 |
+| 评估级 | 对应字段 | 评估器 | 评估内容 |
+|--------|---------|--------|---------|
+| 执行检查 | `execution` | `FactorFBWorkspace.execute()` | 代码是否能运行，包含 stdout/stderr 和 traceback，过滤 warning 和超长数值列表 |
+| 返回值检查 | `return_checking` | `FactorValueEvaluator`（组合9个子检查器） | 输出 DataFrame 的格式与数值校验：单列检查、Inf值检查、输出格式LLM判定、日频检查、行数比、索引相似度、缺失值、等值率、IC/RankIC 相关性 |
+| **代码评审** | `code` | `FactorCodeEvaluator` | **LLM 驱动的 Code Review**：检查代码逻辑是否与因子任务描述一致、是否与 GT 代码对齐（如有）、结合执行错误和值差异指出关键问题 |
+| 最终决策 | `final_decision` | `FactorFinalDecisionEvaluator` | LLM 综合 execution + return_checking + code 三方信息，输出布尔决策（是否接受该实现） |
+
+**代码评审（Code Review）详细机制**（[FactorCodeEvaluator](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/factor_coder/eva_utils.py#L67-L117)）：
+
+- **输入**：因子任务描述、完整 Python 代码（`all_codes`，排除 test 文件）、执行反馈、值检查反馈、GT 代码（benchmark 模式下提供）
+- **Prompt 设计**：系统提示强调"评审意见发送给编码 agent 用于修正代码，不给用户看"，要求：不写代码、只指出关键问题、简短明确、忽略非重要问题、每个批评附改进建议、无问题则返回"No critics found"
+- **GT 模式**：有 GT 代码时以 GT 为准检查一致性；无 GT 时检查代码合理性和正确性
+- **Token 截断保护**：若 prompt 超 token 限制，自动从 execution_feedback 中部截断（最多 10 次）
+- **输出格式**：自由文本，每行一条 critic，格式为 `critic N: <批评内容>`
+- **触发条件**：值检查未明确通过时才触发 code review（值检查明确失败 → code review + final_decision=False；值检查不明确 → code review + LLM 最终决策）
+
+**返回值检查（Value Evaluator）的7个子检查器**：
+
+| 检查器 | 检查内容 | 失败条件 |
 |--------|---------|---------|
-| 执行检查 | `execution` | 代码是否能运行（traceback 信息） |
-| 值/形状检查 | `return_checking` | 输出 DataFrame 的形状、数值范围、与 GT 相关性 |
-| 代码评审 | `code_review` | LLM 代码质量评审 |
-| 最终决策 | `final_decision` | 布尔值，是否接受为 SOTA |
+| `FactorSingleColumnEvaluator` | 输出是否只有一列（v1 因子） | 列数 ≠ 1 |
+| `FactorInfEvaluator` | 是否存在 Inf/-Inf 值 | Inf 数量 > 0 |
+| `FactorOutputFormatEvaluator` | LLM 判断输出格式是否正确 | JSON `output_format_decision=false` |
+| `FactorDatetimeDailyEvaluator` | 索引是否为 datetime 且为日频 | 含分钟级数据或非 datetime 索引 |
+| `FactorRowCountEvaluator` | 行数与 GT 的比率 | ratio ≤ 0.99 |
+| `FactorIndexEvaluator` | 索引 Jaccard 相似度与 GT | similarity ≤ 0.99 |
+| `FactorMissingValuesEvaluator` | 缺失值数量是否与 GT 一致 | 缺失值数不等 |
+| `FactorEqualValueRatioEvaluator` | 等值率（误差 < 1e-6） | ratio 较低 |
+| `FactorCorrelationEvaluator` | IC/RankIC 与 GT 相关性（hard_check） | IC ≤ 0.99 或 RankIC ≤ 0.99 |
 
-**假设反馈**（`HypothesisFeedback`，由 Summarizer 生成）：
+多子任务反馈聚合为 [CoSTEERMultiFeedback](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/evaluators.py#L199-L228)，`final_decision` 取所有子反馈的 AND（全部通过才算通过）。
+
+#### 3.3.2 实验结果反馈：HypothesisFeedback（Summarizer 生成）
+
+由 [QlibFactorExperiment2Feedback](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/feedback.py#L54) / QlibModelExperiment2Feedback 在**回测执行后**生成，直接存入 `Trace.hist`。它**不包含 code review**，而是基于回测指标评估假设是否成立：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `observations` | `str \| None` | 对实验结果的观察（指标分析） |
-| `hypothesis_evaluation` | `str \| None` | 对假设的评估（假设方向是否正确） |
-| `new_hypothesis` | `str \| None` | 建议的下一步研究方向 |
-| `reason` | `str` | 决策理由 |
-| `decision` | `bool` | 是否更新 SOTA |
-| `acceptable` | `bool \| None` | 结果是否可接受 |
-| `code_change_summary` | `str \| None` | 代码变更摘要 |
-| `exception` | `Exception \| None` | 异常信息（执行失败时） |
+| `observations` | `str` | 对实验结果的观察（IC、年化收益、最大回撤等指标对比） |
+| `hypothesis_evaluation` | `str` | 对假设的评估（假设方向是否正确、为什么） |
+| `new_hypothesis` | `str` | 建议的下一步研究假设 |
+| `reason` | `str` | 决策理由的详细推理 |
+| `decision` | `bool` | 是否替换当前 SOTA（即本次实验是否超越基线） |
+
+**生成过程**：Summarizer 将当前实验结果与 SOTA 结果的关键指标（IC、年化超额收益、最大回撤）拼接成文本，连同假设文本和各子任务信息一起发给 LLM（glm-5.2），LLM 以 JSON 模式返回上述5个字段，其中 `decision` 决定是否更新 SOTA。
+
+> **关键区别**：CoSTEER 反馈评估的是**代码实现是否正确**（编码阶段，含 code review），HypothesisFeedback 评估的是**研究假设是否成立**（回测阶段，基于指标）。前者决定代码是否需要重写，后者决定研究方向是否调整。
 
 ---
 

@@ -1,3 +1,4 @@
+{% raw %}
 # 假设生成智能体（HypothesisGen）
 
 > **定位**：multialpha R&D 循环的"大脑"与"研究员"。基于历史实验反馈、SOTA 结果和领域知识，生成可验证、可执行的科学假设，为后续的代码实现与实验验证提供方向。
@@ -918,3 +919,5 @@ Hypothesis(
 | PDF研报循环 | [rdagent/app/qlib_rd_loop/factor_from_report.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/factor_from_report.py) |
 | 主循环调用 | [rdagent/components/workflow/rd_loop.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py#L183-L209) |
 | LiteLLM路由 | [rdagent/oai/backend/litellm.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/oai/backend/litellm.py) |
+
+{% endraw %}

@@ -227,6 +227,7 @@ ModelRDLoop
 
 Qlib 使用 [GeneralPTNN](https://github.com/microsoft/qlib) 作为通用 PyTorch 模型包装器，通过 `pt_model_uri` 动态加载 LLM 生成的模型类：
 
+{% raw %}
 ```yaml
 # conf_baseline_factors_model.yaml 核心配置
 model:
@@ -243,6 +244,7 @@ model:
     batch_size: {{ batch_size }}
     weight_decay: {{ weight_decay }}
 ```
+{% endraw %}
 
 LLM 只需在 `model.py` 中定义一个名为 `model_cls` 的 `nn.Module` 子类，Qlib 自动完成数据加载、训练循环、早停、预测等流程。
 
