@@ -125,7 +125,7 @@ FactorRDLoop
 │  │  │   │   └─ error: 同类错误修复方案                        │  │
 │  │  │   ├─ FactorMultiProcessEvolvingStrategy: LLM生成/修改  │  │
 │  │  │   │   factor.py代码                                    │  │
-│  │  │   ├─ 本地执行factor.py（Conda/Docker），生成result.h5  │  │
+│  │  │   ├─ 本地执行factor.py（LocalEnv+Conda），生成result.h5│  │
 │  │  │   ├─ 多层评估：                                         │  │
 │  │  │   │   ├─ 执行检查：代码能否运行，收集execution_feedback │  │
 │  │  │   │   ├─ 形状/值检查（FactorValueEvaluator，含多个子   │  │

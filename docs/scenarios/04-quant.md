@@ -269,10 +269,10 @@ weights = (0.1, 0.1, 0.05, 0.05, 0.25, 0.15, 0.1, 0.2)
 
 Quant 场景中因子探索的渐进式复杂度阈值基于 **总历史轮次 `len(trace.hist)<6`**（而非 factor 轮计数，也非纯因子场景的15轮），判断代码见 [quant_proposal.py:92](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/quant_proposal.py#L92)：
 
-| 总历史轮次 | RAG 提示 |
+| 总历史轮次 | RAG 提示（[quant_proposal.py#L92-L95](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/quant_proposal.py#L92-L95)） |
 |------|---------|
 | `len(trace.hist)<6` | "Try the easiest and fastest factors to experiment with from various perspectives first." |
-| `len(trace.hist)>=6` | "Try factors that can achieve high IC (e.g., ML-based factors) and do not implement factors already in the SOTA factor library." |
+| `len(trace.hist)>=6` | "Now, you need to try factors that can achieve high IC (e.g., machine learning-based factors)! Do not include factors that are similar to those in the SOTA factor library!" |
 
 ---
 

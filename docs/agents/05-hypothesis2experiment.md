@@ -191,7 +191,7 @@ Hypothesis2Experiment(ABC, Generic[ASpecificExp])    # rdagent/core/proposal.py
 | `target_list` | 始终硬编码为空列表 `[]`，属于死代码（见下文说明） |
 | `RAG` | 启发式策略文本（非向量检索，因子场景为 `None`） |
 
-> 🧹 **死代码说明**：`target_list` 在因子/模型两个子类中都被硬编码为 `[]`，并且虽然 `convert()` 把它作为模板变量传入 `user_prompt`，但 `prompts.yaml` 的 user 模板中**并没有 `{{ target_list }}` 占位符**，因此该变量实际上不会渲染到提示词中。`RAG` 同理被传入 user 模板，但模板中也没有 `{{ RAG }}` 占位符——模型场景返回的 RAG 文本同样不会出现在最终提示词里。
+> 🧹 **死代码说明**：`target_list` 在因子/模型两个子类中都被硬编码为 `[]`，并且虽然 `convert()` 把它作为模板变量传入 `user_prompt`，但 `prompts.yaml` 的 user 模板中**并没有 {% raw %}`{{ target_list }}`{% endraw %} 占位符**，因此该变量实际上不会渲染到提示词中。`RAG` 同理被传入 user 模板，但模板中也没有 {% raw %}`{{ RAG }}`{% endraw %} 占位符——模型场景返回的 RAG 文本同样不会出现在最终提示词里。
 
 ### 4.2 提示词渲染
 
@@ -208,7 +208,7 @@ Please generate the output following the format below:
 ```
 {% endraw %}
 
-> ⚠️ **`scenario` 的实际来源**：模板中的 `{{ scenario }}` 占位符由基类 `convert()` 直接渲染，传入的值是 `trace.scen.get_scenario_all_desc(filtered_tag=self.targets)`（[components/proposal/__init__.py#L98](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L98)），**并不读取** `context["scenario"]`。子类 `prepare_context` 中构建的 `scenario` 局部变量（例如因子场景调用 `get_scenario_all_desc(action="factor")`）虽然被放进了返回字典，但在 system prompt 渲染时被忽略。两者通常恰好都来自同一个 scenario 对象，只是过滤参数不同（基类用 `filtered_tag=self.targets`，子类用 `action="factor"`/`"model"`）。
+> ⚠️ **`scenario` 的实际来源**：模板中的 {% raw %}`{{ scenario }}`{% endraw %} 占位符由基类 `convert()` 直接渲染，传入的值是 `trace.scen.get_scenario_all_desc(filtered_tag=self.targets)`（[components/proposal/__init__.py#L98](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L98)），**并不读取** `context["scenario"]`。子类 `prepare_context` 中构建的 `scenario` 局部变量（例如因子场景调用 `get_scenario_all_desc(action="factor")`）虽然被放进了返回字典，但在 system prompt 渲染时被忽略。两者通常恰好都来自同一个 scenario 对象，只是过滤参数不同（基类用 `filtered_tag=self.targets`，子类用 `action="factor"`/`"model"`）。
 
 **User prompt**（[components/proposal/prompts.yaml#L54-L71](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/prompts.yaml#L54-L71)）：
 
@@ -223,7 +223,7 @@ Please generate the new {{ targets }} based on the information above.
 ```
 {% endraw %}
 
-> 📌 **传入但模板未使用的变量**：基类 `convert()` 在渲染 user_prompt 时额外传入了 `target_list=context["target_list"]` 和 `RAG=context["RAG"]`（[components/proposal/__init__.py#L113-L114](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L113-L114)），但该 YAML 模板里既没有 `{{ target_list }}` 也没有 `{{ RAG }}` 占位符。Jinja2 对未使用的额外变量静默忽略，因此这两个值（无论因子场景的 `RAG=None` 还是模型场景返回的那段数据规模约束文本）都不会出现在最终发给 LLM 的 user prompt 中。
+> 📌 **传入但模板未使用的变量**：基类 `convert()` 在渲染 user_prompt 时额外传入了 `target_list=context["target_list"]` 和 `RAG=context["RAG"]`（[components/proposal/__init__.py#L113-L114](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L113-L114)），但该 YAML 模板里既没有 {% raw %}`{{ target_list }}`{% endraw %} 也没有 {% raw %}`{{ RAG }}`{% endraw %} 占位符。Jinja2 对未使用的额外变量静默忽略，因此这两个值（无论因子场景的 `RAG=None` 还是模型场景返回的那段数据规模约束文本）都不会出现在最终发给 LLM 的 user prompt 中。
 
 ### 4.3 LLM 调用
 
@@ -294,7 +294,9 @@ exp.based_experiments = [QlibFactorExperiment(sub_tasks=[])] + [
 ]
 ```
 
-基线链以一个空实验开头，后跟所有历史因子实验。这使得 Runner 可以沿链回溯获取 SOTA 因子。
+基线链以一个空实验开头，后跟所有**被接受的**（`feedback.decision == True`）历史因子实验。
+
+> ⚠️ **`if t[1]` 的含义**：`ExperimentFeedback.__bool__` 返回 `self.decision`（[proposal.py#L78-L79](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L78-L79)），因此 `if t[1]` 等价于 `if t[1].decision == True`。这意味着 `based_experiments` 只包含历史上被标记为 SOTA（`decision=True`）的因子实验，而非全部历史实验。被拒绝（`decision=False`）的实验不会进入基线链。这使得 Runner 沿链回溯时只会继承已被验证的 SOTA 因子。
 
 ### 5.4 因子去重
 
@@ -346,6 +348,8 @@ exp.tasks = unique_tasks
 | `last_hypothesis_and_feedback` | 最近一轮模型实验 | 了解最近尝试 |
 | `SOTA_hypothesis_and_feedback` | 最近一个 decision=True 的模型实验 | 对比最优基线 |
 
+> ⚠️ **已知代码 Bug（大写键名不匹配）**：模型 H2E 的 `prepare_context` 返回的键名为大写 `SOTA_hypothesis_and_feedback`（[model_proposal.py#L128](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/model_proposal.py#L128)），但基类 `LLMHypothesis2Experiment.convert()` 读取的是小写 `sota_hypothesis_and_feedback`（[components/proposal/__init__.py#L110-L112](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L110-L112)，使用 `if "sota_hypothesis_and_feedback" in context` 判断）。由于大小写不匹配，`"sota_hypothesis_and_feedback" in context` 为 `False`，基类传入空字符串 `""`，导致 **SOTA 假设与反馈段落实际不会被渲染到 user prompt 中**。`hypothesis_and_feedback` 和 `last_hypothesis_and_feedback` 键名小写正确，不受影响。此 bug 与模型 HypothesisGen 中的同名 bug 一致（见 [01-hypothesis-gen.md](01-hypothesis-gen.md)）。
+
 **RAG 启发策略**（[L131](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/model_proposal.py#L131)）：
 
 ```
@@ -360,7 +364,7 @@ return the same model and adjust these parameters instead.
 - 数据规模约束（训练集 < 100 万样本，验证集约 25 万），引导控制模型大小
 - 允许返回相同模型架构但调整超参数，支持超参数优化场景
 
-> 🧹 如 4.2 节所述，这段 RAG 文本虽然由 `prepare_context` 返回并传入模板渲染，但 user 模板中没有 `{{ RAG }}` 占位符，因此当前版本实际不会发送给 LLM，属于未生效的预留逻辑。`target_list=[]` 同理。
+> 🧹 如 4.2 节所述，这段 RAG 文本虽然由 `prepare_context` 返回并传入模板渲染，但 user 模板中没有 {% raw %}`{{ RAG }}`{% endraw %} 占位符，因此当前版本实际不会发送给 LLM，属于未生效的预留逻辑。`target_list=[]` 同理。
 
 ### 6.2 convert_response 任务构建
 
@@ -398,9 +402,9 @@ for model_name in response_dict:
 | 输出字段 | name, description, formulation, variables | + architecture, hyperparameters, training_hyperparameters, model_type |
 | 每轮任务数 | 可多个因子 | 提示词要求"only design one model" |
 | 去重 | 有（按 factor_name） | 无 |
-| 基线链 | 空实验 + 所有因子实验 | 所有模型实验 |
-| SOTA 上下文 | 不单独提取 | 单独提取 last 和 SOTA |
-| RAG 策略 | `None`（不设置；分阶段 RAG 属于 HypothesisGen，不属于 H2E） | 代码中返回数据规模约束 + 超参数调整建议文本，但同样因模板无 `{{ RAG }}` 占位符而未被渲染 |
+| 基线链 | 空实验 + 所有被接受的因子实验（decision=True） | 所有被接受的模型实验（decision=True），无空实验前缀 |
+| SOTA 上下文 | 不单独提取 | prepare_context 中提取，但因大写键名 bug 实际未渲染（见上文说明） |
+| RAG 策略 | `None`（不设置；分阶段 RAG 属于 HypothesisGen，不属于 H2E） | 代码中返回数据规模约束 + 超参数调整建议文本，但同样因模板无 {% raw %}`{{ RAG }}`{% endraw %} 占位符而未被渲染 |
 
 ---
 
@@ -413,19 +417,21 @@ for model_name in response_dict:
 ```
 exp.based_experiments = [
     QlibFactorExperiment(sub_tasks=[]),   # [0] 空基线（仅因子场景）
-    factor_exp_1,                          # [1] 第一轮因子实验
-    factor_exp_2,                          # [2] 第二轮因子实验
+    factor_exp_1,                          # [1] 第一轮被接受的因子实验（decision=True）
+    factor_exp_2,                          # [2] 第二轮被接受的因子实验（decision=True）
     ...
 ]
 ```
 
-Runner 在执行时会递归执行基线链中未完成的实验（`result is None`），并从中提取 SOTA 因子。这使得每轮实验都能继承历史所有已验证的因子。
+注意：只有 `feedback.decision == True`（即被标记为 SOTA）的实验才会进入基线链，被拒绝的实验不会包含在内。Runner 在执行时会递归执行基线链中未完成的实验（`result is None`），并从中提取 SOTA 因子。这使得每轮实验都能继承历史所有已验证的因子。
 
 ### 7.2 去重的意义
 
-因子去重确保：
-1. CoSTEER 不会重复编写已有因子代码，节省 LLM 调用
-2. Runner 不会因重复因子导致 IC 去重时全部被剔除（IC ≥ 0.99）
+> ⚠️ **实际效果说明**：如 5.4 节所述，去重结果赋值给 `exp.tasks`，而 CoSTEER 实际读取的是 `exp.sub_tasks`（未去重），因此**名称去重当前并未阻止重复因子进入 CoSTEER 编码流程**。真正防止重复因子进入回测的是 Runner 阶段的 IC 去重（`deduplicate_new_factors`，阈值 IC ≥ 0.99）。名称去重的结果仅用于日志记录（`research.tasks` tag）。
+
+因子去重（设计意图）确保：
+1. 避免与历史 SOTA 因子重名（但由于 `exp.tasks` 未被 CoSTEER 使用，此效果当前未实际生效）
+2. Runner 阶段的 IC 去重会处理语义重复因子（IC ≥ 0.99 的因子被剔除），这是真正生效的去重机制
 3. 假设生成的探索方向始终是新的
 
 去重仅按 `factor_name` 精确匹配，不做语义相似度判断。若 LLM 生成了语义相同但名称不同的因子，仍会被保留，后续 Runner 的 IC 去重会处理这种情况。

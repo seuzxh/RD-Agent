@@ -208,8 +208,8 @@ async def direct_exp_gen(self, prev_out):
 | 情况 | 行为 |
 |------|------|
 | 首轮（`len(trace.hist)==0`） | `hypothesis_and_feedback` 设为"No previous hypothesis..."，RAG 引导从简单因子开始 |
-| 因子场景前15轮（`len(trace.hist)<15`） | RAG: "Try the easiest and fastest factors from various perspectives first." |
-| 因子场景第16轮起（`len(trace.hist)>=15`） | RAG: "Now try factors that can achieve high IC (e.g., ML-based factors)." |
+| 因子场景前15轮（`len(trace.hist)<15`） | RAG: "Try the easiest and fastest factors to experiment with from various perspectives first." |
+| 因子场景第16轮起（`len(trace.hist)>=15`） | RAG: "Now, you need to try factors that can achieve high IC (e.g., machine learning-based factors)." |
 | 存在 SOTA | 反向遍历 hist 找到最近 `decision=True` 的节点，渲染其完整信息 |
 | 全部失败 | SOTA 字段提示"No SOTA available since previous experiments were not accepted" |
 
@@ -244,19 +244,20 @@ async def direct_exp_gen(self, prev_out):
 }
 ```
 
-**因子假设规范**（`factor_hypothesis_specification`）共5条规则：
+**因子假设规范**（`factor_hypothesis_specification`）共5条规则（第5条含两个要点）：
 1. 每次生成 1-5 个因子
 2. 优先简单有效的因子
 3. 逐步增加复杂度（ML因子、多维数据因子）
 4. 连续失败时切换新方向
-5. 避免重复实现已超越 SOTA 的因子
+5. 超越SOTA的因子已入库，避免重复实现；不论生成几个因子，**只返回一组 hypothesis + reason**
 
 **模型假设规范**（`model_hypothesis_specification`）共8条规则，重点包括：
 - 聚焦 PyTorch 模型架构设计（层配置、激活函数、正则化）
-- 不做特征相关处理
+- 不做特征相关处理（但可对输入时序数据做创新性变换）
 - 训练超参调整也是有效改进策略
-- 鼓励探索 NeurIPS/ICML 级别的创新时序模型结构
-- 训练集约100万样本、验证集约25万，据此控制模型规模
+- 鼓励探索 NeurIPS/ICLR/ICML/SIGKDD 级别的创新时序模型结构
+- 首轮从简单小架构开始，连续失败可回归简单架构
+- 注意：数据规模约束（训练集约100万样本、验证集约25万）来自 RAG 文本，**不在** `model_hypothesis_specification` 规范中
 
 ---
 
@@ -761,39 +762,46 @@ RAG引导:
 ## Specific task:
 - {factor_name}: {factor_description}    (每个子任务的简要信息)
 ## Backtest Analysis and Feedback:
-Backtest Result: IC=xx, ARR=xx, MDD=xx   (只展示3个核心指标)
+Backtest Result: IC=xx, ARR(without_cost)=xx, MDD(without_cost)=xx
 Observation: {feedback.observations}
 Hypothesis Evaluation: {feedback.hypothesis_evaluation}
-Decision: {feedback.decision}            (True/False)
+Decision (Whether the hypothesis was successful): {feedback.decision}
 =========================================================
 ```
 
-`last_hypothesis_and_feedback` 和 `sota_hypothesis_and_feedback` 额外包含：
+> ⚠️ **注意指标口径**：假设生成阶段的历史渲染使用的是**扣费前**（`without_cost`）的年化收益和最大回撤（[prompts.yaml#L15](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/prompts.yaml#L15)），而反馈智能体（Summarizer）的 `IMPORTANT_METRICS` 使用的是**扣费后**（`with_cost`）指标。两者口径不同，阅读代码时需注意区分。
+
+`last_hypothesis_and_feedback` 额外包含：
 - **Training Log**（`experiment.stdout`）：模型训练日志，帮助分析训练问题
-- **New Hypothesis**（`feedback.new_hypothesis`）：上轮反馈建议的新方向（仅参考）
+- 一段固定提示："Here, you need to focus on analyzing whether there are any issues with the training..."
+- **New Hypothesis**（`feedback.new_hypothesis`）和 **Reasoning**（`feedback.reason`）：上轮反馈建议的新方向（仅参考）
+
+`sota_hypothesis_and_feedback` 额外包含：
+- **Training Log**（`experiment.stdout`）：SOTA 实验的训练日志
+- 注意：SOTA 模板**不包含** `New Hypothesis`/`Reasoning` 字段（与 last 模板不同）
 
 ### factor_hypothesis_specification 规范要点
 
 [prompts.yaml#L95-L112](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/prompts.yaml#L95-L112)：
 
-1. 每轮生成 1-5 个因子
+1. 每轮生成 1-5 个因子，平衡简单与复杂度
 2. 先简单有效因子，避免一开始就用复杂/组合因子
-3. 积累结果后逐步增加复杂度（ML-based、多维原始数据）
+3. 积累结果后逐步增加复杂度（ML-based、多维原始数据），简单因子验证后再组合
 4. 连续失败则换方向，可回到简单因子
-5. 超越SOTA的因子已入库，避免重复实现
-6. 不论生成几个因子，**只返回一组 hypothesis + reason**
+5. 超越SOTA的因子已入库，避免重复实现；不论生成几个因子，**只返回一组 hypothesis + reason**
 
 ### model_hypothesis_specification 规范要点
 
 [prompts.yaml#L85-L93](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/prompts.yaml#L85-L93)：
 
-1. 分析整体实验进展，找出去设计不足之处（参数/架构/缺乏创新）
+1. 分析整体实验进展，找出设计不足之处（参数/架构/缺乏创新）
 2. 重点关注 last 和 SOTA 两轮，可基于其一优化或提出新方向
 3. 首轮从简单小架构开始
 4. 连续失败则探索全新方向，可回归简单架构
-5. **只聚焦 PyTorch 模型架构**（层配置、激活函数、正则化、模型结构），不做特征处理
-6. 超参调整也是有效策略
-7. 可用标准库基线，鼓励自定义架构，创新对标 NeurIPS/ICLR/ICML/KDD
+5. **只聚焦 PyTorch 模型架构**（层配置、激活函数、正则化、模型结构），不做特征处理，但可对输入时序数据做创新性变换
+6. 避免包含与架构无关的内容（如输入特征、优化策略）
+7. 超参调整也是有效策略
+8. 可用标准库基线，鼓励自定义架构，创新对标 NeurIPS/ICLR/ICML/SIGKDD
 
 ---
 

@@ -162,12 +162,19 @@ multialpha 系统中有**两个层级**的反馈，分别对应 R&D 循环的不
 | `new_hypothesis` | `str \| None` | 建议的下一步研究假设 |
 | `reason` | `str` | 决策理由的详细推理 |
 | `decision` | `bool` | 是否替换当前 SOTA（即本次实验是否超越基线） |
-| `acceptable` | `bool \| None` | 是否可接受（由子类 `HypothesisFeedback` 新增，区别于基类 `decision`；Qlib 场景的 Summarizer 正常流程中从不设置此字段，始终为默认值 `None`） |
+| `acceptable` | `bool \| None` | 是否可接受（由子类 `HypothesisFeedback` 新增，区别于基类 `decision`；Qlib 因子/模型 Summarizer 正常流程中从不设置此字段，始终为默认值 `None`。但**异常分支存在差异**：基类 RDLoop 的 feedback 步骤在异常时设置 `acceptable=False`，而 QuantRDLoop 的异常分支不设置该字段，使用默认值 `None`） |
 | `exception` | `Exception \| None` | 若实验因异常未能生成可运行结果，记录异常对象；正常回测时为 `None`（继承自基类 `ExperimentFeedback`） |
 | `eda_improvement` | `str \| None` | EDA（探索性数据分析）改进建议（继承自基类 `ExperimentFeedback`，量化反馈生成流程通常不设置） |
 | `code_change_summary` | `str \| None` | 代码变更摘要（继承自基类 `ExperimentFeedback`，异常分支中为空字符串） |
 
-**生成过程**：Summarizer 将当前实验结果与 SOTA 结果的关键指标（`IMPORTANT_METRICS` 中的 IC、扣费年化超额收益、扣费最大回撤，见 4.1）拼接成文本，连同假设文本和各子任务信息一起发给 LLM（glm-5.2），LLM 以 JSON 模式返回 `observations`、`hypothesis_evaluation`、`new_hypothesis`、`reason`、`decision` 等字段，其中 `decision` 决定是否更新 SOTA。异常分支（workflow 捕获到异常，见 [quant.py#L112-L120](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/quant.py#L112-L120)）会直接构造 `decision=False` 的反馈，`observations` 设为异常字符串，其余字段为空，不经过 LLM，`acceptable` 字段使用默认值 `None`。
+**生成过程**：Summarizer 将当前实验结果与 SOTA 结果的关键指标（`IMPORTANT_METRICS` 中的 IC、扣费年化超额收益、扣费最大回撤，见 4.1）拼接成文本，连同假设文本和各子任务信息一起发给 LLM，LLM 以 JSON 模式返回 `observations`、`hypothesis_evaluation`、`new_hypothesis`、`reason`、`decision` 等字段，其中 `decision` 决定是否更新 SOTA。
+
+**异常分支有两套实现，字段差异如下**：
+
+- **基类 `RDLoop.feedback`**（因子/模型场景，见 [rd_loop.py#L222-L236](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py#L222-L236)）：异常时构造 `HypothesisFeedback(reason=str(e), decision=False, code_change_summary="", acceptable=False)`，异常信息放在 `reason`，`observations` 为 `None`，`acceptable=False`。
+- **`QuantRDLoop.feedback`**（全流程场景，见 [quant.py#L111-L128](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/quant.py#L111-L128)）：异常时构造 `HypothesisFeedback(observations=str(e), hypothesis_evaluation="", new_hypothesis="", reason="", decision=False)`，异常信息放在 `observations`，`reason` 为空字符串，`acceptable` 未设置（使用默认值 `None`）。
+
+两者均不经过 LLM，且 `decision=False`、`code_change_summary=""`，但 `reason`/`observations`/`acceptable` 的赋值不同，属于代码层面的不一致。
 
 > **关键区别**：CoSTEER 反馈评估的是**代码实现是否正确**（编码阶段，含 code review），HypothesisFeedback 评估的是**研究假设是否成立**（回测阶段，基于指标）。前者决定代码是否需要重写，后者决定研究方向是否调整。
 
@@ -304,17 +311,19 @@ git_ignore_folder/traces/
 
 ### 6.1 DAG 结构
 
-Trace 不是简单的线性历史，而是通过 `dag_parent` 构成有向无环图：
+Trace 不是简单的线性历史，而是通过 `dag_parent` 构成有向无环图。在默认线性演化模式下，每个新节点的父节点是 **hist 中的上一个节点**（不论其 feedback 是否为 True）：
 
 ```
-轮次0: Exp0 ──(feedback=True)──→ SOTA0
-         │
-轮次1: Exp1(based=[SOTA0]) ──(feedback=False)──→ 失败
-         │
-轮次2: Exp2(based=[SOTA0]) ──(feedback=True)──→ SOTA2 (新SOTA)
-         │                              ↑
-轮次3: Exp3(based=[SOTA2]) ──(feedback=True)──→ SOTA3 (最新SOTA)
+轮次0: Exp0(feedback=True)  ← SOTA0
+          ↓ dag_parent=(0,)
+轮次1: Exp1(feedback=False, based_experiments=[SOTA0])
+          ↓ dag_parent=(1,)   ← 注意：父节点是 Exp1（失败节点），不是 Exp0
+轮次2: Exp2(feedback=True, based_experiments=[SOTA0])  ← SOTA2
+          ↓ dag_parent=(2,)
+轮次3: Exp3(feedback=True, based_experiments=[SOTA2])  ← SOTA3
 ```
+
+> ⚠️ **DAG 父节点 ≠ SOTA 基线**：`dag_parent` 记录的是实验**时序上的前驱**（默认 `(-1,)` 解析为 `len(hist)-1`，即最新入队节点，不看 decision）；而 `based_experiments`（新因子与之组合回测的基线）才取最新 SOTA。两者是不同概念：DAG 表达"从哪个实验继续演化"，based_experiments 表达"和谁对比/组合"。常量名 `SEL_LATEST_SOTA` 有误导性，实际选中的是"最新节点"而非"最新 SOTA 节点"。
 
 ### 6.2 sync_dag_parent_and_hist
 

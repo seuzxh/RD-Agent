@@ -124,7 +124,7 @@ CoSTEER（**Co**llaborative **S**tra**te**gy for **E**volving and **R**etrieval�
 
 ### 3.2 CoSTEERSingleFeedback（单子任务反馈）
 
-定义于 [evaluators.py#L32-L123](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/evaluators.py#L32-L123)，采用分层反馈结构：
+定义于 [evaluators.py#L31-L122](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/evaluators.py#L31-L122)，是一个 dataclass，采用分层反馈结构：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -132,10 +132,25 @@ CoSTEER（**Co**llaborative **S**tra**te**gy for **E**volving and **R**etrieval�
 | `return_checking` | `str \| None` | 返回值校验反馈（因子值与 GT 的比对结果、形状检查） |
 | `code` | `str` | LLM 代码评审意见 |
 | `final_decision` | `bool \| None` | 最终是否通过（True=实现正确） |
-| `raw_execution` | `str` | 完整原始 stdout（供 UI 展示） |
+| `raw_execution` | `str` | 完整原始 stdout（供 UI 展示），默认空字符串 |
 | `source_feedback` | `dict[str, bool]` | 反馈来源标签→决策的映射（支持多评估器合并） |
 
 反馈层次遵循 **Execution → Return Value → Code → Final Decision** 的流水线：先执行代码，再检查返回值，再评审代码质量，最后综合决策。
+
+> **重要**：因子和模型场景实际使用的是子类 [CoSTEERSingleFeedbackDeprecated](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/evaluators.py#L124-L196)（`FactorSingleFeedback`/`ModelSingleFeedback` 均为其别名），它使用不同的字段名：
+>
+> | 实际字段 | 类型 | 说明 |
+> |---------|------|------|
+> | `execution_feedback` | `str` | 执行反馈 |
+> | `shape_feedback` | `str` | 形状检查反馈（模型场景使用，因子场景为 None） |
+> | `value_feedback` | `str` | 值校验反馈 |
+> | `code_feedback` | `str` | 代码评审反馈 |
+> | `final_feedback` | `str` | 最终决策的文字说明 |
+> | `final_decision` | `bool` | 最终决策 |
+> | `value_generated_flag` | `bool \| None` | 是否成功生成输出值（因子：DataFrame；模型：np.ndarray） |
+> | `final_decision_based_on_gt` | `bool \| None` | 决策是否基于 GT 比对（有 GT 时为 True） |
+>
+> 该子类通过 `@property` 将 `execution`/`return_checking`/`code` 映射到上述字段（如 `execution` 属性返回 `execution_feedback`），以保持与基类接口兼容。其 `__str__` 格式也与基类不同，分为六段：Execution Feedback、Shape Feedback、Code Feedback、Value Feedback、Final Feedback、Final Decision。
 
 ### 3.3 CoSTEERMultiFeedback（多任务反馈）
 
@@ -669,31 +684,45 @@ def calculate(df):
     return factor
 ```
 
-### 12.4 反馈（CoSTEERSingleFeedback）
+### 12.4 反馈（CoSTEERSingleFeedbackDeprecated）
+
+因子/模型场景实际使用 `CoSTEERSingleFeedbackDeprecated`，其 `__str__` 输出六段格式：
 
 ```
-------------------Execution------------------
+------------------Execution Feedback------------------
 Factor executed successfully, generated DataFrame with shape (10000, 1)
-------------------Return Checking------------------
-value feedback: Values match ground truth within tolerance 1e-6. Correlation: 1.0
-shape feedback: Output shape matches expected (10000, 1)
-------------------Code------------------
-No critics found
+------------------Shape Feedback------------------
+No shape feedback
+------------------Code Feedback------------------
+Final decision is True and there are no code critics.
+------------------Value Feedback------------------
+Values match ground truth within tolerance 1e-6. Correlation: 1.0
+------------------Final Feedback------------------
+Value evaluation passed, skip final decision evaluation.
 ------------------Final Decision------------------
 This implementation is SUCCESS.
 ```
 
 若失败：
 ```
-------------------Execution------------------
+------------------Execution Feedback------------------
 Traceback (most recent call last):
   File "factor.py", line 5, in calculate
     mom = close / close.shift(20) - 1
 AttributeError: 'Series' object has no attribute 'shift'
+------------------Shape Feedback------------------
+No shape feedback
+------------------Code Feedback------------------
+critic 1: The 'close' variable may not be a pandas Series. Check data loading.
+------------------Value Feedback------------------
+No factor value generated, skip value evaluation.
+------------------Final Feedback------------------
+Value evaluation failed, skip final decision evaluation.
 ------------------Final Decision------------------
 This implementation is FAIL.
-critic 1: The 'close' variable may not be a pandas Series. Check data loading.
 ```
+
+> 基类 `CoSTEERSingleFeedback.__str__` 使用四段格式（Execution / Return Checking / Code / Final Decision），但因子/模型场景不直接使用基类。
 
 ---
 

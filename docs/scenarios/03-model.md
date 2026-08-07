@@ -116,10 +116,12 @@ ModelRDLoop
 | **pt_model_kwargs** | `{"num_features": N}` | `{"num_features": N, "num_timesteps": 20}` |
 | **典型模型** | 多层全连接+BatchNorm+Dropout | GRU/LSTM + Attention + 全连接输出层 |
 
-**HypothesisGen 中的 RAG 约束**（[model_proposal.py#L33-L36](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/model_proposal.py#L33-L36)）：
+**HypothesisGen 中的 RAG 约束**（[model_proposal.py#L54](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/model_proposal.py#L54)）：
 1. 金融时序数据适合 GRU/LSTM，**不要生成 GNN**（图神经网络不适用于因子选股）
-2. 训练集约 100 万样本/验证集约 25 万样本，**控制模型大小**避免过拟合
+2. 训练集**少于 100 万**样本/验证集**约 25 万**样本，**控制模型大小**避免过拟合
 3. 可以只调超参数不换架构（超参调整也是有效策略）
+
+> ⚠️ 注意：模型场景 `prepare_context` 计算的 `SOTA_hypothesis_and_feedback` 因键名大小写 bug（返回大写键、基类读取小写键）实际未送达 LLM，详见 [01-hypothesis-gen.md](../agents/01-hypothesis-gen.md) 中的代码 bug 说明。
 
 ---
 
@@ -295,7 +297,7 @@ LLM 只需在 `model.py` 中定义一个名为 `model_cls` 的 `nn.Module` 子�
 3. 通过 `StaticDataLoader` 加载，与 ALPHA20 的基础特征合并
 4. 使用 `conf_sota_factors_model.yaml` 配置模板（而非 baseline 模板）
 
-纯模型场景中，H2E 的 `convert()` 设置 `based_experiments = [t[0] for t in trace.hist if t[1] and isinstance(t[0], ModelExperiment)]`（见 [model_proposal.py:158](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/model_proposal.py#L158)）：首轮为空列表（无空基线实验），后续轮次包含上一轮起所有 feedback 非 None 的历史模型实验，因此因子数据为空，走 baseline 路径。
+纯模型场景中，H2E 的 `convert()` 设置 `based_experiments = [t[0] for t in trace.hist if t[1] and isinstance(t[0], ModelExperiment)]`（见 [model_proposal.py:158](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/model_proposal.py#L158)）：首轮为空列表（**不会**像因子场景那样在头部插入空基线实验），后续轮次包含历史中所有 `decision=True` 的模型实验（`t[1]` 经 `__bool__` 返回 decision），因此纯模型场景下因子数据为空，走 baseline 路径。注意：这里**没有**像因子场景那样在列表头部插入一个空 `QlibFactorExperiment(sub_tasks=[])` 基线。
 
 ### 7.5 数据预处理管道
 

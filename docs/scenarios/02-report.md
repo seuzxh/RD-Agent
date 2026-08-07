@@ -43,7 +43,7 @@ dotenv run -- python rdagent/app/qlib_rd_loop/factor_from_report.py $LOG_PATH/__
 | `all_duration` | str | None | 最大运行时长 |
 | `checkout` | bool | True | 恢复时是否截断后续记录 |
 
-> ⚠️ 注意：研报场景的 `main()` 不接受 `loop_n`/`step_n` 参数（与因子/模型/全流程场景不同）。循环份数由构造函数中的 `min(len(pdfs), QLIB_FACTOR_REPORT_LIMIT)` 固定。
+> ⚠️ 注意：研报场景的 `main()` 不接受 `loop_n`/`step_n`/`description`/`base_features_path` 参数（与因子/模型/全流程场景不同）。循环份数由构造函数中的 `min(len(pdfs), QLIB_FACTOR_REPORT_LIMIT)` 固定，且不支持自定义基础特征（始终使用 ALPHA20）。
 
 ---
 
