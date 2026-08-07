@@ -88,7 +88,7 @@ Runner 的设计来源于以下学术工作：
 │  │  ② prepare()：拉取镜像 / 准备 Conda 环境 / 下载行情数据     │    │
 │  │  ③ qrun <config>.yaml：运行 Qlib 回测                       │    │
 │  │  ④ python read_exp_res.py：提取 mlflow 中的绩效指标         │    │
-│  │  ⑤ 返回 (result: pd.Series, stdout: str)                   │    │
+│  │  ⑤ 返回 tuple[pd.Series | None, str]                       │    │
 │  └─────────────────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────────────────┘
                                 │
@@ -116,6 +116,7 @@ Runner 的设计来源于以下学术工作：
 Developer(ABC, Generic[ASpecificExp])       # rdagent/core/developer.py
     │
     │  抽象方法: develop(exp) -> exp
+    │    （原地修改 exp，返回值计划移除；docstring 明确要求 inplace edit）
     │
     └── CachedRunner(Developer[ASpecificExp])     # rdagent/components/runner/__init__.py
             │
@@ -162,7 +163,7 @@ def get_cache_key(self, exp: Experiment) -> str:
 2. 对每个子任务调用 `get_task_information()` 获取任务描述文本
 3. 将所有任务描述拼接后计算 MD5 哈希
 
-这意味着：只有当任务描述完全相同时才会命中缓存。代码内容的变更会导致任务信息变化，从而产生不同的缓存键。
+这意味着：缓存键仅基于任务描述文本（`factor_name`/`factor_description`/`factor_formulation`/`variables` 等），**不包含代码内容**。代码变更如果不改变任务描述，不会使缓存失效。仅当任务描述文本发生变化时才会产生不同的缓存键。
 
 ### 4.2 QlibFactorRunner 的增强缓存键
 
@@ -227,11 +228,11 @@ if exp.based_experiments and exp.based_experiments[-1].result is None:
 
 **③ 处理 SOTA 因子**（[L105-L113](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/factor_runner.py#L105-L113)）
 
-从 `based_experiments` 中筛选出所有 `QlibFactorExperiment`，若数量大于 1，调用 `process_factor_data()` 将历史最优因子汇总为 DataFrame。
+从 `based_experiments` 中筛选出所有 `QlibFactorExperiment`，仅当筛选出的数量 **大于 1**（即 `len(sota_factor_experiments_list) > 1`）时，才调用 `process_factor_data()` 将历史最优因子汇总为 DataFrame。若只有 0 或 1 个，`SOTA_factor` 保持为 `None`。
 
 **④ 处理新因子并去重**（[L116-L131](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/factor_runner.py#L116-L131)）
 
-调用 `process_factor_data(exp)` 执行本轮新生成的因子代码，获得因子 DataFrame。然后通过 `deduplicate_new_factors()` 计算新因子与 SOTA 因子的 IC（信息系数），若 IC ≥ 0.99 则认为高度相似并移除，避免冗余因子。
+调用 `process_factor_data(exp)` 执行本轮新生成的因子代码，获得因子 DataFrame。**仅当 `SOTA_factor` 非空（`is not None` 且非 empty）时**，才通过 `deduplicate_new_factors(SOTA_factor, new_factors)` 计算新因子与 SOTA 因子的 IC（信息系数），若 IC ≥ 0.99 则认为高度相似并移除，避免冗余因子；若 `SOTA_factor` 为空则跳过去重，直接使用新因子。
 
 **⑤ 组合因子并保存**（[L133-L148](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/factor_runner.py#L133-L148)）
 
@@ -249,12 +250,13 @@ combined_factors.to_parquet(target_path, engine="pyarrow")
 
 根据是否存在 SOTA 模型，选择不同的 Qlib 配置：
 
-| 条件 | 配置文件 | 说明 |
-|------|----------|------|
-| 存在 SOTA 模型 | `conf_combined_factors_sota_model.yaml` | 组合因子 + SOTA 模型 |
-| 无 SOTA 模型 | `conf_combined_factors.yaml` | 组合因子 + LGBM（默认） |
-| 无基线实验，有基础因子代码 | `conf_combined_factors.yaml` | 仅基础因子 |
-| 无基线实验，无基础因子代码 | `conf_baseline.yaml` | 纯基线（ALPHA20） |
+| 条件 | 配置文件 | 环境变量附加设置 | 说明 |
+|------|----------|------------------|------|
+| 存在 SOTA 模型（TimeSeries） | `conf_combined_factors_sota_model.yaml` | 注入 SOTA `model.py`；传递 SOTA 训练超参（n_epochs/lr/early_stop/batch_size/weight_decay）；`dataset_cls="TSDatasetH"`、`num_features`、`step_len=20`、`num_timesteps=20` | 组合因子 + SOTA TimeSeries 模型 |
+| 存在 SOTA 模型（Tabular） | `conf_combined_factors_sota_model.yaml` | 注入 SOTA `model.py`；传递 SOTA 训练超参；`dataset_cls="DatasetH"`、`num_features` | 组合因子 + SOTA Tabular 模型 |
+| 无 SOTA 模型 | `conf_combined_factors.yaml` | 仅基础因子+组合因子环境变量（`model_selector` 默认为 `lgbm`） | 组合因子 + LGBM（默认） |
+| 无基线实验，有基础因子代码 | `conf_combined_factors.yaml` | 基础因子环境变量 | 仅基础因子 |
+| 无基线实验，无基础因子代码 | `conf_baseline.yaml` | 基础因子环境变量 | 纯基线（ALPHA20） |
 
 **⑦ 结果校验**（[L213-L219](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/factor_runner.py#L213-L219)）
 
@@ -470,7 +472,7 @@ elif MODEL_COSTEER_SETTINGS.env_type == "conda":
 | `valid_start` / `valid_end` | - | 验证集起止日期 |
 | `test_start` / `test_end` | - | 测试集起止日期 |
 | `model_selector` | `"lgbm"` | 模型选择器，影响 YAML 配置模板分支 |
-| `factor_runner` | `"...QlibFactorRunner"` | Runner 类路径 |
+| `runner` | `"...QlibFactorRunner"` | Runner 类路径（`FactorBasePropSetting` 中的字段名为 `runner`；`factor_runner` 是 `QuantBasePropSetting` 中的字段名） |
 
 ### 10.2 模型执行配置（ModelBasePropSetting）
 

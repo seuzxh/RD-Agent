@@ -49,9 +49,10 @@ dotenv run -- python rdagent/app/qlib_rd_loop/quant.py --base_features_path ./my
 | `loop_n` | int | None | 最大循环轮数 |
 | `step_n` | int | None | 最大步骤数 |
 | `all_duration` | str | None | 最大运行时长 |
-| `action_selection` | str | bandit | Action选择策略（也可通过环境变量设置） |
 | `base_features_path` | str | None | 自定义基础因子目录 |
 | `description` | str | None | 用户目标描述 |
+
+> 注：`action_selection` 不是 CLI 参数，仅通过环境变量 `QLIB_QUANT_ACTION_SELECTION` 设置（见 [quant.py main()](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/quant.py#L131-L140) 签名）。
 
 ---
 
@@ -102,7 +103,8 @@ QuantRDLoop
 │   └── 成功因子自动累积到features，供model训练使用
 │
 └── trace = QuantTrace(scen)
-    └── controller = EnvController(Bandit)
+    └── controller = EnvController()
+        ├── bandit = LinearThompsonTwoArm(dim=8, prior_var=10.0, noise_var=0.5)
         └── 记录每轮奖励→Thompson Sampling决策下轮action
 ```
 
@@ -130,10 +132,12 @@ weights = (0.1, 0.1, 0.05, 0.05, 0.25, 0.15, 0.1, 0.2)
 年化收益(0.25)和Sharpe(0.2)权重最高，引导 Bandit 关注盈利能力。
 
 **决策流程**：
-1. 首轮无历史：默认 action = `"factor"`（先做因子）
-2. 每轮结束：从实验结果提取 metrics 向量，计算加权奖励
-3. `trace.controller.record(reward, action)` 更新对应 arm 的后验分布（贝叶斯线性回归）
-4. 下轮开始：`trace.controller.decide(context)` 对两臂分别 Thompson Sampling，选择期望奖励更高的 action
+1. 首轮无历史（`len(trace.hist)==0`）：默认 action = `"factor"`（先做因子）
+2. 非首轮：在下一轮 `prepare_context()` 开头，从 `trace.hist[-1]`（上一轮实验）提取 metrics 向量
+3. `trace.controller.record(metric, prev_action)` 用上一轮结果更新对应 arm 的后验分布（贝叶斯线性回归）
+4. 紧接着 `trace.controller.decide(metric)` 对两臂分别 Thompson Sampling，选择期望奖励更高的 action 作为本轮 action
+
+> 注意：`record` 和 `decide` 都在下一轮的 `prepare_context()` 中连续执行（见 [quant_proposal.py:53-58](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/quant_proposal.py#L53-L58)），而非"本轮结束 record、下轮开始 decide"分离在两个步骤。
 
 ### 5.2 LLM 策略
 
@@ -157,7 +161,7 @@ weights = (0.1, 0.1, 0.05, 0.05, 0.25, 0.15, 0.1, 0.2)
 │  [初始化]                                                       │
 │  ├─ 创建双套组件(factor_*/model_*)                              │
 │  ├─ plan = {features: ALPHA20, feature_codes: {}}              │
-│  ├─ trace = QuantTrace(scen, controller=EnvController)         │
+│  ├─ trace = QuantTrace(scen)（__init__内创建EnvController）  │
 │  └─ asyncio.run(quant_loop.run())                              │
 │                                                                 │
 │  ┌─── Loop N ────────────────────────────────────────────────┐  │
@@ -166,21 +170,23 @@ weights = (0.1, 0.1, 0.05, 0.05, 0.25, 0.15, 0.1, 0.2)
 │  │  ├─ 等待并行槽位                                          │  │
 │  │  ├─ _propose(): QlibQuantHypothesisGen.gen(trace)         │  │
 │  │  │   ├─ prepare_context():                                │  │
-│  │  │   │   ├─ [Bandit] trace.controller.decide() → action  │  │
-│  │  │   │   │   (首轮默认"factor")                           │  │
+│  │  │   │   ├─ [Bandit] 若有历史：                            │  │
+│  │  │   │   │   record(metric, prev_action) → decide(metric) │  │
+│  │  │   │   │   (metric来自上一轮实验，record在prepare_context │  │
+│  │  │   │   │    开头用trace.hist[-1]结果，decide紧随其后)   │  │
+│  │  │   │   │   首轮无历史→默认"factor"                      │  │
 │  │  │   │   ├─ [LLM] 单独LLM调用 → action                   │  │
 │  │  │   │   ├─ [Random] random.choice → action              │  │
 │  │  │   │   │                                                │  │
 │  │  │   │   ├─ 根据action过滤trace构建上下文:                 │  │
 │  │  │   │   │   action=factor:                               │  │
 │  │  │   │   │     所有factor实验 + 最近1个SOTA model实验     │  │
-│  │  │   │   │     RAG: hist<6→简单因子; hist≥6→ML因子       │  │
+│  │  │   │   │     RAG: 总hist<6→简单因子; 总hist≥6→ML因子  │  │
 │  │  │   │   │   action=model:                                │  │
 │  │  │   │   │     所有model实验 + 最近1个SOTA factor实验     │  │
 │  │  │   │   │     RAG: GRU/LSTM/控制模型大小/可只调超参      │  │
 │  │  │   │   │                                                │  │
-│  │  │   │   ├─ targets = "feature engineering and model     │  │
-│  │  │   │   │             building"                         │  │
+│  │  │   │   ├─ targets = action（"factor"或"model"）        │  │
 │  │  │   │   ├─ output_format: 含action字段的JSON格式         │  │
 │  │  │   │   └─ specification: 根据action选对应规范           │  │
 │  │  │   │                                                    │  │
@@ -225,9 +231,10 @@ weights = (0.1, 0.1, 0.05, 0.05, 0.25, 0.15, 0.1, 0.2)
 │  │      QlibModelExperiment2Feedback（对比SOTA模型）         │  │
 │  │                                                           │  │
 │  │  ⑤ record()                                               │  │
-│  │  ├─ trace.sync_dag_parent_and_hist((exp, feedback), idx) │  │
-│  │  └─ [Bandit更新] trace.controller.record(reward, action) │  │
-│  │      从exp.result提取8维metrics→加权reward→更新后验       │  │
+│  │  └─ trace.sync_dag_parent_and_hist((exp, feedback), idx)  │  │
+│  │      将(实验,反馈)追加到trace.hist                         │  │
+│  │      （Bandit的record在下一轮prepare_context开头执行，     │  │
+│  │       用本轮trace.hist[-1]结果更新后验，不在此步骤）       │  │
 │  │                                                           │  │
 │  └─── 下一轮（Bandit基于更新后的后验选择新action） ──────────┘  │
 └─────────────────────────────────────────────────────────────────┘
@@ -255,17 +262,17 @@ weights = (0.1, 0.1, 0.05, 0.05, 0.25, 0.15, 0.1, 0.2)
 ### 7.2 Model → Factor：模型表现指导因子方向
 
 1. **上下文构建**：当 HypothesisGen 决定做 factor 时，会在 trace 上下文中包含最近一个 SOTA model 实验
-2. **反馈参考**：因子 Summarizer 在评估因子时，如果存在 SOTA 模型，会使用 SOTA 模型的配置来回测因子（而非默认的 LightGBM）
+2. **回测参考**：`QlibFactorRunner` 在执行 factor 轮时，若 `based_experiments` 中存在 SOTA model 实验，会注入该模型的 `model.py` 和训练超参，使用 `conf_combined_factors_sota_model.yaml` 配置模板回测因子（而非默认的 LightGBM，见 [factor_runner.py:150-184](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/factor_runner.py#L150-L184)）。注意：因子 Summarizer 本身不使用 SOTA 模型配置，它只根据实验结果生成反馈文本
 3. **Bandit 奖励**：无论哪类实验，Bandit 都从结果中提取相同的8维指标（IC/ARR/MDD等）作为奖励信号
 
 ### 7.3 渐进式复杂度（因子侧）
 
-Quant 场景中因子探索的渐进式复杂度阈值是 **6轮**（而非纯因子场景的15轮），因为全流程迭代更快：
+Quant 场景中因子探索的渐进式复杂度阈值基于 **总历史轮次 `len(trace.hist)<6`**（而非 factor 轮计数，也非纯因子场景的15轮），判断代码见 [quant_proposal.py:92](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/quant_proposal.py#L92)：
 
-| 轮次 | RAG 提示 |
+| 总历史轮次 | RAG 提示 |
 |------|---------|
-| Factor轮前6轮 | "Try the easiest and fastest factors to experiment with from various perspectives first." |
-| Factor轮6轮后 | "Try factors that can achieve high IC (e.g., ML-based factors) and do not implement factors already in the SOTA factor library." |
+| `len(trace.hist)<6` | "Try the easiest and fastest factors to experiment with from various perspectives first." |
+| `len(trace.hist)>=6` | "Try factors that can achieve high IC (e.g., ML-based factors) and do not implement factors already in the SOTA factor library." |
 
 ---
 
@@ -286,16 +293,17 @@ Quant 场景中因子探索的渐进式复杂度阈值是 **6轮**（而非纯�
 
 ```python
 class QuantTrace(Trace):
-    controller: EnvController = Field(
-        default_factory=lambda: EnvController(
-            bandit=LinearThompsonTwoArm(context_dim=8, n_arms=2)
-        )
-    )
+    def __init__(self, scen: Scenario) -> None:
+        super().__init__(scen)
+        # Initialize the controller with default weights
+        self.controller = EnvController()
 ```
+
+`EnvController()` 内部创建 `LinearThompsonTwoArm(dim=8, prior_var=10.0, noise_var=0.5)`（见 [bandit.py:98](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/bandit.py#L98)）。
 
 - `hist` 混合存储 QlibFactorExperiment 和 QlibModelExperiment
 - `controller` 持久化在 pickle 中，断点恢复时 Bandit 后验分布不丢失
-- `get_sota_hypothesis_and_experiment()` 反向遍历时不区分类型，返回最后一个 decision=True 的实验（可能是factor也可能是model）
+- `get_sota_hypothesis_and_experiment()` 是基类 `Trace` 方法，反向遍历时**不区分类型**，返回最后一个 `decision=True` 的实验（可能是 factor 也可能是 model）。但在 quant_proposal 的 `SOTA_hypothesis_and_feedback` 上下文构建中，当 `action=="model"` 时只查找 `action=="model"` 且 `decision=True` 的实验（见 [quant_proposal.py:146-152](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/quant_proposal.py#L146-L152)），action=factor 时该键为 None。
 
 ---
 
@@ -308,7 +316,7 @@ class QuantTrace(Trace):
 | **Trace内容** | 纯factor实验 | 纯model实验 | 混合存储两类实验 |
 | **SOTA引用** | 因子SOTA | 模型SOTA | 跨类型引用（factor看SOTA model，反之亦然） |
 | **特征传递** | 因子累积给固定LGBM | 使用固定ALPHA20 | factor成功→model特征增强 |
-| **因子复杂度阈值** | 15轮 | N/A | 6轮 |
+| **因子复杂度阈值** | 15轮（总hist） | N/A | 6轮（总hist，非factor轮计数） |
 | **模型特征数** | 固定LGBM | ALPHA20(20) | 动态增长（20+SOTA新因子） |
 | **Bandit控制器** | 无 | 无 | LinearThompsonTwoArm(8维) |
 | **错误跳过** | FactorEmptyError | ModelEmptyError | 两者都跳过 |

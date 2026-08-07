@@ -114,7 +114,7 @@
 
 | 属性 | 说明 |
 |------|------|
-| `hist: list[tuple[Experiment, ExperimentFeedback]]` | 按时间顺序排列的（实验，反馈）对列表 |
+| `hist: list[tuple[Experiment, ExperimentFeedback]]` | 按时间顺序排列的（实验，反馈）对列表；类型标注为 `ExperimentFeedback`，实际运行时存放的是其子类 `HypothesisFeedback` |
 | `dag_parent: list[tuple[int,...]]` | DAG 父节点索引，支持分支探索 |
 | `knowledge_base` | 关联的 RAG 知识库 |
 | `current_selection` | 当前扩展点选择（默认 SOTA） |
@@ -128,7 +128,7 @@
 
 传递给 `gen()` 的可选参数，包含：
 
-- `features`：基础因子集合（默认为 ALPHA20，也支持 ALPHA158）
+- `features`：基础因子集合（默认为 ALPHA20）
 - `feature_codes`：基础因子代码文件
 - `user_instruction`：用户自然语言指令
 
@@ -170,7 +170,7 @@ ABC (Python)
 
 ### 5.1 主循环中的调用
 
-在 [RDLoop](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py#L183-L209) 中，假设生成发生在 `direct_exp_gen` 阶段：
+在 [RDLoop](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py#L199-L210) 中，假设生成发生在 `direct_exp_gen` 阶段：
 
 ```python
 async def direct_exp_gen(self, prev_out):
@@ -199,7 +199,7 @@ async def direct_exp_gen(self, prev_out):
    - `hypothesis_and_feedback`：全部历史实验及反馈（渲染为文本）
    - `last_hypothesis_and_feedback`：最近一轮的详细信息（含训练日志 stdout）
    - `sota_hypothesis_and_feedback`：SOTA 实验的详细信息
-   - `RAG`：策略引导文本（注意：此处的 RAG 变量并非向量检索，而是根据迭代轮次等状态注入的启发式策略提示，如"先尝试简单因子"或"现在尝试高IC的ML因子"。真正的向量知识库检索发生在 CoSTEER 编码阶段）
+   - `RAG`：策略引导文本（注意：此处的 RAG 变量并非向量检索，而是根据迭代轮次等状态注入的启发式策略提示，如"先尝试简单因子"或"现在尝试高IC的ML因子"。CoSTEER 编码阶段另有知识检索机制）
 4. **调用 LLM**：`APIBackend().build_messages_and_create_chat_completion()`，强制 JSON 输出。
 5. **解析响应**：调用子类 `convert_response(resp)` 将 JSON 转为 `Hypothesis` 对象。
 
@@ -208,8 +208,8 @@ async def direct_exp_gen(self, prev_out):
 | 情况 | 行为 |
 |------|------|
 | 首轮（`len(trace.hist)==0`） | `hypothesis_and_feedback` 设为"No previous hypothesis..."，RAG 引导从简单因子开始 |
-| 因子场景 < 15 轮 | RAG: "Try the easiest and fastest factors from various perspectives first." |
-| 因子场景 ≥ 15 轮 | RAG: "Now try factors that can achieve high IC (e.g., ML-based factors)." |
+| 因子场景前15轮（`len(trace.hist)<15`） | RAG: "Try the easiest and fastest factors from various perspectives first." |
+| 因子场景第16轮起（`len(trace.hist)>=15`） | RAG: "Now try factors that can achieve high IC (e.g., ML-based factors)." |
 | 存在 SOTA | 反向遍历 hist 找到最近 `decision=True` 的节点，渲染其完整信息 |
 | 全部失败 | SOTA 字段提示"No SOTA available since previous experiments were not accepted" |
 
@@ -299,7 +299,7 @@ async def direct_exp_gen(self, prev_out):
 
 ```python
 weights = (0.1, 0.1, 0.05, 0.05, 0.25, 0.15, 0.1, 0.2)
-#          IC   ICIR  RankIC RankICIR ARR   IR   MDD  Sharpe
+#          IC   ICIR  RankIC RankICIR ARR   IR   -MDD Sharpe
 ```
 
 #### Trace 过滤
@@ -343,7 +343,7 @@ generate_hypothesis()                   # 基于因子结果+报告内容生成H
 
 `generate_hypothesis()` 函数（[factor_from_report.py#L26-L58](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/factor_from_report.py#L26-L58)）使用独立的提示词模板，将提取到的因子字典和报告原文拼接后调用 LLM 生成假设。
 
-PDF 加载器还包含**KMeans + LLM 去重**管线（[pdf_loader.py#L397-L564](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/factor_experiment_loader/pdf_loader.py#L397-L564)）：使用 Embedding + KMeans 聚类 + LLM 判断语义重复，对研报中的因子进行去重。
+PDF 加载器代码中存在 **KMeans + LLM 去重**管线（[pdf_loader.py#L397-L564](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/factor_experiment_loader/pdf_loader.py#L397-L564)），使用 Embedding + KMeans 聚类 + LLM 判断语义重复，但该功能当前在 [pdf_loader.py#L587](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/factor_experiment_loader/pdf_loader.py#L587) 被注释禁用，并非活跃功能。
 
 ---
 
@@ -366,7 +366,7 @@ def _interact_hypo(self, hypo: Hypothesis) -> Hypothesis:
 - 编辑假设文本和理由
 - 拒绝并要求重新生成
 
-> 代码见 [rd_loop.py#L153-L166](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py#L153-L166)。
+> 代码见 [rd_loop.py#L154-L167](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py#L154-L167)。
 
 ---
 
@@ -374,7 +374,7 @@ def _interact_hypo(self, hypo: Hypothesis) -> Hypothesis:
 
 ### 10.1 LLM 模型配置
 
-假设生成对应的日志标签为 `direct_exp_gen`，在 `.env` 中通过 `CHAT_MODEL_MAP` 绑定模型：
+假设生成对应的日志标签为 `direct_exp_gen`，在 `.env` 中通过 `CHAT_MODEL_MAP` 绑定模型。以下为 `.env` 示例值，非代码默认：
 
 ```bash
 CHAT_MODEL_MAP={
@@ -383,7 +383,7 @@ CHAT_MODEL_MAP={
 }
 ```
 
-LiteLLM 后端在调用时检测日志标签栈 `logger._tag`，当包含 `direct_exp_gen` 时自动路由到 MiniMax-M3 模型。
+LiteLLM 后端在调用时检测日志标签栈 `logger._tag`，当包含 `direct_exp_gen` 时按 `CHAT_MODEL_MAP` 配置路由到对应模型。
 
 > 路由实现见 [litellm.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/oai/backend/litellm.py)。
 
@@ -394,15 +394,15 @@ LiteLLM 后端在调用时检测日志标签栈 `logger._tag`，当包含 `direc
 | `hypothesis_gen` | `*_PROP_SETTING` | 场景化类路径 | 假设生成类的完整导入路径 |
 | `hypothesis2experiment` | `*_PROP_SETTING` | 场景化类路径 | 假设转实验类的完整导入路径 |
 | `action_selection` | `QUANT_PROP_SETTING` | `"bandit"` | 全流程场景的动作选择策略 |
-| `evolving_n` | 各 PROP_SETTING | `10` | 最大迭代轮数 |
-| `auto_mode` | RDLoop | `false`(CLI) | 是否自动跳过人工审核 |
+| `evolving_n` | 各 PROP_SETTING | `10`（各 PropSetting 中定义） | 最大迭代轮数 |
+| `auto_mode` | `main()` 函数 kwargs | `false`(CLI) | 是否自动跳过人工审核 |
 
 ### 10.3 Hypothesis2Experiment（假设转实验）
 
 假设生成后，由 [Hypothesis2Experiment](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L437-L445) 将抽象假设转化为具体的可执行任务：
 
 - 因子场景：输出 JSON 包含每个因子的 `description`、`formulation`（LaTeX）、`variables`
-- 模型场景：输出 JSON 包含 `architecture`、`hyperparameters`、`training_hyperparameters`、`model_type`
+- 模型场景：输出 JSON 包含 `description`、`formulation`、`architecture`、`variables`、`hyperparameters`、`training_hyperparameters`、`model_type`
 - 全流程场景：输出还包含 `action` 字段
 
 该组件使用 `@wait_retry(retry_n=5)` 装饰器，在 JSON 解析失败时自动重试最多5次。
@@ -489,8 +489,7 @@ Decision: True
                              ▼
               ┌──────────────────────────────┐
               │  APIBackend LLM 调用         │
-              │  model: minimax-m3           │
-              │  temperature: 0.7            │
+              │  model: 由CHAT_MODEL_MAP配置路由 │
               │  json_mode: True             │
               └──────────────┬───────────────┘
                              │
@@ -528,7 +527,7 @@ Decision: True
          │ extract_metrics()   │
          │ IC/ICIR/RankIC/     │
          │ RankICIR/ARR/IR/    │
-         │ MDD/Sharpe (8维)    │
+         │ -MDD/Sharpe (8维)   │
          └─────────┬───────────┘
                    │
                    ▼
@@ -566,7 +565,7 @@ PDF文件夹
 LangChain PDF解析
     │
     ▼
-LLM分类(投票) ──→ 非金工研报 → 跳过
+LLM分类(单次分类, vote_time=1) ──→ 非金工研报 → 跳过
     │
     ▼ (是金工研报)
 多进程因子提取:
@@ -577,13 +576,10 @@ LLM分类(投票) ──→ 非金工研报 → 跳过
 多报告合并去重
     │
     ▼
-Embedding + KMeans聚类
+LLM可行性筛选 check_factor_viability（分批，每批≤50因子）
     │
     ▼
-LLM语义去重（分批，每批≤50因子）
-    │
-    ▼
-LLM可行性筛选
+[代码中存在但当前被注释禁用: Embedding + KMeans聚类 + LLM语义去重]
     │
     ▼
 generate_hypothesis()
@@ -620,7 +616,7 @@ HypothesisGen 有三个具体子类，分别对应三种场景：`QlibFactorHypo
 
 **targets 值**：`"factors"`（在基类 `FactorHypothesisGen.__init__` 中设置）
 
-**关键特点**：因子场景**不需要** SOTA 特殊引用——因为因子反馈模板中已经包含了 SOTA 对比信息。
+**关键特点**：因子场景的 `prepare_context` 未提供 SOTA 键，仅使用全量历史；模型场景则显式提取了 `sota_hypothesis_and_feedback`。
 
 ---
 
@@ -672,7 +668,7 @@ HypothesisGen 有三个具体子类，分别对应三种场景：`QlibFactorHypo
 
 - **action = factor** 时：保留所有 factor 实验 + **最近一个 SOTA model 实验**（factor 优化需要知道当前模型的输入能力边界）
 - **action = model** 时：保留所有 model 实验 + **最近一个 SOTA factor 实验**（model 优化需要知道可用的特征集）
-- 渐进式复杂度：factor 前 6 轮先简单（不是15轮），6 轮后探索 ML-based 高 IC 因子；model 使用与纯模型场景相同的硬约束 RAG
+- 渐进式复杂度：factor 前 6 轮先简单（不是15轮），6 轮后探索 ML-based 高 IC 因子；model 使用硬约束 RAG（训练集约 478k 样本/验证集约 128k，与纯模型场景的 <1M/250k 数值不同）
 - 输出格式使用 `hypothesis_output_format_with_action`，额外要求 LLM 返回 `action` 字段
 
 **targets 值**：`"feature engineering and model building"`
@@ -695,9 +691,10 @@ HypothesisGen 的提示词分两层：**通用框架提示词**（`rdagent/compo
 ```
 {{ targets }}                → "factors" / "model tuning" / "feature engineering and model building"
 {{ scenario }}               → 场景描述（过滤后），由 scen.get_scenario_all_desc() 生成
-                               - factor场景: get_scenario_all_desc(filtered_tag="factors")
-                               - model场景:  get_scenario_all_desc(filtered_tag="model")
-                               - quant场景:  get_scenario_all_desc(filtered_tag="hypothesis_and_experiment")
+                               代码判断: if self.targets in ["factor", "model"]
+                               - factor场景(targets="factors"): 不匹配，走else → filtered_tag="hypothesis_and_experiment"
+                               - model场景(targets="model tuning"): 不匹配，走else → filtered_tag="hypothesis_and_experiment"
+                               - quant场景(action选择后targets="factor"/"model"): 命中if → filtered_tag=self.targets
 {{ user_instruction }}       → 用户全局指令（如有，来自ExperimentPlan）
 {{ hypothesis_specification }}→ 场景定制规范（factor_hypothesis_specification 或 model_hypothesis_specification）
 {{ hypothesis_output_format }}→ JSON输出格式要求
@@ -844,7 +841,7 @@ resp = APIBackend().build_messages_and_create_chat_completion(
 
 ### 重试机制
 
-`gen()` 方法**自身没有重试装饰器**，但 `Hypothesis2Experiment.convert()` 使用了 `@wait_retry(retry_n=5)`（[proposal/__init__.py#L93](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L93)）。HypothesisGen 的 JSON 解析失败会直接抛异常，由 RDLoop 的异常处理兜底（将异常包装为 `HypothesisFeedback(decision=False, reason=str(e))`，见 [rd_loop.py#L104-L111](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py#L104-L111)）。
+`gen()` 方法**自身没有重试装饰器**，但 `Hypothesis2Experiment.convert()` 使用了 `@wait_retry(retry_n=5)`（[proposal/__init__.py#L93](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L93)）。HypothesisGen 的 JSON 解析失败会直接抛异常；RDLoop 的 `feedback()` 方法中存在将异常包装为 `HypothesisFeedback(decision=False, reason=str(e))` 的兜底逻辑（见 [rd_loop.py#L224-L231](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py#L224-L231)），但该逻辑处理的是前序阶段（coding/running）存入 `EXCEPTION_KEY` 的异常，`direct_exp_gen` 阶段的异常不会被包装为 feedback，会直接向上传播。
 
 ### 输入输出示例
 
@@ -917,7 +914,7 @@ Hypothesis(
 | Qlib场景提示词 | [rdagent/scenarios/qlib/prompts.yaml](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/prompts.yaml) |
 | PDF研报加载器 | [rdagent/scenarios/qlib/factor_experiment_loader/pdf_loader.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/factor_experiment_loader/pdf_loader.py) |
 | PDF研报循环 | [rdagent/app/qlib_rd_loop/factor_from_report.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/factor_from_report.py) |
-| 主循环调用 | [rdagent/components/workflow/rd_loop.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py#L183-L209) |
+| 主循环调用 | [rdagent/components/workflow/rd_loop.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py#L199-L210) |
 | LiteLLM路由 | [rdagent/oai/backend/litellm.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/oai/backend/litellm.py) |
 
 {% endraw %}

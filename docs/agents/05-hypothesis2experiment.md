@@ -174,18 +174,24 @@ Hypothesis2Experiment(ABC, Generic[ASpecificExp])    # rdagent/core/proposal.py
 
 ### 4.1 prepare_context
 
-由子类实现，返回 `(context_dict, json_flag)` 元组。`context_dict` 包含：
+由子类实现，运行时返回二元组 `(context_dict, json_mode_flag)`：第一个元素是上下文字典，第二个元素是布尔值，传给 LLM 调用的 `json_mode` 参数（因子/模型场景均为 `True`）。
+
+> ⚠️ **类型标注瑕疵**：抽象基类 `LLMHypothesis2Experiment.prepare_context` 标注为 `Tuple[dict, bool]`（[components/proposal/__init__.py#L88](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L88)），但 `QlibFactorHypothesis2Experiment` 的覆盖标注写成了 `Tuple[dict | bool]`（[factor_proposal.py#L61](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/factor_proposal.py#L61)）——缺少逗号，会被 Python 解析为"元素类型为 `dict | bool` 的一元组类型"，与实际返回的二元组不符。以运行时实际行为为准。
+
+`context_dict` 包含：
 
 | 键 | 说明 |
 |----|------|
 | `target_hypothesis` | 目标假设的字符串表示 |
-| `scenario` | 场景描述（背景、接口、数据格式等） |
+| `scenario` | 子类在 `prepare_context` 中构建的场景描述变量（**注意：此键虽然被返回，但 system prompt 渲染时并不读取它**，详见 4.2） |
 | `hypothesis_and_feedback` | 历史假设与反馈（按类型筛选后的 trace） |
 | `last_hypothesis_and_feedback` | 最近一轮假设与反馈 |
-| `SOTA_hypothesis_and_feedback` | SOTA 实验的假设与反馈 |
+| `SOTA_hypothesis_and_feedback` | SOTA 实验的假设与反馈（模型场景键名为大写 `SOTA_hypothesis_and_feedback`） |
 | `experiment_output_format` | 输出 JSON 格式规范 |
-| `target_list` | 历史相似任务列表（当前为空列表 `[]`） |
-| `RAG` | 启发式策略文本（非向量检索，见下文） |
+| `target_list` | 始终硬编码为空列表 `[]`，属于死代码（见下文说明） |
+| `RAG` | 启发式策略文本（非向量检索，因子场景为 `None`） |
+
+> 🧹 **死代码说明**：`target_list` 在因子/模型两个子类中都被硬编码为 `[]`，并且虽然 `convert()` 把它作为模板变量传入 `user_prompt`，但 `prompts.yaml` 的 user 模板中**并没有 `{{ target_list }}` 占位符**，因此该变量实际上不会渲染到提示词中。`RAG` 同理被传入 user 模板，但模板中也没有 `{{ RAG }}` 占位符——模型场景返回的 RAG 文本同样不会出现在最终提示词里。
 
 ### 4.2 提示词渲染
 
@@ -200,6 +206,8 @@ Please generate the output following the format below:
 {{ experiment_output_format }}
 ```
 
+> ⚠️ **`scenario` 的实际来源**：模板中的 `{{ scenario }}` 占位符由基类 `convert()` 直接渲染，传入的值是 `trace.scen.get_scenario_all_desc(filtered_tag=self.targets)`（[components/proposal/__init__.py#L98](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L98)），**并不读取** `context["scenario"]`。子类 `prepare_context` 中构建的 `scenario` 局部变量（例如因子场景调用 `get_scenario_all_desc(action="factor")`）虽然被放进了返回字典，但在 system prompt 渲染时被忽略。两者通常恰好都来自同一个 scenario 对象，只是过滤参数不同（基类用 `filtered_tag=self.targets`，子类用 `action="factor"`/`"model"`）。
+
 **User prompt**（[components/proposal/prompts.yaml#L54-L71](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/prompts.yaml#L54-L71)）：
 
 ```
@@ -210,6 +218,8 @@ The target hypothesis you are targeting to generate {{ targets }} for is as foll
 [SOTA假设与反馈（条件渲染）]
 Please generate the new {{ targets }} based on the information above.
 ```
+
+> 📌 **传入但模板未使用的变量**：基类 `convert()` 在渲染 user_prompt 时额外传入了 `target_list=context["target_list"]` 和 `RAG=context["RAG"]`（[components/proposal/__init__.py#L113-L114](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L113-L114)），但该 YAML 模板里既没有 `{{ target_list }}` 也没有 `{{ RAG }}` 占位符。Jinja2 对未使用的额外变量静默忽略，因此这两个值（无论因子场景的 `RAG=None` 还是模型场景返回的那段数据规模约束文本）都不会出现在最终发给 LLM 的 user prompt 中。
 
 ### 4.3 LLM 调用
 
@@ -306,6 +316,12 @@ exp.tasks = unique_tasks
 
 遍历所有基线实验的子任务，若新任务的 `factor_name` 已存在，则跳过。模型实验被排除在去重检查之外（`isinstance(based_exp, QlibModelExperiment)` 时 continue）。
 
+> ⚠️ **`exp.tasks` vs `exp.sub_tasks`**：去重结果赋值给的是 `exp.tasks`（[factor_proposal.py#L130](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/factor_proposal.py#L130)），这是一个**动态挂载的属性**，并非 `Experiment` 基类构造函数中声明的字段。`Experiment.sub_tasks` 才是构造时传入、由基类正式声明的任务列表（[experiment.py#L411](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/experiment.py#L411)）。在 `QlibFactorHypothesis2Experiment.convert_response` 中，`exp = QlibFactorExperiment(tasks, hypothesis=hypothesis)` 把 LLM 生成的**全部**任务作为 `sub_tasks` 传入，因此去重后：
+> - `exp.sub_tasks`：仍保留 LLM 本轮生成的全部任务（包括与历史重名的）；
+> - `exp.tasks`：去重后的唯一任务列表，供下游 CoSTEER 实际编码使用。
+>
+> 注意：`Experiment` 基类本身没有定义 `tasks` 属性，这里是子类动态添加的，阅读代码时不要与 `sub_tasks` 混淆。
+
 ---
 
 ## 6. QlibModelHypothesis2Experiment（模型假设转实验）
@@ -339,6 +355,8 @@ return the same model and adjust these parameters instead.
 模型 RAG 策略关注：
 - 数据规模约束（训练集 < 100 万样本，验证集约 25 万），引导控制模型大小
 - 允许返回相同模型架构但调整超参数，支持超参数优化场景
+
+> 🧹 如 4.2 节所述，这段 RAG 文本虽然由 `prepare_context` 返回并传入模板渲染，但 user 模板中没有 `{{ RAG }}` 占位符，因此当前版本实际不会发送给 LLM，属于未生效的预留逻辑。`target_list=[]` 同理。
 
 ### 6.2 convert_response 任务构建
 
@@ -378,7 +396,7 @@ for model_name in response_dict:
 | 去重 | 有（按 factor_name） | 无 |
 | 基线链 | 空实验 + 所有因子实验 | 所有模型实验 |
 | SOTA 上下文 | 不单独提取 | 单独提取 last 和 SOTA |
-| RAG 策略 | 按轮次分阶段（探索/深挖） | 数据规模约束 + 超参数调整建议 |
+| RAG 策略 | `None`（不设置；分阶段 RAG 属于 HypothesisGen，不属于 H2E） | 代码中返回数据规模约束 + 超参数调整建议文本，但同样因模板无 `{{ RAG }}` 占位符而未被渲染 |
 
 ---
 
@@ -475,35 +493,57 @@ System prompt 定义角色和输出格式要求，User prompt 组织目标假设
 
 `convert` 方法使用 `@wait_retry(retry_n=5)` 装饰器（[components/proposal/__init__.py#L93](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L93)）：
 
-- 最多重试 5 次
+- `retry_n=5` 表示**在首次调用失败后最多再重试 5 次**，即总共最多尝试 **6 次**（首次 + 5 次重试）。装饰器内部循环为 `for i in range(retry_n + 1)`（[misc.py#L37](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/utils/workflow/misc.py#L37)），最后一次（`i == retry_n`）仍失败则抛出异常。
 - 当 LLM 返回的 JSON 格式错误或 `convert_response` 抛出异常时触发重试
-- 重试间有等待间隔（`wait`），避免频繁调用 API
+- 每次重试间有等待间隔（`sleep_time=1` 秒），避免频繁调用 API
 - 这对于处理 LLM 偶尔返回格式错误 JSON 的情况至关重要
 
 ---
 
 ## 10. 在 R&D 循环中的位置
 
-Hypothesis2Experiment 在循环中由 `direct_exp_gen` 步骤调用：
+Hypothesis2Experiment 在循环中由 `direct_exp_gen` 步骤调用（[rd_loop.py#L199-L210](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py#L199-L210)）：
+
+```python
+async def direct_exp_gen(self, prev_out: dict[str, Any]):
+    while True:
+        if self.get_unfinished_loop_cnt(self.loop_idx) < RD_AGENT_SETTINGS.get_max_parallel():
+            hypo = self._propose()
+            exp = self._exp_gen(hypo)
+            exp.base_features = self.plan["features"]
+            exp.base_feature_codes = self.plan["feature_codes"]
+            if exp.based_experiments:
+                exp.based_experiments[-1].base_features = self.plan["features"]
+                exp.based_experiments[-1].base_feature_codes = self.plan["feature_codes"]
+            return {"propose": hypo, "exp_gen": exp}
+        await asyncio.sleep(1)
+```
+
+`while True` + `get_unfinished_loop_cnt(...) < get_max_parallel()` 构成一个简单的并发闸门：当正在执行的 loop 数达到 `RD_AGENT_SETTINGS.get_max_parallel()` 上限时，该协程每秒轮询一次，直到有 slot 空出才真正调用 HypothesisGen/H2E。此外，除了 `base_features`（算子形式的基线因子，如 `"RESI5": "Resi($close, 5)/$close"`），还会设置 `base_feature_codes`（代码形式的基线因子），并同步赋值给基线链的最后一个实验（通常是 SOTA），供 Runner 组合回测使用。
+
+在量化全流程（QuantRDLoop）中，根据 `hypothesis.action` 路由到因子或模型转换器（[quant.py#L74-L90](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/quant.py#L74-L90)）：
 
 ```python
 async def direct_exp_gen(self, prev_out):
-    hypo = self._propose()                           # HypothesisGen
-    exp = self.factor_hypothesis2experiment.convert(  # Hypothesis2Experiment
-        hypo, self.trace
-    )
-    exp.base_features = self.plan["features"]
-    return {"propose": hypo, "exp_gen": exp}
+    while True:
+        if self.get_unfinished_loop_cnt(self.loop_idx) < RD_AGENT_SETTINGS.get_max_parallel():
+            hypo = self._propose()
+            assert hypo.action in ["factor", "model"]
+            if hypo.action == "factor":
+                exp = self.factor_hypothesis2experiment.convert(hypo, self.trace)
+            else:
+                exp = self.model_hypothesis2experiment.convert(hypo, self.trace)
+            logger.log_object(exp.sub_tasks, tag="experiment generation")
+            exp.base_features = self.plan["features"]
+            exp.base_feature_codes = self.plan["feature_codes"]
+            if exp.based_experiments:
+                exp.based_experiments[-1].base_features = self.plan["features"]
+                exp.based_experiments[-1].base_feature_codes = self.plan["feature_codes"]
+            return {"propose": hypo, "exp_gen": exp}
+        await asyncio.sleep(1)
 ```
 
-在量化全流程（QuantRDLoop）中，根据 `hypothesis.action` 路由到因子或模型转换器：
-
-```python
-if hypo.action == "factor":
-    exp = self.factor_hypothesis2experiment.convert(hypo, self.trace)
-elif hypo.action == "model":
-    exp = self.model_hypothesis2experiment.convert(hypo, self.trace)
-```
+注意 QuantRDLoop 用 `assert hypo.action in ["factor", "model"]` 做前置校验，然后用 `if/else`（不是 `if/elif`）二选一路由；与基类一样会设置 `base_features` 与 `base_feature_codes`，并透传给基线链末尾的实验。
 
 输出的 `Experiment` 对象随后传递给 CoSTEER 进行代码生成：
 

@@ -102,7 +102,7 @@ PDF文件
   │     PyPDFLoader/PyPDFDirectoryLoader → 全文文本(dict[path, text])
   │
   ├─② classify_report_from_dict()
-  │     LLM分类：是否为有用的量化/金工研报（vote_time轮投票）
+  │     LLM分类：是否为有用的量化/金工研报（vote_time=1，单次判断）
   │     → selected_report_dict（过滤掉非量化报告）
   │
   ├─③ extract_factors_from_report_dict() [多进程]
@@ -118,7 +118,8 @@ PDF文件
   │     → factor_dict (合并后的大字典)
   │
   ├─⑤ check_factor_viability() [多进程]
-  │     LLM判断每个因子是否可代码实现（每批50个并行）
+  │     LLM判断每个因子是否可代码实现（按每批50个切分传给LLM，
+  │     多进程由 RD_AGENT_SETTINGS.multi_proc_n 控制）
   │     → filtered_factor_dict（过滤掉不可实现的）
   │
   ├─⑥ FactorExperimentLoaderFromDict().load()
@@ -131,7 +132,7 @@ PDF文件
 
 ### 5.1 研报分类（classify_report_from_dict）
 
-系统提示词指导 LLM 判断每份报告是否包含可实现的量化因子。采用投票机制（`vote_time` 参数，默认多次判断取多数）提高准确性。内容超过 token 限制时自动截断。
+系统提示词指导 LLM 判断每份报告是否包含可实现的量化因子。当前调用传入 `vote_time=1`（单次分类判断）；代码支持多次投票取多数（`vote_time` 参数），但当前 `FactorExperimentLoaderFromPDFfiles.load()` 中实际传 1。内容超过 token 限制时自动截断。
 
 ### 5.2 因子名称与描述提取
 
@@ -152,11 +153,11 @@ PDF文件
 - 描述过于模糊无法编码的因子
 - 需要另类数据（如新闻情绪、卫星图像）但系统无法获取的因子
 
-### 5.6 已注释的步骤
+### 5.6 未启用的步骤
 
-以下步骤在代码中存在但**当前被注释未启用**：
-- `check_factor_relevance()`：因子相关性检查
-- `deduplicate_factors_by_llm()`：基于 KMeans 聚类 + LLM 判断的语义去重
+以下函数在代码中存在但**当前未在 NLP 管道中被调用**：
+- `check_factor_relevance()`：因子相关性检查（函数定义于 [pdf_loader.py:281](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/factor_experiment_loader/pdf_loader.py#L281)，但管道中无调用）
+- `deduplicate_factors_by_llm()`：基于 KMeans 聚类 + LLM 判断的语义去重（其调用在 [pdf_loader.py:587](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/factor_experiment_loader/pdf_loader.py#L587) 被注释）
 
 ---
 
@@ -186,12 +187,14 @@ PDF文件
 │  │  │   │   shift_report+=1, loop_n-=1, continue             │  │
 │  │  │   ├─ extract_first_page_screenshot_from_pdf() 首页截图 │  │
 │  │  │   ├─ generate_hypothesis(factor_result, report_content)│  │
-│  │  │   │   LLM事后生成假设描述                               │  │
+│  │  │   │   LLM事后生成Hypothesis对象（函数注解标str但实际  │  │
+│  │  │   │   返回Hypothesis）                                  │  │
 │  │  │   └─ exp.hypothesis = hypothesis                       │  │
 │  │  ├─ 截断因子数: sub_tasks[:max_factors_per_exp=6]         │  │
 │  │  ├─ 设置based_experiments:                                 │  │
 │  │  │   空基线实验 + [t[0] for t in trace.hist if t[1]]      │  │
-│  │  │   (历史成功实验作为参考)                                 │  │
+│  │  │   (t[1]为feedback对象，truthy意味着feedback非None；    │  │
+│  │  │    异常轮feedback也可能存在但decision=False)           │  │
 │  │  ├─ 设置base_features = ALPHA20                           │  │
 │  │  └─ 返回exp (直接返回Experiment对象，不是dict)             │  │
 │  │                                                           │  │
@@ -247,9 +250,9 @@ PDF 文本提取和因子提取使用 `multiprocessing_wrapper` 并行处理多�
 
 研报场景的 `based_experiments` 包含：
 1. 一个空基线 `QlibFactorExperiment(sub_tasks=[], hypothesis=exp.hypothesis)`
-2. 所有历史成功实验 `[t[0] for t in self.trace.hist if t[1]]`（即 feedback.decision=True 的实验）
+2. 所有历史实验 `[t[0] for t in self.trace.hist if t[1]]`
 
-这使得 CoSTEER 可以参考之前研报中成功实现的因子代码作为范例，Runner 也能将之前研报的成功因子合并入 SOTA 库。
+注意 `t[1]` 是 feedback 对象，`if t[1]` 是 truthy 判断（即 feedback 非 `None`），并不严格等于 `feedback.decision=True`。异常轮也会生成 decision=False 的 feedback 进入该列表。这使得 CoSTEER 可以参考之前研报中实现的因子代码作为范例，Runner 也能将之前研报的成功因子合并入 SOTA 库。
 
 ---
 

@@ -32,12 +32,23 @@ class Trace(Generic[ASpecificScen, ASpecificKB]):
     current_selection: tuple[int, ...]           # 当前选择的扩展点
 ```
 
+量化全流程场景使用一个子类 `QuantTrace`（[quant_proposal.py#L16-L20](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/quant_proposal.py#L16-L20)）：
+
+```python
+class QuantTrace(Trace):
+    def __init__(self, scen: Scenario) -> None:
+        super().__init__(scen)
+        self.controller = EnvController()   # bandit 动作选择控制器，记录指标并决策 factor/model
+```
+
+即 `QuantTrace` 在基类基础上仅新增了一个 `controller = EnvController()` 字段，供 bandit 模式的 HypothesisGen 调用 `trace.controller.record(...)` / `trace.controller.decide(...)`。LLM/random 模式下该 controller 不参与决策。
+
 ### 2.2 核心字段详解
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `hist` | `list[tuple[Experiment, ExperimentFeedback]]` | **核心字段**。按时间顺序排列的历史记录，每个元素是 `(实验, 反馈)` 二元组 |
-| `dag_parent` | `list[tuple[int, ...]]` | 与 `hist` 一一对应的父节点索引列表。`()` 表示根节点（无父），`(-1,)` 表示以最新节点为父 |
+| `dag_parent` | `list[tuple[int, ...]]` | 与 `hist` 一一对应的父节点索引列表。`()` 表示根节点（无父）；非根元素存的是**真实索引**（如 `(0,)`、`(1,)`）。`(-1,)` 只作为 `current_selection` 中的语法糖表示"最新节点"，落盘到 `dag_parent` 前会被解析为真实下标 |
 | `idx2loop_id` | `dict[int, int]` | 因为多进程并发执行时 hist 入队顺序可能与 loop_id 不一致，此映射记录每个 hist 索引属于第几轮 |
 | `current_selection` | `tuple[int, ...]` | 当前选择的扩展节点，默认 `SEL_LATEST_SOTA = (-1,)` 表示基于最新 SOTA 继续演化 |
 
@@ -55,7 +66,7 @@ class Trace(Generic[ASpecificScen, ASpecificKB]):
 
 ### 3.1 Experiment（实验）
 
-每个实验包含从假设到执行结果的完整信息（[experiment.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/experiment.py)）：
+每个实验包含从假设到执行结果的完整信息（[experiment.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/experiment.py)）。基类 `Experiment.__init__` 中声明的字段如下：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -64,20 +75,30 @@ class Trace(Generic[ASpecificScen, ASpecificKB]):
 | `sub_workspace_list` | `list[FBWorkspace \| None]` | 各子任务的代码工作区，包含实际编写的 Python 代码 |
 | `based_experiments` | `Sequence[Experiment]` | 该实验的基线实验（通常是当前 SOTA），新因子会与 SOTA 因子组合 |
 | `experiment_workspace` | `Workspace \| None` | 实验级共享工作区 |
-| `result` | `object` | 执行结果（如回测指标 `pd.Series`，包含 IC、年化收益、最大回撤等） |
-| `stdout` | `str` | 执行过程中的标准输出（用于调试和日志） |
+| `prop_dev_feedback` | `Feedback \| None` | 跨 developer 传递的反馈（生命周期：上一 developer 赋值，workflow 控制清除） |
+| `running_info` | `RunningInfo` | 运行信息对象，含 `result` 和 `running_time`；注意 `result` 是通过该对象暴露的 **property**，不是基类 `__init__` 中直接声明的字段 |
+| `sub_results` | `dict[str, float]` | 子结果字典（Kaggle 等场景使用，Qlib 因子场景结果走 `running_info.result`） |
 | `local_selection` | `tuple[int, ...] \| None` | 该实验指定的父节点选择（支持分支演化） |
+| `plan` | `ExperimentPlan \| None` | 该实验的规划信息（应在 exp_gen 阶段生成） |
+| `user_instructions` | `UserInstructions \| None` | 附加到该实验及其子任务/工作区的用户指令 |
+| `result`（property） | `object` | **property**：getter 返回 `self.running_info.result`，setter 写入 `self.running_info.result`。执行结果如回测指标 `pd.Series`（包含 IC、年化收益、最大回撤等） |
+
+> ⚠️ **`stdout` 不是基类字段**：`Experiment` 基类并没有声明 `stdout` 属性。`stdout` 是 Qlib 场景子类在各自 `__init__` 中动态添加的——`QlibFactorExperiment`（[factor_experiment.py#L23](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/experiment/factor_experiment.py#L23)）和 `QlibModelExperiment`（[model_experiment.py#L22](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/experiment/model_experiment.py#L22)）都会初始化 `self.stdout = ""`，随后由 factor_runner/model_runner 在执行后赋值（`exp.stdout = stdout`）。基类实验对象并不保证存在该属性。
 
 ### 3.2 FBWorkspace（代码工作区）
 
-每个子任务的代码存储在 FBWorkspace 中：
+每个子任务的代码存储在 FBWorkspace 中（[experiment.py#L139-L169](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/experiment.py#L139-L169)）：
 
 ```python
 class FBWorkspace(Workspace):
-    file_dict: dict[str, str]  # {文件名: 文件内容} 字典
+    file_dict: dict[str, Any]   # {文件名: 文件内容} 字典，值类型为 Any（通常是 str）
     # 例如: {"factor.py": "import pandas as pd\ndef calculate(df):...", "config.yaml": "..."}
-    workspace_path: Path       # 工作目录路径（RD-Agent_workspace/<UUID>/）
+    workspace_path: Path        # 工作目录路径（RD-Agent_workspace/<UUID>/）
+    ws_ckp: bytes | None        # create_ws_ckp() 生成的内存 zip 检查点（字节）
+    change_summary: str | None  # 相对上一版工作区的变更摘要
 ```
+
+> 说明：`file_dict` 的类型标注是 `dict[str, Any]`（不是 `dict[str, str]`），虽然注入代码时值一般是字符串；`ws_ckp` 由 `create_ws_ckp()` 将工作区目录打包成 zip 字节写入，供 `recover_ws_ckp()` 还原；`change_summary` 用于记录本版相对前版的改动。基类 `Workspace` 还提供 `feedback`（该工作区对应的反馈）和 `running_info` 字段。
 
 代码同时存储在内存（`file_dict`）和磁盘（`workspace_path`），随 pickle 序列化。
 
@@ -87,12 +108,12 @@ multialpha 系统中有**两个层级**的反馈，分别对应 R&D 循环的不
 
 #### 3.3.1 编码阶段反馈：CoSTEERSingleFeedback（CoSTEER 评估器）
 
-由 [FactorEvaluatorForCoder](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/factor_coder/evaluators.py#L20) / ModelEvaluatorForCoder 在**编码-演化循环**中生成，存储在 EvolvingItem 中而非直接存入 Trace.hist。它通过三级管线评估单个子任务（因子/模型）的代码实现：
+由 [FactorEvaluatorForCoder](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/factor_coder/evaluators.py#L20) / ModelEvaluatorForCoder 在**编码-演化循环**中生成。单个子任务的反馈（`CoSTEERSingleFeedback`）最终被赋值到该子任务对应工作区的 `Workspace.feedback` 属性上（[experiment.py#L95](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/experiment.py#L95)），随 `sub_workspace_list` 一起在 CoSTEER 演化循环中流转，**不会**直接写入 `Trace.hist`（Trace.hist 存的是回测后的 `HypothesisFeedback`）。CoSTEER 内部确实有一个 `EvolvingItem(Experiment, EvolvableSubjects)` 类（[evolvable_subjects.py#L6](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/evolvable_subjects.py#L6)）作为演化中间载体，但反馈数据本身附着在其 `sub_workspace_list[i].feedback` 上。它通过三级管线评估单个子任务（因子/模型）的代码实现：
 
 | 评估级 | 对应字段 | 评估器 | 评估内容 |
 |--------|---------|--------|---------|
 | 执行检查 | `execution` | `FactorFBWorkspace.execute()` | 代码是否能运行，包含 stdout/stderr 和 traceback，过滤 warning 和超长数值列表 |
-| 返回值检查 | `return_checking` | `FactorValueEvaluator`（组合9个子检查器） | 输出 DataFrame 的格式与数值校验：单列检查、Inf值检查、输出格式LLM判定、日频检查、行数比、索引相似度、缺失值、等值率、IC/RankIC 相关性 |
+| 返回值检查 | `return_checking` | `FactorValueEvaluator`（条件性组合多个子检查器） | 输出 DataFrame 的格式与数值校验：单列检查、Inf值检查、输出格式LLM判定、日频检查、行数比、索引相似度、缺失值、等值率、IC/RankIC 相关性 |
 | **代码评审** | `code` | `FactorCodeEvaluator` | **LLM 驱动的 Code Review**：检查代码逻辑是否与因子任务描述一致、是否与 GT 代码对齐（如有）、结合执行错误和值差异指出关键问题 |
 | 最终决策 | `final_decision` | `FactorFinalDecisionEvaluator` | LLM 综合 execution + return_checking + code 三方信息，输出布尔决策（是否接受该实现） |
 
@@ -105,19 +126,23 @@ multialpha 系统中有**两个层级**的反馈，分别对应 R&D 循环的不
 - **输出格式**：自由文本，每行一条 critic，格式为 `critic N: <批评内容>`
 - **触发条件**：值检查未明确通过时才触发 code review（值检查明确失败 → code review + final_decision=False；值检查不明确 → code review + LLM 最终决策）
 
-**返回值检查（Value Evaluator）的7个子检查器**：
+**返回值检查（Value Evaluator）的子检查器（条件性执行，并非每次都跑全部）**：
 
-| 检查器 | 检查内容 | 失败条件 |
-|--------|---------|---------|
-| `FactorSingleColumnEvaluator` | 输出是否只有一列（v1 因子） | 列数 ≠ 1 |
-| `FactorInfEvaluator` | 是否存在 Inf/-Inf 值 | Inf 数量 > 0 |
-| `FactorOutputFormatEvaluator` | LLM 判断输出格式是否正确 | JSON `output_format_decision=false` |
-| `FactorDatetimeDailyEvaluator` | 索引是否为 datetime 且为日频 | 含分钟级数据或非 datetime 索引 |
-| `FactorRowCountEvaluator` | 行数与 GT 的比率 | ratio ≤ 0.99 |
-| `FactorIndexEvaluator` | 索引 Jaccard 相似度与 GT | similarity ≤ 0.99 |
-| `FactorMissingValuesEvaluator` | 缺失值数量是否与 GT 一致 | 缺失值数不等 |
-| `FactorEqualValueRatioEvaluator` | 等值率（误差 < 1e-6） | ratio 较低 |
-| `FactorCorrelationEvaluator` | IC/RankIC 与 GT 相关性（hard_check） | IC ≤ 0.99 或 RankIC ≤ 0.99 |
+`FactorValueEvaluator.evaluate`（[eva_utils.py#L389-L475](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/factor_coder/eva_utils.py#L389-L475)）根据 `version` 和是否提供 `gt_implementation` **条件性**地调用下列子检查器，最多 9 个：
+
+| 检查器 | 检查内容 | 失败条件 | 执行条件 |
+|--------|---------|---------|---------|
+| `FactorSingleColumnEvaluator` | 输出是否只有一列（v1 因子） | 列数 ≠ 1 | 仅 `version == 1` |
+| `FactorInfEvaluator` | 是否存在 Inf/-Inf 值 | Inf 数量 > 0 | 始终执行 |
+| `FactorOutputFormatEvaluator` | LLM 判断输出格式是否正确 | JSON `output_format_decision=false` | 始终执行 |
+| `FactorDatetimeDailyEvaluator` | 索引是否为 datetime 且为日频 | 含分钟级数据或非 datetime 索引 | 仅 `version == 1` |
+| `FactorRowCountEvaluator` | 行数与 GT 的比率 | ratio ≤ 0.99 | 仅当 `gt_implementation is not None` |
+| `FactorIndexEvaluator` | 索引 Jaccard 相似度与 GT | similarity ≤ 0.99 | 仅当 `gt_implementation is not None` |
+| `FactorMissingValuesEvaluator` | 缺失值数量是否与 GT 一致 | 缺失值数不等 | 仅当 `gt_implementation is not None` |
+| `FactorEqualValueRatioEvaluator` | 等值率（误差 < 1e-6） | ratio 较低 | 仅当 `gt_implementation is not None` |
+| `FactorCorrelationEvaluator` | IC/RankIC 与 GT 相关性（hard_check） | IC ≤ 0.99 或 RankIC ≤ 0.99 | 仅当 `gt_implementation is not None` 且 `index_result > 0.99` |
+
+> 因此"7个"与"9个"的说法都不准确：在无 GT（`gt_implementation is None`）时只跑单列(v1)/Inf/输出格式/日频(v1)这几个；在 v1 且提供 GT 时才可能跑满上述 9 个具名检查器，且相关性检查还需索引相似度先达标。`version == 2`（Kaggle 特征处理）不跑单列/日频检查，改以内联消息检查输出列数。
 
 多子任务反馈聚合为 [CoSTEERMultiFeedback](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/evaluators.py#L199-L228)，`final_decision` 取所有子反馈的 AND（全部通过才算通过）。
 
@@ -127,13 +152,17 @@ multialpha 系统中有**两个层级**的反馈，分别对应 R&D 循环的不
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `observations` | `str` | 对实验结果的观察（IC、年化收益、最大回撤等指标对比） |
-| `hypothesis_evaluation` | `str` | 对假设的评估（假设方向是否正确、为什么） |
-| `new_hypothesis` | `str` | 建议的下一步研究假设 |
+| `observations` | `str \| None` | 对实验结果的观察（IC、年化收益、最大回撤等指标对比） |
+| `hypothesis_evaluation` | `str \| None` | 对假设的评估（假设方向是否正确、为什么） |
+| `new_hypothesis` | `str \| None` | 建议的下一步研究假设 |
 | `reason` | `str` | 决策理由的详细推理 |
 | `decision` | `bool` | 是否替换当前 SOTA（即本次实验是否超越基线） |
+| `acceptable` | `bool \| None` | 是否可接受（由子类 `HypothesisFeedback` 新增，区别于基类 `decision`；用于区分"超越 SOTA"与"虽未超越但可接受"等场景，Summarizer 生成时可能为 `None`） |
+| `exception` | `Exception \| None` | 若实验因异常未能生成可运行结果，记录异常对象；正常回测时为 `None`（继承自基类 `ExperimentFeedback`） |
+| `eda_improvement` | `str \| None` | EDA（探索性数据分析）改进建议（继承自基类 `ExperimentFeedback`，量化反馈生成流程通常不设置） |
+| `code_change_summary` | `str \| None` | 代码变更摘要（继承自基类 `ExperimentFeedback`，异常分支中默认置空字符串） |
 
-**生成过程**：Summarizer 将当前实验结果与 SOTA 结果的关键指标（IC、年化超额收益、最大回撤）拼接成文本，连同假设文本和各子任务信息一起发给 LLM（glm-5.2），LLM 以 JSON 模式返回上述5个字段，其中 `decision` 决定是否更新 SOTA。
+**生成过程**：Summarizer 将当前实验结果与 SOTA 结果的关键指标（`IMPORTANT_METRICS` 中的 IC、扣费年化超额收益、扣费最大回撤，见 4.1）拼接成文本，连同假设文本和各子任务信息一起发给 LLM（glm-5.2），LLM 以 JSON 模式返回 `observations`、`hypothesis_evaluation`、`new_hypothesis`、`reason`、`decision` 等字段，其中 `decision` 决定是否更新 SOTA。异常分支（workflow 捕获到异常）会直接构造 `decision=False`、`acceptable=False` 的反馈，而不经过 LLM。
 
 > **关键区别**：CoSTEER 反馈评估的是**代码实现是否正确**（编码阶段，含 code review），HypothesisFeedback 评估的是**研究假设是否成立**（回测阶段，基于指标）。前者决定代码是否需要重写，后者决定研究方向是否调整。
 
@@ -145,7 +174,17 @@ multialpha 系统中有**两个层级**的反馈，分别对应 R&D 循环的不
 
 一个实验成为新的 SOTA 当且仅当：
 - 该实验的 `HypothesisFeedback.decision == True`
-- Summarizer 根据回测指标（IC、年化收益、夏普比率、最大回撤等）综合判断
+- Summarizer 根据回测指标综合判断
+
+用于 SOTA 判定的关键指标由 `IMPORTANT_METRICS`（[feedback.py#L17-L21](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/feedback.py#L17-L21)）明确定义，只有以下 **3 项**：
+
+1. `IC`
+2. `1day.excess_return_with_cost.annualized_return`（扣费年化超额收益）
+3. `1day.excess_return_with_cost.max_drawdown`（扣费最大回撤）
+
+> ⚠️ **不存在"夏普比率"**：`IMPORTANT_METRICS` 中并没有夏普比率（Sharpe Ratio），SOTA 判定只基于上述 IC、扣费年化收益、扣费最大回撤三项。
+>
+> 💰 **with_cost vs without_cost**：反馈（Summarizer 的 `factor_feedback_generation` / `model_feedback_generation` 模板）用于 SOTA 判定时取的是 **`with_cost`** 版本指标（见 `process_results` 与模型反馈中 `.loc[IMPORTANT_METRICS]`）；而 `hypothesis_and_feedback`、`last_hypothesis_and_feedback`、`sota_hypothesis_and_feedback` 等模板在向 HypothesisGen/H2E 展示历史结果时，使用的是 **`without_cost`** 版本（[qlib/prompts.yaml#L15](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/prompts.yaml#L15) 等处：`experiment.result.loc[["IC", "1day.excess_return_without_cost.annualized_return", "1day.excess_return_without_cost.max_drawdown"]]`）。也就是说，**决定是否替换 SOTA 看扣费指标，给假设生成看历史时看不扣费指标**，两者刻意区分。
 
 ### 4.2 SOTA 查询方法
 
@@ -283,13 +322,26 @@ def record(self, prev_out):
     self.trace.sync_dag_parent_and_hist((exp, feedback), prev_out[self.LOOP_IDX_KEY])
 ```
 
-这是 Trace 被更新的**唯一入口**。
+该方法负责在追加 `hist` 的同时计算并写入对应的 `dag_parent`、`idx2loop_id`。它是 record 步骤追加节点的标准入口，但**不是 Trace 被更新的唯一入口**——下列路径也会修改 Trace 状态：
 
-### 6.3 支持的演化模式
+- `Trace.set_current_selection(selection)`：直接改写 `self.current_selection`（[proposal.py#L200-L201](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L200-L201)），用于切换下一轮扩展点；
+- QuantTrace 场景下，`QuantTrace.controller`（`EnvController`）由 HypothesisGen 直接读写（如 `trace.controller.record(...)`、`trace.controller.decide(...)`，见 [quant_proposal.py#L57-L58](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/quant_proposal.py#L57-L58)）；
+- 其它代码路径也可能直接对 `trace.hist` 进行构造/插入（例如 H2E 中创建临时 `specific_trace` 用于渲染提示词，但那是局部对象，不会写回主 trace）。
 
-- **线性演化**：默认模式，每轮基于最新 SOTA 继续（`dag_parent` 追加 `(-1,)`）
-- **分支探索**：通过 `local_selection` 选择不同父节点分支
-- **回溯恢复**：从 session pickle 加载后继续运行（断点续跑）
+### 6.3 dag_parent 中存的是实际索引，`(-1,)` 只是 current_selection 的语法糖
+
+`sync_dag_parent_and_hist` 在写入 `dag_parent` 时：
+
+- 根节点写入 `NEW_ROOT = ()`；
+- 非根节点读取 `selection[0]` 作为父节点索引，若该值为 `-1`，则在写入**之前**把它替换为 `len(self.hist) - 1`（即当前最新节点的真实索引），再追加 `(current_node_idx,)`。
+
+因此 `dag_parent` 列表中存储的永远是**实际的整数索引**（如 `(0,)`、`(1,)`），而不会出现 `(-1,)`。`(-1,)` 这个值只存在于 `current_selection`（以及 `SEL_LATEST_SOTA` 常量）中，作为"选择最新节点"的语法糖，在真正落盘到 `dag_parent` 时已被解析为真实下标。
+
+### 6.4 支持的演化模式
+
+- **线性演化**：默认模式，`current_selection` 保持 `(-1,)`（最新 SOTA），`sync_dag_parent_and_hist` 把它解析为上一节点的真实索引后写入 `dag_parent`；
+- **分支探索**：通过 `exp.local_selection` 或 `set_current_selection` 选择不同父节点分支；
+- **回溯恢复**：从 session pickle 加载后继续运行（断点续跑）。
 
 ---
 
@@ -301,13 +353,15 @@ def record(self, prev_out):
 
 ```python
 def dump(self, path: str | Path) -> None:
+    if RD_Agent_TIMER_wrapper.timer.started:
+        RD_Agent_TIMER_wrapper.timer.update_remain_time()
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as f:
         pickle.dump(self, f)
 ```
 
-整个 `LoopBase` 对象（包含 `self.trace`）被 pickle 序列化。
+在 pickle 之前，若全局 `RD_Agent_TIMER_wrapper.timer` 已启动（用于 `all_duration` 总时长预算控制），会先调用 `update_remain_time()` 把剩余时间快照写回 timer，确保反序列化后续跑时能正确继承剩余预算。随后整个 `LoopBase` 对象（包含 `self.trace`）被 pickle 序列化。
 
 ### 7.2 Load 机制
 
@@ -326,10 +380,10 @@ def dump(self, path: str | Path) -> None:
 
 ### 7.4 知识图谱持久化
 
-CoSTEER 的知识图谱（graph.pkl）独立于 Trace 存储：
-- 位于当前工作目录 `Path.cwd() / "graph.pkl"`
-- 通过 `knowledge_base_path` 配置可跨运行复用
-- LoopBase session pickle 中包含完整 KB 引用
+CoSTEER 的知识库（历史成功/失败实现的向量库）独立于 Trace 存储：
+- 路径由配置项 `CoSTEER.knowledge_base_path`（读取旧库）和 `CoSTEER.new_knowledge_base_path`（dump 新库）决定，两者默认值均为 `None`（[config.py#L30-L34](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/config.py#L30-L34)）。未配置时不会从磁盘加载、也不会落盘（`dump_knowledge_base_path is None` 时仅打印 warning 并跳过）。
+- 代码中**没有**硬编码 `Path.cwd() / "graph.pkl"` 这样的路径；`graph.pkl` 只是某些部署脚本/示例里可能采用的文件名，并非框架默认行为。
+- LoopBase session pickle 中包含的是运行时内存里的 KB 对象引用，但跨运行复用必须显式配置上述路径。
 
 ---
 
@@ -400,18 +454,20 @@ trace.hist = [
 
 trace.dag_parent = [
     (),        # Exp0: 根节点（无父）
-    (-1,),     # Exp1: 父节点是上一轮
-    (-1,),     # Exp2: 父节点是上一轮（SOTA1）
+    (0,),      # Exp1: 父节点是 hist[0]（current_selection 中的 (-1,) 在写入时被解析为 0）
+    (1,),      # Exp2: 父节点是 hist[1]（current_selection 中的 (-1,) 在写入时被解析为 1）
 ]
 ```
 
-对应的 session pickle 文件大小变化：
+> 注意：这里 `dag_parent` 里存的是真实索引 `(0,)`、`(1,)` 而不是 `(-1,)`。`(-1,)` 只出现在 `trace.current_selection`（默认 `SEL_LATEST_SOTA`）中，`sync_dag_parent_and_hist` 写入前会把它替换为 `len(hist) - 1`。
+
+对应的 session pickle 文件大小变化（以下均为**示例值**，实际大小取决于工作区代码、数据与历史长度）：
 ```
-0/0_direct_exp_gen  ~50KB    (空hist)
-0/4_record          ~52KB    (1条历史)
-1/0_direct_exp_gen  ~470KB   (1条历史)
-1/4_record          ~495KB   (2条历史)
-2/4_record          ~520KB   (3条历史)
+0/0_direct_exp_gen  ~50KB    (空hist)            # 示例值
+0/4_record          ~52KB    (1条历史)           # 示例值
+1/0_direct_exp_gen  ~470KB   (1条历史)           # 示例值
+1/4_record          ~495KB   (2条历史)           # 示例值
+2/4_record          ~520KB   (3条历史)           # 示例值
 ```
 
 ---

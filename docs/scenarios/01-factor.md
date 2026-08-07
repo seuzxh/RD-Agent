@@ -10,7 +10,7 @@
 
 **核心特点**：
 - 🧪 **LLM 自主探索**：不需要用户提供因子公式或研报，由假设生成智能体自主探索因子空间
-- 📈 **渐进式复杂度**：前15轮优先尝试简单量价因子，15轮后探索 ML-based 等复杂因子
+- 📈 **渐进式复杂度**：前15轮（`len(trace.hist)<15`）优先尝试简单量价因子，第16轮起（`len(trace.hist)>=15`）探索 ML-based 等复杂因子（代码 [factor_proposal.py:38-41](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/factor_proposal.py#L38-L41) 判断 `len(trace.hist)`）
 - 🔗 **因子累积机制**：成功因子自动进入 SOTA 因子库，新因子与 SOTA 因子组合回测
 - 🔄 **IC 去重**：与已有 SOTA 因子相关系数 ≥0.99 的新因子自动剔除
 - 🛡️ **错误容错**：因子执行失败（FactorEmptyError）不中断循环，跳过当前轮继续
@@ -60,8 +60,9 @@ dotenv run -- python rdagent/app/qlib_rd_loop/factor.py --base_features_path ./m
 | `QLIB_FACTOR_SUMMARIZER` | QlibFactorExperiment2Feedback | 反馈生成类 |
 | `QLIB_FACTOR_EVOLVING_N` | 10 | CoSTEER 内部编码迭代轮数 |
 | `QLIB_FACTOR_MODEL_SELECTOR` | lgbm | 因子验证模型：lgbm/linear/xgboost/catboost |
-| `QLIB_FACTOR_TRAIN_START` | 2008-01-01 | 训练集起始 |
-| `QLIB_FACTOR_TEST_END` | auto | 测试集结束（auto=最新交易日） |
+| `QLIB_FACTOR_TRAIN_START/END` | 2008-01-01 / 2014-12-31 | 训练集 |
+| `QLIB_FACTOR_VALID_START/END` | 2015-01-01 / 2016-12-31 | 验证集 |
+| `QLIB_FACTOR_TEST_START/END` | 2017-01-01 / auto | 测试集（auto=最新交易日） |
 
 ---
 
@@ -70,15 +71,15 @@ dotenv run -- python rdagent/app/qlib_rd_loop/factor.py --base_features_path ./m
 ```
 FactorRDLoop
 ├── scen:           QlibFactorScenario
-├── hypothesis_gen: QlibFactorHypothesisGen    (minimax-m3, temp=0.7)
+├── hypothesis_gen: QlibFactorHypothesisGen    (模型/temperature由 CHAT_MODEL_MAP 配置路由，见 .env)
 ├── h2e:            QlibFactorHypothesis2Experiment
-├── coder:          QlibFactorCoSTEER          (deepseek-v4, temp=0.5, evolving_n=10)
+├── coder:          QlibFactorCoSTEER          (模型/temperature由 CHAT_MODEL_MAP 配置路由，evolving_n=10)
 │   └── evolving_version: 2 (图知识库V2)
 ├── runner:         QlibFactorRunner           (无LLM调用)
 │   ├── process_factor_data() → 收集SOTA因子+新因子
 │   ├── deduplicate_new_factors() → IC去重(阈值0.99)
 │   └── execute() → Docker内qrun回测
-└── summarizer:     QlibFactorExperiment2Feedback (glm-5.2, temp=0.4)
+└── summarizer:     QlibFactorExperiment2Feedback (模型/temperature由 CHAT_MODEL_MAP 配置路由)
 ```
 
 ---
@@ -105,10 +106,13 @@ FactorRDLoop
 │  │  │   └─ 用户交互修改(可选)                                  │  │
 │  │  │                                                        │  │
 │  │  └─ _exp_gen(): QlibFactorHypothesis2Experiment.convert() │  │
-│  │      ├─ prepare_context() 传入SOTA因子列表用于去重          │  │
+│  │      ├─ prepare_context() 组装场景/历史链/输出格式等上下文   │  │
+│  │      │   （不接收SOTA因子列表参数）                         │  │
 │  │      ├─ LLM将假设转化为FactorTask列表(名称/描述/公式/变量)  │  │
-│  │      ├─ 去重：与SOTA和本轮已有因子比较，剔除重复              │  │
-│  │      ├─ 设置based_experiments: 空基线+所有历史成功因子实验   │  │
+│  │      ├─ 去重：convert()内部遍历based_experiments，基于trace │  │
+│  │      │   剔除与SOTA/本轮已有因子同名的重复任务              │  │
+│  │      ├─ 设置based_experiments（H2E负责构建）:               │  │
+│  │      │   空基线实验 + trace中feedback非None的历史因子实验   │  │
 │  │      └─ 注入base_features(ALPHA20)                         │  │
 │  │                                                           │  │
 │  │  ② coding() — QlibFactorCoSTEER.develop(exp)              │  │
@@ -121,15 +125,19 @@ FactorRDLoop
 │  │  │   ├─ FactorMultiProcessEvolvingStrategy: LLM生成/修改  │  │
 │  │  │   │   factor.py代码                                    │  │
 │  │  │   ├─ 本地执行factor.py（Conda/Docker），生成result.h5  │  │
-│  │  │   ├─ 三级评估：                                         │  │
-│  │  │   │   ├─ 执行检查：代码能否运行                          │  │
-│  │  │   │   ├─ 值/形状检查：输出DataFrame是否正确             │  │
-│  │  │   │   └─ 代码评审：LLM判断代码质量                      │  │
+│  │  │   ├─ 多层评估：                                         │  │
+│  │  │   │   ├─ 执行检查：代码能否运行，收集execution_feedback │  │
+│  │  │   │   ├─ 形状/值检查（FactorValueEvaluator，含多个子   │  │
+│  │  │   │   │   检查器：单列/Inf/输出格式/日频/行数/索引/     │  │
+│  │  │   │   │   缺失值/等值率/相关性等）                      │  │
+│  │  │   │   ├─ LLM代码评审（FactorCodeEvaluator）            │  │
+│  │  │   │   └─ 最终决策（FactorFinalDecisionEvaluator）      │  │
 │  │  │   └─ 知识更新：成功时写入图知识库(component/task/error) │  │
 │  │  └─ 返回填充了代码的Experiment                              │  │
 │  │                                                           │  │
 │  │  ③ running() — QlibFactorRunner.develop(exp)              │  │
-│  │  ├─ 递归处理基线实验（确保SOTA已有结果）                     │  │
+│  │  ├─ 处理based_experiments链中最后一个基线                  │  │
+│  │  │   （若其result为None则递归调用一次develop确保有结果）    │  │
 │  │  ├─ process_factor_data(based_experiments):               │  │
 │  │  │   并行执行所有SOTA因子代码→拼接SOTA因子DataFrame         │  │
 │  │  ├─ process_factor_data(exp): 执行本轮新因子代码            │  │
@@ -207,7 +215,7 @@ Round 2: [ALPHA20 + 因子1 + 因子2(SOTA)] + [新因子3] → 23个因子 → 
 
 `FactorRDLoop` 定义了 `skip_loop_error = (FactorEmptyError, CoderError)`：
 - 因子代码执行失败（如运行时错误、输出为空）→ 抛出 `FactorEmptyError`
-- CoSTEER 编码完全失败（所有进化轮次都失败）→ 抛出 `CoderError`
+- CoSTEER 编码阶段完全失败（所有进化轮次都无法生成可接受实现）→ 抛出 `CoderError`（定义于 [rdagent/core/exception.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/exception.py)，由 CoSTEER 编码流程在任务全部失败时抛出）
 - 这些错误不会终止整个循环，而是在 feedback 步骤生成否定反馈（decision=False），继续下一轮
 
 ---

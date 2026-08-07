@@ -63,7 +63,12 @@ dotenv run -- python rdagent/app/qlib_rd_loop/model.py --base_features_path ./my
 | `QLIB_MODEL_VALID_START/END` | 2015-01-01 / 2016-12-31 | 验证集 |
 | `QLIB_MODEL_TEST_START/END` | 2017-01-01 / auto | 测试集 |
 
-CoSTEER 独立配置前缀 **`MODEL_CoSTEER_`**：
+CoSTEER 循环配置使用基类前缀 **`COSTEER_`**（`ModelCoSTEER` 传入 `CoSTEER_SETTINGS`，见 [model_coder/__init__.py:19](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/model_coder/__init__.py#L19)）：
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `COSTEER_MAX_LOOP` | 10 | CoSTEER 内部进化轮数（同 `QLIB_MODEL_EVOLVING_N`） |
+
+编码环境配置使用独立前缀 **`MODEL_CoSTEER_`**（`ModelCoSTEERSettings`，仅控制 `get_model_env()`）：
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `MODEL_CoSTEER_ENV_TYPE` | conda | 编码环境：conda 或 docker |
@@ -76,12 +81,12 @@ CoSTEER 独立配置前缀 **`MODEL_CoSTEER_`**：
 ModelRDLoop
 ├── skip_loop_error: (ModelEmptyError,)
 ├── scen:           QlibModelScenario
-├── hypothesis_gen: QlibModelHypothesisGen   (minimax-m3, temp=0.7)
+├── hypothesis_gen: QlibModelHypothesisGen   (模型/temperature由 CHAT_MODEL_MAP 配置路由)
 │   └── targets: "model tuning"
 │   └── 额外提供SOTA_hypothesis_and_feedback
 │   └── RAG: 硬约束（时序数据用GRU/LSTM, 控制模型大小, 可只调超参）
 ├── h2e:            QlibModelHypothesis2Experiment
-├── coder:          QlibModelCoSTEER         (deepseek-v4, temp=0.5, evolving_n=10)
+├── coder:          QlibModelCoSTEER         (模型/temperature由 CHAT_MODEL_MAP 配置路由, evolving_n=10)
 │   ├── evolving_strategy: ModelMultiProcessEvolvingStrategy
 │   ├── evaluator: ModelCoSTEEREvaluator
 │   │   ├── shape_evaluator: 前向传播→输出shape=(batch,1)?
@@ -93,7 +98,7 @@ ModelRDLoop
 │   ├── SOTA因子合并 → combined_factors_df.parquet
 │   ├── model_type路由 (Tabular/TimeSeries)
 │   └── GeneralPTNN训练+回测
-└── summarizer:     QlibModelExperiment2Feedback (glm-5.2, temp=0.4)
+└── summarizer:     QlibModelExperiment2Feedback (模型/temperature由 CHAT_MODEL_MAP 配置路由)
 ```
 
 ---
@@ -177,7 +182,7 @@ ModelRDLoop
 │  │  ├─ 处理SOTA因子：                                         │  │
 │  │  │   ├─ 从based_experiments过滤QlibFactorExperiment       │  │
 │  │  │   ├─ 多个时process_factor_data()合并→parquet           │  │
-│  │  │   └─ 无SOTA因子时使用纯Alpha158DL(ALPHA20)             │  │
+│  │  │   └─ 无SOTA因子时使用ALPHA20基础特征（baseline路径）   │  │
 │  │  ├─ 将model.py注入experiment_workspace                    │  │
 │  │  ├─ 构建环境变量：                                         │  │
 │  │  │   ├─ 日期: train/valid/test start/end                  │  │
@@ -287,10 +292,10 @@ LLM 只需在 `model.py` 中定义一个名为 `model_cls` 的 `nn.Module` 子�
 
 1. 通过 `process_factor_data()` 执行所有 SOTA 因子代码，生成因子值 DataFrame
 2. 保存为 `combined_factors_df.parquet`
-3. 通过 `StaticDataLoader` 加载，与 Alpha158DL 的基础特征合并
+3. 通过 `StaticDataLoader` 加载，与 ALPHA20 的基础特征合并
 4. 使用 `conf_sota_factors_model.yaml` 配置模板（而非 baseline 模板）
 
-纯模型场景中 `based_experiments` 主要是历史模型实验，因子数据为空，走 baseline 路径。
+纯模型场景中，H2E 的 `convert()` 设置 `based_experiments = [t[0] for t in trace.hist if t[1] and isinstance(t[0], ModelExperiment)]`（见 [model_proposal.py:158](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/model_proposal.py#L158)）：首轮为空列表（无空基线实验），后续轮次包含上一轮起所有 feedback 非 None 的历史模型实验，因此因子数据为空，走 baseline 路径。
 
 ### 7.5 数据预处理管道
 
@@ -309,8 +314,7 @@ LLM 只需在 `model.py` 中定义一个名为 `model_cls` 的 `nn.Module` 子�
 
 `ModelRDLoop.skip_loop_error = (ModelEmptyError,)`：
 - model.py 前向传播失败、训练不收敛、回测异常等导致 `exp is None` → `ModelEmptyError`
-- CoSTEER 所有轮次失败 → `CoderError`
-- 这些错误不终止循环，在 feedback 步骤记录失败反馈后继续
+- CoSTEER 所有轮次失败 → `CoderError`，但 **`CoderError` 不在 `skip_loop_error` 中**（与因子场景不同），会终止循环而非跳过
 
 ---
 

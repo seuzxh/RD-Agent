@@ -97,7 +97,7 @@
 | `QlibFactorExperiment2Feedback` | [feedback.py#L54-L118](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/feedback.py#L54-L118) | 因子实验反馈生成器，对比因子 IC/收益指标 |
 | `QlibModelExperiment2Feedback` | [feedback.py#L121-L186](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/feedback.py#L121-L186) | 模型实验反馈生成器，对比模型绩效并分析训练日志 |
 | `HypothesisFeedback` | [proposal.py#L96-L120](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L96-L120) | 反馈数据结构，含观察、假设评估、新假设、决策 |
-| `Trace` | [proposal.py#L141-L255](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L141-L255) | 实验轨迹，维护历史 (实验, 反馈) DAG，提供 SOTA 检索 |
+| `Trace` | [proposal.py#L141-L318](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L141-L318) | 实验轨迹，维护历史 (实验, 反馈) DAG，提供 SOTA 检索 |
 | `process_results` | [feedback.py#L24-L51](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/feedback.py#L24-L51) | 指标对比格式化函数，筛选关键指标并生成对比文本 |
 
 ---
@@ -141,7 +141,7 @@ class HypothesisFeedback(ExperimentFeedback):
     observations: str | None        # LLM 对实验结果的整体观察
     hypothesis_evaluation: str | None  # 对假设的支持/反驳评估
     new_hypothesis: str | None      # 建议的下一轮新假设
-    acceptable: bool | None         # 结果是否可接受（当前未在主流程使用）
+    acceptable: bool | None         # 结果是否可接受（仅在基类 RDLoop 异常反馈路径中设置为 False；正常 LLM 反馈路径不设置该字段）
     # 继承自 ExperimentFeedback:
     #   reason: str                  # 决策理由
     #   decision: bool               # 是否替换 SOTA
@@ -155,7 +155,7 @@ class HypothesisFeedback(ExperimentFeedback):
 
 ### 4.2 Trace（实验轨迹）
 
-定义于 [proposal.py#L141-L255](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L141-L255)：
+定义于 [proposal.py#L141-L318](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L141-L318)：
 
 ```python
 class Trace:
@@ -225,7 +225,7 @@ IC of Current Result is 0.045000, of SOTA Result is 0.038000;
 
 **③ 渲染提示词**
 
-- System prompt：`scenarios.qlib.prompts:factor_feedback_generation.system`，注入场景描述
+- System prompt：`scenarios.qlib.prompts:factor_feedback_generation.system`，注入场景描述。代码中根据场景类型分支：若 `self.scen` 是 `QlibQuantScenario`，调用 `get_scenario_all_desc(action="factor")` 获取因子相关场景描述；否则调用 `get_scenario_all_desc()`（无 `action` 参数）。
 - User prompt：`scenarios.qlib.prompts:factor_feedback_generation.user`，注入假设文本、任务详情、对比结果
 
 **④ LLM 调用与解析**
@@ -257,17 +257,19 @@ response_json = json.loads(response)
 ```python
 decision = convert2bool(response_json.get("Replace Best Result", "no"))
 return HypothesisFeedback(
-    observations=response_json.get("Observations"),
-    hypothesis_evaluation=response_json.get("Feedback for Hypothesis"),
-    new_hypothesis=response_json.get("New Hypothesis"),
-    reason=response_json.get("Reasoning"),
+    observations=response_json.get("Observations", "No observations provided"),
+    hypothesis_evaluation=response_json.get("Feedback for Hypothesis", "No feedback provided"),
+    new_hypothesis=response_json.get("New Hypothesis", "No new hypothesis provided"),
+    reason=response_json.get("Reasoning", "No reasoning provided"),
     decision=decision,
 )
 ```
 
+各字段均带有默认字符串值（如 `"No observations provided"`、`"No feedback provided"` 等），当 LLM 返回的 JSON 中缺少对应键时不会得到 `None`。
+
 ### 5.2 因子反馈的特殊逻辑
 
-- 因子反馈的 SOTA 结果直接来自 `exp.based_experiments[-1].result`，而非通过 `trace.get_sota_hypothesis_and_experiment()` 检索。这是因为因子实验的基线链通过 `based_experiments` 显式维护。
+- 因子反馈的 SOTA 结果直接来自 `exp.based_experiments[-1].result`，而非通过 `trace.get_sota_hypothesis_and_experiment()` 检索。
 - 提示词中明确告知 LLM："所有超越 SOTA 的因子会被纳入 SOTA 因子库，新因子会与库中因子组合后回测"，这影响了 LLM 对"新方向"vs"优化现有方向"的判断。
 - 决策准则：**年化收益有任何小幅提升都应建议替换 SOTA**；其他指标的小幅波动可接受。
 
@@ -316,15 +318,15 @@ User prompt 中包含：
 ```python
 decision = convert2bool(response_json_hypothesis.get("Decision", "false"))
 return HypothesisFeedback(
-    observations=...,
-    hypothesis_evaluation=...,
-    new_hypothesis=...,
-    reason=...,
+    observations=response_json_hypothesis.get("Observations", "No observations provided"),
+    hypothesis_evaluation=response_json_hypothesis.get("Feedback for Hypothesis", "No feedback provided"),
+    new_hypothesis=response_json_hypothesis.get("New Hypothesis", "No new hypothesis provided"),
+    reason=response_json_hypothesis.get("Reasoning", "No reasoning provided"),
     decision=decision,
 )
 ```
 
-注意：模型反馈的 JSON 决策字段名为 `"Decision"`（布尔值），而因子反馈为 `"Replace Best Result"`（yes/no 字符串）。
+注意：模型反馈的 JSON 决策字段名为 `"Decision"`（布尔值），而因子反馈为 `"Replace Best Result"`（yes/no 字符串）。模型反馈各字段同样带有默认字符串值。
 
 ### 6.2 首轮特殊处理
 
@@ -344,17 +346,30 @@ return HypothesisFeedback(
 def process_results(current_result, sota_result):
     current_df = pd.DataFrame(current_result)
     sota_df = pd.DataFrame(sota_result)
+
+    # Set the metric as the index
+    current_df.index.name = "metric"
+    sota_df.index.name = "metric"
+
+    # Rename the value column to reflect the result type
+    current_df.rename(columns={"0": "Current Result"}, inplace=True)
+    sota_df.rename(columns={"0": "SOTA Result"}, inplace=True)
+
+    # Combine the dataframes on the Metric index
     combined_df = pd.concat([current_df, sota_df], axis=1)
+
+    # Filter the combined DataFrame to retain only the important metrics
     filtered_combined_df = combined_df.loc[IMPORTANT_METRICS]
     # 格式化为 "metric of Current Result is X, of SOTA Result is Y"
     return format_filtered_combined_df(filtered_combined_df)
 ```
 
 处理步骤：
-1. 将当前结果和 SOTA 结果转为 DataFrame
-2. 按指标名拼接为对比表
-3. 仅保留 `IMPORTANT_METRICS` 中的三个核心指标
-4. 格式化为 LLM 易读的分号分隔文本
+1. 将当前结果和 SOTA 结果转为 DataFrame，将索引命名为 `metric`
+2. 将两个 DataFrame 的值列名从 `"0"` 分别重命名为 `"Current Result"` 和 `"SOTA Result"`（因为 `pd.DataFrame(pd.Series)` 默认列名为 `0`）
+3. 按指标索引按列拼接为对比表
+4. 仅保留 `IMPORTANT_METRICS` 中的三个核心指标
+5. 格式化为 LLM 易读的分号分隔文本（`f"{metric} of Current Result is {current:.6f}, of SOTA Result is {sota:.6f}"`）
 
 该函数仅在因子反馈中使用；模型反馈直接在模板中通过 `exp.result.loc[IMPORTANT_METRICS]` 筛选。
 
@@ -389,6 +404,8 @@ def process_results(current_result, sota_result):
 - 要求分析训练日志判断超参数问题
 - 各字段有明确的句数限制（Observations ≤ 3 句，其他 ≤ 2 句）
 - 输出 JSON 格式规范
+
+> **⚠️ 已知代码 Bug**：[feedback.py#L142-L145](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/feedback.py#L142-L145) 中，非 Quant 场景（`else` 分支）错误地使用了 `factor_feedback_generation.system` 而非 `model_feedback_generation.system`。正确行为应为使用模型反馈的 system prompt。这是代码 bug，并非设计意图。
 
 **User prompt 模板变量**：
 - SOTA 信息（条件渲染）：`sota_hypothesis`、`sota_task`、`sota_code`、`sota_result`
@@ -465,13 +482,26 @@ if e is not None:
     )
 ```
 
-在 QuantRDLoop 中（[quant.py#L111-L128](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/quant.py#L111-L128)），异常反馈还会填充 `observations` 字段为异常信息。
+在 QuantRDLoop 中（[quant.py#L111-L128](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/quant.py#L111-L128)），异常反馈的字段不同：
+
+```python
+feedback = HypothesisFeedback(
+    observations=str(e),
+    hypothesis_evaluation="",
+    new_hypothesis="",
+    reason="",
+    decision=False,
+)
+```
+
+注意 QuantRDLoop 的异常反馈**没有** `code_change_summary` 和 `acceptable` 字段，但显式设置了 `observations`/`hypothesis_evaluation`/`new_hypothesis` 为空字符串。而基类 RDLoop 设置了 `code_change_summary=""` 和 `acceptable=False`。
 
 这些异常类型在循环类的 `skip_loop_error` 中注册：
-- 因子循环：`(FactorEmptyError, CoderError)`
-- 量化循环：`(FactorEmptyError, ModelEmptyError)`
+- 因子循环（`FactorRDLoop`）：`(FactorEmptyError, CoderError)`
+- 模型循环（`ModelRDLoop`）：`(ModelEmptyError,)`
+- 量化循环（`QuantRDLoop`）：`(FactorEmptyError, ModelEmptyError)`
 
-异常发生时当前轮次被跳过，但循环继续进行下一轮。
+其中 `CoderError` 来自 CoSTEER 编码阶段（编码失败或生成代码无法运行时抛出），`FactorEmptyError`/`ModelEmptyError` 来自 Runner 执行阶段（回测无结果时抛出）。异常发生时当前轮次被跳过，但循环继续进行下一轮。
 
 ### 10.2 人工交互
 
@@ -506,7 +536,7 @@ def _interact_feedback(self, feedback):
 
 ### 11.2 LLM 模型绑定
 
-在 `.env` 中通过 `CHAT_MODEL_MAP` 按日志标签路由模型：
+在 `.env` 中通过 `CHAT_MODEL_MAP` 按日志标签路由模型。以下为项目 `.env` 中的**用户配置示例**（非代码默认值；代码本身不绑定具体模型名，默认走 `LITELLM_SETTINGS.chat_model`）：
 
 ```json
 {
@@ -517,14 +547,16 @@ def _interact_feedback(self, feedback):
 }
 ```
 
-路由机制（[litellm.py#L106-L119](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/oai/backend/litellm.py#L106-L119)）：LLM 调用时遍历 `chat_model_map`，若 key 出当前 logger tag 栈中，则使用对应模型配置。反馈阶段的 logger tag 为 `"feedback"`（在 [rd_loop.py#L235](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py#L235) 设置）。
+路由机制（[litellm.py#L106-L119](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/oai/backend/litellm.py#L106-L119)）：LLM 调用时遍历 `chat_model_map`，若 key 出现在当前 logger tag 栈中，则使用对应模型配置。反馈阶段的 logger tag 由循环框架设置为 `"Loop_{li}.feedback"`（[loop.py#L218](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/utils/workflow/loop.py#L218) 中 `with logger.tag(f"Loop_{li}.{name}")`），其中 `li` 为循环索引、`name` 为步骤名（`feedback`）。由于匹配采用子串包含判断，`.env` 中只需配置 `"feedback"` 即可命中。
 
-选择 GLM-5.2（temperature=0.6）用于反馈的原因：反馈需要稳定的数值分析能力，较低的温度减少幻觉，同时保留一定的创造性以生成多样化的新假设方向。
+选择 GLM-5.2（temperature=0.6）用于反馈的原因（来自 `.env` 注释）：反馈需要稳定的数值分析能力，较低的温度减少幻觉，同时保留一定的创造性以生成多样化的新假设方向。
 
 ### 11.3 各智能体模型配置总览
 
-| 阶段 | logger tag | 模型 | temperature |
-|------|-----------|------|-------------|
+> 以下模型名均来自项目 `.env` 的 `CHAT_MODEL_MAP` 配置示例，**非代码硬编码默认值**。用户可自行替换。
+
+| 阶段 | logger tag | .env 中配置的模型 | temperature |
+|------|-----------|-------------------|-------------|
 | 假设生成 | `direct_exp_gen` | `openai/minimax-m3` | 0.7 |
 | 编码进化 | `coding` | `openai/kimi-k2.7-code` | 1.0 |
 | 方案执行 | `running` | `openai/deepseek-v4-flash` | 0.0 |
@@ -608,6 +640,8 @@ HypothesisFeedback(
 
 ### 13.1 反馈生成整体流程
 
+> **注意**：下方流程图展示的是 `QuantRDLoop.feedback()` 的完整分支。基类 `RDLoop.feedback()` **没有**"判断实验类型（factor/model）"的分支，而是直接调用 `self.summarizer.generate_feedback(exp, trace)`；类型路由（factor/model 分支）仅在 `QuantRDLoop` 中根据 `hypothesis.action` 实现。
+
 ```
           ┌─────────────────────┐
           │  Runner 执行完成    │
@@ -621,10 +655,10 @@ HypothesisFeedback(
           是  │             │ 否
               ▼             ▼
     ┌─────────────────┐  ┌──────────────────────┐
-    │ 构造失败反馈     │  │ 判断实验类型         │
-    │ decision=False  │  │ (factor / model)     │
+    │ 构造失败反馈     │  │ QuantRDLoop: 判断    │
+    │ decision=False  │  │ hypothesis.action    │
     │ 不调用 LLM      │  └───┬──────────────┬───┘
-    └────────┬────────┘  因子 │              │ 模型
+    └────────┬────────┘  factor│              │ model
              │                ▼              ▼
              │     ┌──────────────────┐ ┌──────────────────┐
              │     │ Factor           │ │ Model            │

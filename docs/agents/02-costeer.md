@@ -77,8 +77,8 @@ CoSTEER（**Co**llaborative **S**tra**te**gy for **E**volving and **R**etrieval�
 │  │  │     └─ 最终决策（True/False）                        │   │    │
 │  │  │  ④ EvoStep 打包并追加到 evolving_trace               │   │    │
 │  │  │  ⑤ rag.generate_knowledge(trace)                    │   │    │
-│  │  │     ├─ 成功 → 更新图知识库（节点+边）                 │   │    │
-│  │  │     └─ 失败 → 分析错误模式并存储                     │   │    │
+│  │  │     ├─ 成功 → update_success_task 写入图节点+边       │   │    │
+│  │  │     └─ 失败 → 仅缓存代码+反馈及错误分析（不写图节点） │   │    │
 │  │  │  ⑥ feedback.finished()? → break                     │   │    │
 │  │  └─────────────────────────────────────────────────────┘   │    │
 │  └─────────────────────────────┬───────────────────────────────┘    │
@@ -102,7 +102,7 @@ CoSTEER（**Co**llaborative **S**tra**te**gy for **E**volving and **R**etrieval�
 - **入口类** [CoSTEER](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/__init__.py#L20-L178)：继承 `Developer`，实现 `develop(exp)` 接口，协调 RAG、进化策略、评估器三者。
 - **进化引擎** [RAGEvoAgent](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/evolving_agent.py#L78-L198)：实现多轮进化循环，是 CoSTEER 的核心调度器。
 - **进化策略** [MultiProcessEvolvingStrategy](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/evolving_strategy.py#L22-L172)：抽象基类，子类实现具体的 LLM 代码生成逻辑；基类负责任务调度和多进程并行。
-- **RAG 策略** [CoSTEERRAGStrategyV2](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/knowledge_management.py#L354-L849)：图知识库的查询与知识生成。
+- **RAG 策略** [CoSTEERRAGStrategyV2](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/knowledge_management.py#L354-L848)：图知识库的查询与知识生成。
 - **评估器** [CoSTEERMultiEvaluator](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/evaluators.py#L253-L333)：多任务并行评估，支持评估链。
 
 ---
@@ -117,10 +117,10 @@ CoSTEER（**Co**llaborative **S**tra**te**gy for **E**volving and **R**etrieval�
 |------|------|------|
 | `sub_tasks` | `list[Task]` | 待实现的子任务列表（如多个因子、一个模型） |
 | `sub_workspace_list` | `list[FBWorkspace]` | 每个子任务对应的工作区（含生成的代码文件） |
-| `sub_gt_implementations` | `list[FBWorkspace]` | Ground truth 实现（如有，用于值比对评估） |
+| `sub_gt_implementations` | `list[FBWorkspace]` | Ground truth 实现（如有，用于值比对评估）。注意：`from_experiment()` 不会复制该字段，经此路径构造时始终为 `None` |
 | `based_experiments` | — | 所基于的历史实验（提供上下文） |
 
-通过 `from_experiment(exp)` 类方法从 Experiment 转换而来。
+通过 `from_experiment(exp)` 类方法从 Experiment 转换而来（仅复制 `sub_tasks`、`based_experiments`、`experiment_workspace`）。
 
 ### 3.2 CoSTEERSingleFeedback（单子任务反馈）
 
@@ -142,8 +142,8 @@ CoSTEER（**Co**llaborative **S**tra**te**gy for **E**volving and **R**etrieval�
 定义于 [evaluators.py#L199-L228](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/evaluators.py#L199-L228)，是 `CoSTEERSingleFeedback` 的列表容器。
 
 关键方法：
-- `is_acceptable()`：所有子任务反馈都 acceptable（非 None 且通过）时返回 True。
-- `finished()`：所有非 None 的子任务反馈 final_decision 都为 True 时返回 True。允许部分任务被跳过（None），只要正确部分被接受。
+- `is_acceptable()`：对 `feedback_list` 中的每个反馈（不过滤 `None`）调用 `is_acceptable()`，全部为 True 时返回 True。若存在 `None` 反馈会直接抛错，因此该方法要求所有子任务都已产出反馈。
+- `finished()`：过滤掉 `None` 的子任务反馈后，其余反馈的 `final_decision` 全部为 True 时返回 True。允许部分任务被跳过（`None`），只要正确部分被接受。
 
 ### 3.4 EvoStep（进化步骤）
 
@@ -202,9 +202,9 @@ EvoAgent (ABC, Generic)                 # core/evolving_agent.py
 
 EvolvingStrategy (ABC, Generic)         # core/evolving_framework.py
  └── MultiProcessEvolvingStrategy       # components/coder/CoSTEER/evolving_strategy.py
-      ├── implement_one_task() (abstract)  # 子类实现：LLM生成代码
+      ├── implement_one_task()           # 方法体 raise NotImplementedError（非 @abstractmethod），子类必须覆盖
       ├── implement_func_list()            # 可拆分为多步实现
-      ├── assign_code_list_to_evo() (abstract)
+      ├── assign_code_list_to_evo()       # 基类提供默认实现（注入文件并处理 __change_summary__），子类可覆盖
       └── evolve_iter()                    # ★ 多进程任务调度
            ├── FactorMultiProcessEvolvingStrategy   # factor_coder/
            └── ModelMultiProcessEvolvingStrategy    # model_coder/
@@ -309,7 +309,7 @@ for evo_loop_id in range(self.max_loop):
 | **已失败超限** | 任务描述在 `failed_task_info_set` 中（失败次数 ≥ `fail_task_trial_limit`，默认20） | 跳过，不实现 |
 | **待实现** | 以上都不是 | 加入 `to_be_finished_task_index`，调用 LLM 生成/修正代码 |
 
-在 `improve_mode` 下，首轮不实现任何任务（因为没有失败反馈可依据），仅从第二轮开始基于反馈修正。
+在 `improve_mode`（默认 `False`，由 `MultiProcessEvolvingStrategy.__init__` 参数控制）下，首轮不实现任何任务（因为没有失败反馈可依据），仅从第二轮开始基于反馈修正。
 
 ### 6.2 多进程并行
 
@@ -330,7 +330,7 @@ result = multiprocessing_wrapper(
 生成的代码通过 `assign_code_list_to_evo()` 注入到对应子任务的工作区：
 - 因子任务：注入 `factor.py` 文件
 - 模型任务：注入 `model.py` 文件
-- 支持特殊 key `__change_summary__` 记录本次修改摘要
+- 基类默认实现支持特殊 key `__change_summary__` 记录本次修改摘要；但因子/模型子类各自重写了 `assign_code_list_to_evo()` 且未处理该 key，因此该特性仅在基类生效，因子/模型场景下不支持。
 
 ---
 
@@ -338,7 +338,7 @@ result = multiprocessing_wrapper(
 
 ### 7.1 图结构
 
-V2 知识库 [CoSTEERKnowledgeBaseV2](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/knowledge_management.py#L852-L1053) 使用 [UndirectedGraph](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/knowledge_management/graph.py#L108-L443) 存储知识，节点有四种标签：
+V2 知识库 [CoSTEERKnowledgeBaseV2](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/knowledge_management.py#L852-L1053) 使用 [UndirectedGraph](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/knowledge_management/graph.py#L108-L443) 存储知识，节点有五种标签：
 
 ```
 ┌─────────────────┐
@@ -362,7 +362,7 @@ V2 知识库 [CoSTEERKnowledgeBaseV2](file:///home/zxh/projects/1.multialphaV/RD
 └─────────────────┘
 ```
 
-- **component 节点**：预定义的组件分类，初始化时通过 `init_component_list` 注入。
+- **component 节点**：预定义的组件分类，仅在初始化时通过 `init_component_list` 注入；默认该列表为空。`analyze_component()` 只读取图中已有的 component 节点做 LLM 匹配，并不会创建新节点。
 - **task_description 节点**：任务的自然语言描述，与相关 component 节点相连。
 - **task_trace 节点**：进化过程中每一轮的代码+反馈（包括失败轮次），与 task_description 和遇到的 error 节点相连。
 - **task_success_implement 节点**：最终成功的代码+反馈，是链的终点。
@@ -492,7 +492,7 @@ LLM 代码评审 (FactorCodeEvaluator)
 1. 目标因子信息（名称、描述、公式、变量）。
 2. 相似错误修复对（错误描述 + 错误代码 + 修复后代码），可附 LLM 错误摘要。
 3. 相似组件成功代码（参考实现）。
-4. 最近一次失败尝试（代码+反馈）。
+4. `latest_attempt_to_latest_successful_execution`：最近一次成功之后又失败的尝试（代码+反馈），仅在 `v2_add_fail_attempt_to_latest_successful_execution=True` 时渲染，用于警告 LLM 不要重蹈覆辙。
 
 ### 9.2 错误摘要提示词
 
@@ -504,7 +504,11 @@ LLM 代码评审 (FactorCodeEvaluator)
 
 ### 9.4 Prompt 长度自适应
 
-因子和模型的 `implement_one_task()` 都有最多10次的截断循环：当 token 数超过模型限制时，按优先级依次裁剪：历史失败轨迹 → 相似成功代码 → 相似错误知识，确保 prompt 不超长。
+因子的 `implement_one_task()` 有两个最多 10 次的循环：
+- **截断循环**：当 token 数超过模型限制时，按优先级依次裁剪历史失败轨迹 → 相似成功代码 → 相似错误知识，确保 prompt 不超长。
+- **LLM 重试循环**：当 LLM 返回的 JSON 无法解析（`JSONDecodeError`/`KeyError`）时自动重试，最多 10 次后返回空字符串。
+
+模型的 `implement_one_task()` 仅包含截断循环（裁剪顺序：历史失败轨迹 → 相似成功代码），**没有**相似错误知识（模型场景未接入 error_query），也**没有** LLM 重试循环——JSON 解析失败会直接抛出异常。
 
 ---
 
@@ -534,7 +538,7 @@ class FactorCoSTEER(CoSTEER):
 
 - 进化策略：[ModelMultiProcessEvolvingStrategy](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/model_coder/evolving_strategy.py#L20-L89)，生成 `model.py`。
 - system_prompt 额外注入 `current_code`（当前 model.py 内容），支持增量修改。
-- 评估器：模型代码执行 + 形状检查 + 代码评审。
+- 评估器：[ModelCoSTEEREvaluator](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/model_coder/evaluators.py#L20-L104) 实际为五层流水线——执行 → 形状检查（`shape_evaluator`）→ 值检查（`value_evaluator`，与 GT 比对）→ LLM 代码评审（`ModelCodeEvaluator`）→ 最终决策（`ModelFinalEvaluator`）。
 
 ### 10.3 Qlib 场景封装
 
@@ -551,7 +555,7 @@ class FactorCoSTEER(CoSTEER):
 
 CoSTEER 编码阶段对应 RDLoop 的 `coding` 步骤。工作流引擎为每个步骤自动添加日志标签 `Loop_{li}.coding`，LiteLLM 后端检测到标签中包含 `coding` 时路由到指定模型。
 
-`.env` 配置：
+`.env` 配置（以下模型名仅为用户 `.env` 示例，非代码硬编码；实际模型由 `CHAT_MODEL_MAP` 环境变量决定）：
 
 ```bash
 CHAT_MODEL_MAP={
@@ -562,7 +566,7 @@ CHAT_MODEL_MAP={
 }
 ```
 
-CoSTEER 代码生成使用 **kimi-k2.7-code**（temperature=1.0），该模型针对代码生成优化。温度较高（1.0）有助于在纠错时产生多样化的修复方案。
+在上例配置中，CoSTEER 代码生成使用 **kimi-k2.7-code**（temperature=1.0），该模型针对代码生成优化。温度较高（1.0）有助于在纠错时产生多样化的修复方案。代码本身不绑定任何具体模型名。
 
 路由实现见 [litellm.py#L106-L119](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/oai/backend/litellm.py#L106-L119)：遍历 `chat_model_map`，当 key（如 `"coding"`）出现在当前日志标签栈中时，覆盖默认模型和温度。
 
@@ -585,8 +589,9 @@ CoSTEER 代码生成使用 **kimi-k2.7-code**（temperature=1.0），该模型�
 | `new_knowledge_base_path` | `None` | 新知识库 dump 路径 |
 | `enable_filelock` | `False` | 多进程知识库文件锁 |
 | `filelock_path` | `None` | 锁文件路径 |
+| `max_seconds_multiplier` | `10**6` | 最大秒数乘数（与 `max_seconds` 相乘得到内部计时器阈值） |
 
-因子和模型场景有各自的 Settings 子类（`FACTOR_COSTEER_SETTINGS`、`MODEL_COSTEER_SETTINGS`），继承上述配置。
+因子场景有子类 `FactorCoSTEERSettings`（单例 `FACTOR_COSTEER_SETTINGS`），模型场景没有独立的 Settings 子类，`ModelCoSTEER` 直接使用基类单例 `CoSTEER_SETTINGS`。
 
 ### 11.3 并行进程数
 
@@ -772,8 +777,8 @@ critic 1: The 'close' variable may not be a pandas Series. Check data loading.
           │ │ FileLock          │ │
           │ │ load_dumped_kb    │ │
           │ │ generate_knowledge│ │
-          │ │  ├─ 成功→图更新   │ │
-          │ │  └─ 失败→错误分析 │ │
+          │ │  ├─ 成功→update_success_task 写图 │ │
+          │ │  └─ 失败→仅缓存错误分析，不写图节点 │ │
           │ │ dump_knowledge    │ │
           │ └───────────────────┘ │
           └───────────┬───────────┘
@@ -902,15 +907,15 @@ CoSTEER V2 的核心创新是将成功和失败的编码经验以**无向图（U
 
 ### 图节点类型
 
-知识图谱定义在 [knowledge_management.py#L852-L927](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/knowledge_management.py#L852-L927)，包含 **4 种节点标签**：
+知识图谱定义在 [knowledge_management.py#L852-L927](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/knowledge_management.py#L852-L927)，包含 **5 种节点标签**：
 
 | 节点标签 | 含义 | 内容 | 创建时机 |
 |---------|------|------|---------|
-| `component` | 代码组件节点 | 组件功能描述文本（如"计算移动平均"、"数据归一化"） | 初始化时通过 `init_component_list` 注入，或任务首次分析组件时创建 |
+| `component` | 代码组件节点 | 组件功能描述文本（如"计算移动平均"、"数据归一化"） | 仅在初始化时通过 `init_component_list` 注入，默认列表为空；`analyze_component()` 只读取已有 component 节点，不创建新节点 |
 | `task_description` | 任务描述节点 | 任务的信息字符串（`target_task.get_task_information()`） | 任务首次成功时在 `update_success_task()` 中创建 |
 | `task_trace` | 失败轨迹节点 | 中间失败轮次的**完整代码+反馈文本**（`CoSTEERKnowledge.get_implementation_and_feedback_str()`） | 任务成功后，将成功之前的每一轮失败尝试各创建一个节点 |
 | `task_success_implement` | 成功实现节点 | 最终成功轮次的**完整代码+反馈文本** | 任务成功时，最后一轮的代码创建为此节点 |
-| `error` | 错误节点 | 错误类型+错误行（如 `"ErrorType: NameError\nError line: Ref"`） | 分析执行错误时值校验错误时创建（如果图中不存在） |
+| `error` | 错误节点 | 错误类型+错误行（如 `"ErrorType: NameError\nError line: Ref"`） | 分析执行错误或值校验错误时创建（如果图中不存在） |
 
 ### 图边的连接关系
 
@@ -1031,7 +1036,7 @@ query(evo, evolving_trace)
 | 错误经验 | 不单独存储错误节点 | error 节点连接失败轨迹→成功实现，支持"同错误修复方案"检索 |
 | 组件知识 | 无组件概念 | component 节点连接任务，支持"相同技术栈参考"检索 |
 | GT 验证 | 无 GT 区分 | 优先返回基于 GT（ground truth）验证的成功实现 |
-| 持久化 | pickle 整个 KB | pickle 图对象到 `graph.pkl`（工作目录下） |
+| 持久化 | pickle 整个 KB | `graph` 在 `UndirectedGraph.__init__` 时从工作目录下的 `graph.pkl` 加载；CoSTEER 循环本身不主动 dump `graph.pkl`。`dump_knowledge_base()` 通过 `new_knowledge_base_path`（默认 `None`，不写文件）pickle 整个 KB 对象 |
 
 ### 配置参数
 
@@ -1041,20 +1046,23 @@ query(evo, evolving_trace)
 |------|--------|------|
 | `evolving_version` | `2` | 知识库版本（1=V1已废弃，2=V2图知识库） |
 | `fail_task_trial_limit` | `20` | 任务失败超过此次数则标记为 failed，不再尝试 |
-| `v2_query_former_trace_limit` | `5` | former_trace 检索返回最近 N 轮失败记录 |
-| `v2_query_component_limit` | `5` | component 检索返回最多 N 个相似成功实现 |
-| `v2_query_error_limit` | `5` | error 检索返回最多 N 个相似错误修复对 |
+| `v2_query_former_trace_limit` | `3` | former_trace 检索返回最近 N 轮失败记录 |
+| `v2_query_component_limit` | `1` | component 检索返回最多 N 个相似成功实现 |
+| `v2_query_error_limit` | `1` | error 检索返回最多 N 个相似错误修复对 |
 | `v2_knowledge_sampler` | `1.0` | 知识采样率（1.0=返回全部，<1.0 随机丢弃部分，用于增加多样性） |
-| `v2_add_fail_attempt_to_latest_successful_execution` | `false` | 是否在成功后仍告知 LLM 最近的失败尝试（防止死循环） |
-| `knowledge_base_path` | `None` | 知识库持久化路径（设为路径可在多次运行间复用知识） |
-| `simple_background` | `false` | 是否使用简化背景提示词（减少知识库内容传入） |
+| `v2_add_fail_attempt_to_latest_successful_execution` | `False` | 是否在成功后仍告知 LLM 最近的失败尝试（防止死循环） |
+| `knowledge_base_path` | `None` | 知识库预加载路径（pickle 整个 KB 对象） |
+| `new_knowledge_base_path` | `None` | 新知识库 dump 路径（默认为 `None`，不写文件） |
+| `max_seconds_multiplier` | `10**6` | 最大秒数乘数（与 `max_seconds` 相乘得到内部计时器阈值） |
+
+> 注：`simple_background`（默认 `False`）属于 `FactorCoSTEERSettings`，并非基类 `CoSTEERSettings` 的字段。
 
 ### 持久化
 
-知识图谱通过 pickle 序列化保存：
-- **图对象**：`graph.pkl`（位于当前工作目录 `Path.cwd() / "graph.pkl"`）
-- **完整 KB**：可通过 `knowledge_base_path` 配置 dump/load 路径
-- **Session 恢复**：LoopBase 的 session pickle 包含完整 KB，断点续跑时自动恢复
+知识库通过 pickle 序列化加载/保存：
+- **图对象 `graph.pkl`**：位于当前工作目录 `Path.cwd() / "graph.pkl"`。`CoSTEERKnowledgeBaseV2.__init__` 构造 `UndirectedGraph` 时会从该路径加载已有图（若存在）；CoSTEER 主循环**不会**主动 dump `graph.pkl`，图的写入依赖 `UndirectedGraph` 自身的持久化机制。
+- **完整 KB 对象**：`dump_knowledge_base()` 将整个 KB 对象 pickle 到 `new_knowledge_base_path`；该路径默认为 `None`，此时跳过 dump 并输出 warning。`load_or_init_knowledge_base()` 通过 `knowledge_base_path` 加载已有 KB。
+- **Session 恢复**：LoopBase 的 session pickle 包含完整 KB，断点续跑时自动恢复。
 
 ---
 
