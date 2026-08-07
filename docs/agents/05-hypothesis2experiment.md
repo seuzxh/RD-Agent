@@ -438,11 +438,13 @@ Runner 在执行时会递归执行基线链中未完成的实验（`result is No
 
 System prompt 定义角色和输出格式要求，User prompt 组织目标假设和历史信息。提示词使用 Jinja2 模板，条件渲染三个历史段落：
 
+{% raw %}
 ```
 {% if hypothesis_and_feedback %}...{% endif %}
 {% if last_hypothesis_and_feedback %}...{% endif %}
 {% if sota_hypothesis_and_feedback %}...{% endif %}
 ```
+{% endraw %}
 
 首轮实验时三个段落均为空，LLM 仅基于目标假设生成任务。
 
