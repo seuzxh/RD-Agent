@@ -340,15 +340,54 @@ for tag, model_config in chat_model_map.items():
 
 #### 常用模型参考速查
 
+##### 豆包 Seed 系列（火山方舟，主要推荐）
+
+豆包 Seed 系列通过火山方舟调用，模型名为 `openai/doubao-seed-*`（Base URL 指向 `https://ark.cn-beijing.volces.com/api/v3`），均原生支持深度思考、JSON 结构化输出、工具调用和 256K 上下文。
+
+| 模型名（model 字段值） | 定位 | 核心能力 | 价格(输入/输出 元/百万token) | multialpha 推荐场景 |
+|----------------------|------|---------|--------------------------|-------------------|
+| `openai/doubao-seed-2-1-pro-260628` | **旗舰版**（最强） | Coding 工程交付顶尖（开发者评测对 Claude Opus 4.6 胜率 59%），Agent 长链路任务执行、多模态理解、SWE-Bench/Terminal-Bench 高分，完整 MoE 稠密激活+加长思维链自校验 | 6 / 30 | **coding 步骤首选**（替代 deepseek-v4），复杂代码进化和 Bug 修复 |
+| `openai/doubao-seed-2-1-turbo-260628` | **高效版**（性价比） | Pro 版蒸馏优化，能力接近 Pro，INT4 量化+动态批推理，时延比 Pro 低 40%，支持与 Pro 完全相同的能力集 | 3 / 15 | **大规模运行推荐**，coding 步骤的高性价比选择，或 feedback/direct_exp_gen 日常使用 |
+| `openai/doubao-seed-evolving` | **动态迭代版** | 周级频率自动更新版本，始终使用最新最强的 Seed 模型（当前等同 2.1 Pro），无需切换 Model ID | 6 / 30 | **持续迭代实验**，愿意尝鲜的开发/研究场景；不推荐生产环境（版本变化不可控） |
+| `openai/doubao-seed-2-0-code-preview-260215` | **代码专用版**（上一代） | 编程场景深度优化，前端代码生成出众，多模态视觉理解（可从设计图生成代码），代码调试/重构能力精准 | 按方舟定价 | 纯代码任务的备选方案；综合能力已被 2.1 Pro 超越 |
+| `openai/doubao-seed-code-preview-251028` | **代码预览版**（早期） | 专注编程场景优化，精准代码调试与重构，适合中小项目快速开发 | 按方舟定价 | 历史版本，不推荐新项目使用 |
+| `openai/doubao-seed-2-0-pro-260215` | **2.0 旗舰**（上一代） | 复杂推理与长链路任务，代码架构设计与多模块协同 | 按方舟定价 | 2.0 时代旗舰，已被 2.1 Pro 替代 |
+| `openai/doubao-seed-2-0-lite-260428` | **轻量版** | 能力约为 Pro 的 80%，成本更低速度更快，RPM/TPM 限额更高（30000 RPM / 5M TPM） | 按方舟定价 | 高并发简单任务、开发调试、批量预处理 |
+| `openai/doubao-seed-2-0-mini-260428` | **迷你版** | 最轻量快速，适合高频简单调用 | 按方舟定价 | 最基础的文本处理任务，一般不用于 agent 核心环节 |
+
+> **豆包深度思考参数**：Seed 系列默认开启深度思考模式，可通过 `reasoning_effort` 参数调节思考长度，支持 `minimal`/`low`/`medium`/`high` 四档（默认 `high`）。coding 场景建议设为 `high` 或 `medium`，feedback 场景可设为 `medium` 以节省 token。
+
+##### 其他国产模型
+
 | 模型名（model 字段值） | 提供商 | 特长 | 上下文窗口 | 适合场景 |
 |----------------------|--------|------|-----------|---------|
-| `openai/gpt-4o` | OpenAI | 综合能力最强，代码+推理+JSON 均优 | 128K | 预算充足时的 coding 首选 |
-| `openai/deepseek-v4` | DeepSeek | 代码生成顶尖，数学推理强，JSON 稳定 | 128K | coding 步骤推荐 |
-| `openai/deepseek-v4-flash` | DeepSeek | 速度快，成本低，能力略逊 | 128K | running/简单任务 |
-| `openai/minimax-m3` | MiniMax | 中文创意好，发散性强 | 128K | direct_exp_gen 推荐 |
-| `openai/glm-5.2` | 智谱 AI | 中文金融适配好，结构化输出稳定 | 128K | feedback 推荐 |
+| `openai/deepseek-v4` | DeepSeek | 代码生成顶尖，数学推理强，JSON 稳定 | 128K | coding 步骤备选 |
+| `openai/deepseek-v4-flash` | DeepSeek | 速度快，成本低，能力略逊 | 128K | running/简单任务/高并发 |
+| `openai/deepseek-v4-pro` | DeepSeek | Pro 版更强推理 | 1M | 超长代码库上下文场景 |
+| `openai/minimax-m3` | MiniMax | 中文创意好，发散性强 | 128K | direct_exp_gen 备选 |
+| `openai/glm-5.2` | 智谱 AI | 中文金融适配好，结构化输出稳定 | 128K | feedback 备选 |
 | `openai/kimi-k2.5` | Moonshot | 超长上下文（200K+），代码不错 | 200K+ | RAG 检索结果极长时备选 |
+| `openai/kimi-k2.7-code` | Moonshot | 代码专用版本 | 200K+ | 代码生成备选 |
+
+##### 海外模型
+
+| 模型名（model 字段值） | 提供商 | 特长 | 上下文窗口 | 适合场景 |
+|----------------------|--------|------|-----------|---------|
+| `openai/gpt-4o` | OpenAI | 综合能力最强，代码+推理+JSON 均优 | 128K | 预算充足时的 coding 备选 |
 | `openai/gpt-4o-mini` | OpenAI | 速度快成本低，简单任务够用 | 128K | 开发调试/轻量任务 |
+
+##### 多模型推荐配置（火山方舟生态）
+
+如果所有模型均通过火山方舟调用（Base URL 统一），推荐配置：
+
+```json
+CHAT_MODEL_MAP={
+  "direct_exp_gen": {"model": "openai/doubao-seed-2-1-turbo-260628", "temperature": "0.7", "reasoning_effort": "medium"},
+  "coding": {"model": "openai/doubao-seed-2-1-pro-260628", "temperature": "0.5", "reasoning_effort": "high"},
+  "running": {"model": "openai/doubao-seed-2-0-lite-260428", "temperature": "0.0"},
+  "feedback": {"model": "openai/doubao-seed-2-1-turbo-260628", "temperature": "0.4", "reasoning_effort": "medium"}
+}
+```
 
 ---
 
