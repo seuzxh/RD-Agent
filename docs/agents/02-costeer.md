@@ -424,9 +424,9 @@ V1 的 `generate_knowledge` 和 `query` 方法已直接 `raise NotImplementedErr
 
 ## 8. 反馈评估体系
 
-### 8.1 三层级联评估（以因子为例）
+### 8.1 四层级联评估（以因子为例）
 
-[FactorEvaluatorForCoder.evaluate()](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/factor_coder/evaluators.py#L31-L120) 实现了三层评估流水线：
+[FactorEvaluatorForCoder.evaluate()](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/factor_coder/evaluators.py#L31-L120) 实现了四层评估流水线（对应 `CoSTEERSingleFeedback` 的 `Execution → Return Value → Code → Final Decision` 阶段划分）：
 
 ```
 代码执行 (implementation.execute())
@@ -528,7 +528,7 @@ class FactorCoSTEER(CoSTEER):
 ```
 
 - 进化策略：[FactorMultiProcessEvolvingStrategy](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/factor_coder/evolving_strategy.py#L23-L178)，生成 `factor.py`。
-- 评估器：三层级联（执行→值校验→代码评审→最终决策）。
+- 评估器：四层级联（执行→值校验→代码评审→最终决策）。
 - 工作区：`FactorFBWorkspace`，执行后产出因子值 DataFrame。
 - 额外：develop 完成后将最后一轮反馈存入 `exp.prop_dev_feedback`，供后续反馈阶段使用。
 
@@ -591,7 +591,7 @@ CHAT_MODEL_MAP={
 | `filelock_path` | `None` | 锁文件路径 |
 | `max_seconds_multiplier` | `10**6` | 最大秒数乘数（与 `max_seconds` 相乘得到内部计时器阈值） |
 
-因子场景有子类 `FactorCoSTEERSettings`（单例 `FACTOR_COSTEER_SETTINGS`），模型场景没有独立的 Settings 子类，`ModelCoSTEER` 直接使用基类单例 `CoSTEER_SETTINGS`。
+因子场景有子类 `FactorCoSTEERSettings`（单例 `FACTOR_COSTEER_SETTINGS`，继承基类默认值并新增 `data_folder`、`python_bin`、`file_based_execution_timeout` 等执行相关配置）。模型场景同样定义了 `ModelCoSTEERSettings`（单例 `MODEL_COSTEER_SETTINGS`，环境变量前缀 `MODEL_CoSTEER_`，新增 `env_type` 字段控制 conda/docker 执行环境），但 `ModelCoSTEER` 类内部实际传入的是基类单例 `CoSTEER_SETTINGS`（见 [model_coder/__init__.py#L19-L21](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/model_coder/__init__.py#L19-L21)），`MODEL_COSTEER_SETTINGS` 仅在 `get_model_env()` 等工具函数中用于读取 `env_type`。
 
 ### 11.3 并行进程数
 

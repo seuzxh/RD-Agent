@@ -144,10 +144,14 @@ FactorRDLoop
 │  │  ├─ deduplicate_new_factors(): IC去重(≥0.99剔除)           │  │
 │  │  ├─ 拼接: combined = concat([SOTA_factors, new_factors])  │  │
 │  │  ├─ 保存为 combined_factors_df.parquet                    │  │
-│  │  ├─ 注入Docker工作空间，渲染conf_combined_factors.yaml     │  │
-│  │  ├─ Docker内执行qrun: 训练LGBM + 回测                     │  │
-│  │  ├─ 解析mlflow结果→IC/ARR/MDD等指标                        │  │
-│  │  └─ 如果exp为None→抛FactorEmptyError→跳过本轮              │  │
+│  │  ├─ 注入Docker工作空间，渲染配置yaml:
+│  │  │   ├─ based_experiments中无SOTA model → conf_combined_factors.yaml
+│  │  │   │  (LGBM + combined factors)
+│  │  │   └─ based_experiments中有SOTA model → conf_combined_factors_sota_model.yaml
+│  │  │       (复用SOTA模型结构+超参 + combined factors)
+│  │  ├─ Docker内执行qrun: 训练模型 + 回测
+│  │  ├─ 解析mlflow结果→IC/ARR/MDD等指标
+│  │  └─ 如果exp为None→抛FactorEmptyError→跳过本轮
 │  │                                                           │  │
 │  │  ④ feedback()                                             │  │
 │  │  ├─ 异常情况：生成decision=False的反馈                      │  │

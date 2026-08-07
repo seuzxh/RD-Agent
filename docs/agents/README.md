@@ -392,9 +392,9 @@ CHAT_MODEL_MAP={
 
 ---
 
-## 三种运行场景
+## 四种运行场景
 
-multialpha 支持三个入口场景，均复用相同的五个智能体：
+multialpha 支持四个入口场景，均复用相同的五个智能体：
 
 ### 场景一：因子挖掘（Factor）
 
@@ -403,25 +403,26 @@ multialpha 支持三个入口场景，均复用相同的五个智能体：
 - 流程：假设生成 → 因子任务 → CoSTEER 编写因子代码 → 因子计算+IC验证+回测 → 反馈
 - 环境变量前缀：`QLIB_FACTOR_`
 
-### 场景二：模型调优（Model）
+### 场景二：研报复现（Factor from Report）
+
+- 入口：[factor_from_report.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/factor_from_report.py)
+- 配置：`FactorFromReportPropSetting`
+- 流程：PDF提取因子 → CoSTEER 编写因子代码 → 因子计算+IC验证+回测 → 反馈
+- 环境变量前缀：`QLIB_FACTOR_`（继承因子场景）
+
+### 场景三：模型调优（Model）
 
 - 入口：[model.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/model.py)
 - 配置：`ModelBasePropSetting`
 - 流程：假设生成 → 模型任务 → CoSTEER 编写模型代码 → 模型训练+预测+回测 → 反馈
 - 环境变量前缀：`QLIB_MODEL_`
 
-### 场景三：全流程研发（Quant）
+### 场景四：全流程研发（Quant）
 
 - 入口：[quant.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/quant.py)
 - 配置：`QuantBasePropSetting`
 - 流程：每轮通过 Bandit/LLM/Random 选择做因子还是模型，两套智能体动态切换
 - 环境变量前缀：`QLIB_QUANT_`
-
-### 特殊入口：PDF 研报复现
-
-- 入口：[factor_from_report.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/factor_from_report.py)
-- 从 PDF 研报中直接提取因子定义，绕过 HypothesisGen 和 Hypothesis2Experiment
-- 后续仍使用 CoSTEER → Runner → Summarizer 进行代码实现和验证
 
 ---
 

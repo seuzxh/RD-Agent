@@ -63,10 +63,10 @@ dotenv run -- python rdagent/app/qlib_rd_loop/model.py --base_features_path ./my
 | `QLIB_MODEL_VALID_START/END` | 2015-01-01 / 2016-12-31 | 验证集 |
 | `QLIB_MODEL_TEST_START/END` | 2017-01-01 / auto | 测试集 |
 
-CoSTEER 循环配置使用基类前缀 **`COSTEER_`**（`ModelCoSTEER` 传入 `CoSTEER_SETTINGS`，见 [model_coder/__init__.py:19](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/model_coder/__init__.py#L19)）：
+CoSTEER 循环配置使用基类前缀 **`CoSTEER_`**（`ModelCoSTEER` 传入 `CoSTEER_SETTINGS`，见 [model_coder/__init__.py:19](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/model_coder/__init__.py#L19)）：
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `COSTEER_MAX_LOOP` | 10 | CoSTEER 内部进化轮数（同 `QLIB_MODEL_EVOLVING_N`） |
+| `CoSTEER_MAX_LOOP` | 10 | CoSTEER 内部进化轮数（同 `QLIB_MODEL_EVOLVING_N`） |
 
 编码环境配置使用独立前缀 **`MODEL_CoSTEER_`**（`ModelCoSTEERSettings`，仅控制 `get_model_env()`）：
 | 配置项 | 默认值 | 说明 |
@@ -89,7 +89,7 @@ ModelRDLoop
 ├── coder:          QlibModelCoSTEER         (模型/temperature由 CHAT_MODEL_MAP 配置路由, evolving_n=10)
 │   ├── evolving_strategy: ModelMultiProcessEvolvingStrategy
 │   ├── evaluator: ModelCoSTEEREvaluator
-│   │   ├── shape_evaluator: 前向传播→输出shape=(batch,1)?
+│   │   ├── shape_evaluator: 前向传播→输出shape=(batch,1)         │  │
 │   │   ├── value_evaluator: 与GT对比(如有GT)
 │   │   ├── code_review: LLM代码评审
 │   │   └── final_decision: LLM综合判定
@@ -169,7 +169,7 @@ ModelRDLoop
 │  │  │   │   ├─ 固定输入: batch=8, features=30, timesteps=40  │  │
 │  │  │   │   │           input_value=0.4, param_init=0.6      │  │
 │  │  │   │   ├─ Conda/Docker中实例化模型+前向传播              │  │
-│  │  │   │   ├─ shape_evaluator: 输出shape==(8,1)?           │  │
+│  │  │   │   ├─ shape_evaluator: 输出shape==(8,1)            │  │
 │  │  │   │   ├─ value_evaluator: 数值稳定性检查(有GT时)       │  │
 │  │  │   │   ├─ ModelCodeEvaluator: LLM代码评审               │  │
 │  │  │   │   └─ ModelFinalEvaluator: LLM综合判定可接受?       │  │
