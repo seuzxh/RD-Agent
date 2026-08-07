@@ -885,6 +885,179 @@ critic 1: The 'close' variable may not be a pandas Series. Check data loading.
 
 ---
 
+## 知识库与知识图谱（V2）
+
+CoSTEER V2 的核心创新是将成功和失败的编码经验以**无向图（UndirectedGraph）**结构存储，形成一个可被 RAG 检索的知识图谱，使后续任务能够复用历史编码经验。
+
+### 什么是知识库？
+
+知识库（`CoSTEERKnowledgeBaseV2`）是 CoSTEER 的"长期记忆"，它记录：
+
+- ✅ 哪些任务已经成功实现，成功代码是什么
+- ❌ 哪些任务反复失败，应跳过（避免浪费轮次）
+- 🔧 历史上遇到过哪些错误，这些错误是如何被修复的
+- 🧩 代码中有哪些可复用的组件（如数据加载、特征工程）
+
+与简单的向量检索不同，知识图谱通过**图结构连接**任务、组件、错误、代码实现之间的关系，实现语义+结构双重检索。
+
+### 图节点类型
+
+知识图谱定义在 [knowledge_management.py#L852-L927](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/knowledge_management.py#L852-L927)，包含 **4 种节点标签**：
+
+| 节点标签 | 含义 | 内容 | 创建时机 |
+|---------|------|------|---------|
+| `component` | 代码组件节点 | 组件功能描述文本（如"计算移动平均"、"数据归一化"） | 初始化时通过 `init_component_list` 注入，或任务首次分析组件时创建 |
+| `task_description` | 任务描述节点 | 任务的信息字符串（`target_task.get_task_information()`） | 任务首次成功时在 `update_success_task()` 中创建 |
+| `task_trace` | 失败轨迹节点 | 中间失败轮次的**完整代码+反馈文本**（`CoSTEERKnowledge.get_implementation_and_feedback_str()`） | 任务成功后，将成功之前的每一轮失败尝试各创建一个节点 |
+| `task_success_implement` | 成功实现节点 | 最终成功轮次的**完整代码+反馈文本** | 任务成功时，最后一轮的代码创建为此节点 |
+| `error` | 错误节点 | 错误类型+错误行（如 `"ErrorType: NameError\nError line: Ref"`） | 分析执行错误时值校验错误时创建（如果图中不存在） |
+
+### 图边的连接关系
+
+当一个任务成功时（`update_success_task()`），会建立以下连接：
+
+```
+component (组件节点)
+    │
+    └── task_description (任务描述)
+            │
+            ├── task_trace (失败轨迹1，含error边) ── error (错误A)
+            │                                    └── error (错误B)
+            ├── task_trace (失败轨迹2，含error边) ── error (错误C)
+            │
+            └── task_success_implement (最终成功代码)
+```
+
+**关键设计**：失败轨迹节点同时连接 task_description 和它遇到的错误节点，这使得"遇到同类错误时，如何找到修复方案"成为可能——沿 error → task_trace → task_success_implement 路径检索。
+
+### 知识写入流程（generate_knowledge）
+
+每次进化轮次结束后，`generate_knowledge()` 将本轮结果写入知识库（[knowledge_management.py#L360-L429](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/knowledge_management.py#L360-L429)）：
+
+```
+每轮进化结果
+    │
+    ├─ 任务已在success_dict中？→ 跳过（已有成功实现）
+    │
+    ├─ 首次见到该任务？
+    │   └─ analyze_component() → LLM分析该任务涉及哪些component节点
+    │
+    ├─ 保存本轮代码+反馈到 working_trace_knowledge（临时缓冲）
+    │
+    ├─ final_decision == True（成功）？
+    │   └─ update_success_task():
+    │       1. 将 working_trace 中的每轮失败转为 task_trace 节点
+    │       2. 分析每轮错误，创建/连接 error 节点
+    │       3. 创建 task_success_implement 节点
+    │       4. 连接所有边到图中
+    │       5. 移入 success_task_to_knowledge_dict（永久记忆）
+    │
+    └─ final_decision == False（失败）？
+        └─ analyze_error() → 正则解析错误类型和错误行
+           保存到 working_trace_error_analysis（供成功后建图用）
+```
+
+#### 错误分析机制
+
+`analyze_error()`（[knowledge_management.py#L488-L528](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/knowledge_management.py#L488-L528)）通过正则表达式从 traceback 中提取结构化错误信息：
+
+```python
+# 执行错误正则
+r'File "(?P<file>.+)", line (?P<line>\d+), in (?P<function>.+)\n\s+(?P<error_line>.+)\n(?P<error_type>\w+): (?P<error_message>.+)'
+
+# 值校验错误（预定义类型）
+- "The source dataframe and the ground truth dataframe have different rows count."
+- "Some values differ by more than the tolerance of 1e-6."
+- "No sufficient correlation found when shifting up"
+- ...
+```
+
+#### 组件分析机制
+
+`analyze_component()`（[knowledge_management.py#L457-L486](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/knowledge_management.py#L457-L486)）调用 LLM，将任务描述与已有组件列表匹配：
+
+```
+system: "以下是所有可用组件：{all_component_content}，请选择任务用到的组件编号"
+user:   "{target_task_information}"
+output: JSON {"component_no_list": [1, 3, 5]}
+```
+
+### RAG 检索流程（query）
+
+每次编码前，`query()`（[knowledge_management.py#L431-L455](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/knowledge_management.py#L431-L455)）执行三步检索，返回 `CoSTEERQueriedKnowledgeV2` 对象：
+
+```
+query(evo, evolving_trace)
+    │
+    ├─ ① former_trace_query() — 历史轨迹检索
+    │   ├─ 任务已成功？→ 返回成功实现（直接复用）
+    │   ├─ 失败次数 >= fail_task_trial_limit？→ 标记为failed（跳过）
+    │   └─ 否则 → 返回最近N轮失败代码+反馈
+    │       注意：会删除"退化轨迹"（值校验通过后又失败的轮次）
+    │
+    ├─ ② component_query() — 组件相似成功实现检索
+    │   ├─ 多组件交集查询：找到同时涉及相同组件的成功任务
+    │   ├─ 单组件邻居查询：从每个组件出发找1跳内的task_description
+    │   ├─ 沿task_description找task_success_implement
+    │   ├─ Embedding相似度兜底：向量检索语义相似的成功任务
+    │   └─ GT优先：确保至少一半检索结果来自GT验证的成功实现
+    │
+    └─ ③ error_query() — 相似错误修复方案检索
+        ├─ 获取上一轮的错误分析结果
+        ├─ 多错误交集：找犯过相同错误组合的task_trace
+        ├─ 单错误邻居：从每个error出发找1跳内的task_trace
+        └─ 沿task_trace找后续的task_success_implement
+            （即"犯了同样错误但最终成功"的代码对）
+```
+
+#### 三步检索的结果如何被 LLM 使用
+
+检索结果通过提示词传入 LLM：
+
+| 检索结果 | 传入位置 | LLM 用途 |
+|---------|---------|---------|
+| `success_task_to_knowledge_dict` | "Following tasks have been successfully implemented" | 告知哪些任务已完成，避免重复实现 |
+| `failed_task_info_set` | "You have tried ... times but failed, skip it" | 告知哪些任务应放弃，避免死循环 |
+| `task_to_former_failed_traces` | "Here is your former implementation and feedback" | 提供自身最近的失败代码+错误，指导修改 |
+| `task_to_similar_task_successful_knowledge` | "Here are similar successful implementations" | 提供组件/语义相似的成功代码作为参考 |
+| `task_to_similar_error_successful_knowledge` | "The error ... was fixed in another task like this" | 提供"犯同样错误→修复→成功"的案例对 |
+
+### V1 与 V2 的区别
+
+| 维度 | V1（已废弃） | V2（当前默认） |
+|------|------------|--------------|
+| 知识结构 | 扁平字典 + Embedding 向量 | 无向图（UndirectedGraph）结构 |
+| 检索方式 | 仅 Embedding 相似度 | 图结构查询（交集+邻居+路径）+ Embedding 兜底 |
+| 错误经验 | 不单独存储错误节点 | error 节点连接失败轨迹→成功实现，支持"同错误修复方案"检索 |
+| 组件知识 | 无组件概念 | component 节点连接任务，支持"相同技术栈参考"检索 |
+| GT 验证 | 无 GT 区分 | 优先返回基于 GT（ground truth）验证的成功实现 |
+| 持久化 | pickle 整个 KB | pickle 图对象到 `graph.pkl`（工作目录下） |
+
+### 配置参数
+
+[config.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/config.py) 中与知识库相关的参数：
+
+| 参数 | 默认值 | 含义 |
+|------|--------|------|
+| `evolving_version` | `2` | 知识库版本（1=V1已废弃，2=V2图知识库） |
+| `fail_task_trial_limit` | `20` | 任务失败超过此次数则标记为 failed，不再尝试 |
+| `v2_query_former_trace_limit` | `5` | former_trace 检索返回最近 N 轮失败记录 |
+| `v2_query_component_limit` | `5` | component 检索返回最多 N 个相似成功实现 |
+| `v2_query_error_limit` | `5` | error 检索返回最多 N 个相似错误修复对 |
+| `v2_knowledge_sampler` | `1.0` | 知识采样率（1.0=返回全部，<1.0 随机丢弃部分，用于增加多样性） |
+| `v2_add_fail_attempt_to_latest_successful_execution` | `false` | 是否在成功后仍告知 LLM 最近的失败尝试（防止死循环） |
+| `knowledge_base_path` | `None` | 知识库持久化路径（设为路径可在多次运行间复用知识） |
+| `simple_background` | `false` | 是否使用简化背景提示词（减少知识库内容传入） |
+
+### 持久化
+
+知识图谱通过 pickle 序列化保存：
+- **图对象**：`graph.pkl`（位于当前工作目录 `Path.cwd() / "graph.pkl"`）
+- **完整 KB**：可通过 `knowledge_base_path` 配置 dump/load 路径
+- **Session 恢复**：LoopBase 的 session pickle 包含完整 KB，断点续跑时自动恢复
+
+---
+
 ## 相关代码索引
 
 | 模块 | 文件路径 |

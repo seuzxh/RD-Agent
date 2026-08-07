@@ -6,15 +6,16 @@
 
 ## 智能体总览
 
-multialpha 的 R&D 循环由以下五个智能体组成，按执行顺序排列：
+multialpha 的 R&D 循环由以下五个智能体和一个核心记忆系统组成，按执行顺序排列：
 
-| 序号 | 智能体 | 核心职责 | 输入 | 输出 | 文档 |
-|------|--------|----------|------|------|------|
+| 序号 | 智能体/系统 | 核心职责 | 输入 | 输出 | 文档 |
+|------|------------|----------|------|------|------|
 | 1 | **HypothesisGen**（假设生成） | 基于历史反馈和市场观察，生成新的研究方向和假设 | Trace（历史轨迹） | Hypothesis（假设对象） | [01-hypothesis-gen.md](01-hypothesis-gen.md) |
 | 2 | **Hypothesis2Experiment**（假设转实验） | 将抽象假设转化为结构化的可执行任务列表 | Hypothesis + Trace | Experiment（含 Task 列表） | [05-hypothesis2experiment.md](05-hypothesis2experiment.md) |
 | 3 | **CoSTEER**（编码进化） | 通过"生成→执行→评估→修正"多轮循环，为每个 Task 编写可运行的 Python 代码 | Experiment（含 Task 规格） | Experiment（含可运行代码） | [02-costeer.md](02-costeer.md) |
 | 4 | **Runner**（方案执行） | 在隔离的 Qlib 环境中执行代码，产出因子计算结果和回测指标 | Experiment（含代码） | Experiment（含执行结果） | [03-runner.md](03-runner.md) |
 | 5 | **Summarizer**（反馈总结） | 分析回测结果，与 SOTA 对比，生成结构化反馈并决定是否更新 SOTA | Experiment（含结果）+ Trace | Feedback（反馈与决策） | [04-summarizer.md](04-summarizer.md) |
+| — | **Trace**（实验轨迹） | 贯穿全循环的记忆中枢，记录所有实验历史、SOTA、DAG演化关系，支持断点恢复 | 各步骤输出 | 持久化历史 | [06-trace.md](06-trace.md) |
 
 ---
 
@@ -471,3 +472,4 @@ multialpha 的智能体设计基于以下学术研究：
 - 想要了解代码如何自动编写和进化？→ [02-costeer.md](02-costeer.md)
 - 想要了解代码如何执行和回测？→ [03-runner.md](03-runner.md)
 - 想要了解结果如何分析和反馈？→ [04-summarizer.md](04-summarizer.md)
+- 想要了解实验历史如何记录、SOTA如何追踪？→ [06-trace.md](06-trace.md)
