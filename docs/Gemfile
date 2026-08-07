@@ -1,0 +1,4 @@
+source "https://rubygems.org"
+
+# 与 GitHub Pages 当前版本对齐（见 https://pages.github.com/versions/）
+gem "github-pages", group: :jekyll_plugins
