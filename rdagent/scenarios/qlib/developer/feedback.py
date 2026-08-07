@@ -16,23 +16,36 @@ from rdagent.utils.agent.tpl import T
 DIRNAME = Path(__file__).absolute().resolve().parent
 
 
+def _metrics_to_frame(result, col_name: str) -> pd.DataFrame:
+    """
+    Normalize a single backtest result into a DataFrame with index=metric and a
+    single value column named ``col_name``.
+
+    ``result`` may be None (no SOTA yet), a ``pd.Series`` (index=metric, often
+    ``Name: 0``), or a ``pd.DataFrame``. None returns an empty table so that
+    concatenation simply omits the corresponding column.
+    """
+    if result is None:
+        return pd.DataFrame()
+    df = pd.DataFrame(result)
+    if df.shape[1] > 0:
+        df = df.rename(columns={df.columns[0]: col_name})
+    df.index.name = "metric"
+    return df
+
+
 def process_results(current_result, sota_result):
     """
     Format current vs SOTA metrics as a readable string for the LLM prompt.
 
     Uses StrategyMetrics.important_metrics_keys() to determine which metrics
-    to include, ensuring consistency with the domain model schema.
+    to include, ensuring consistency with the domain model schema. Tolerates a
+    missing/empty SOTA result (first loop has no SOTA yet).
     """
     important_keys = StrategyMetrics.important_metrics_keys()
 
-    current_df = pd.DataFrame(current_result)
-    sota_df = pd.DataFrame(sota_result)
-
-    current_df.index.name = "metric"
-    sota_df.index.name = "metric"
-
-    current_df.rename(columns={"0": "Current Result"}, inplace=True)
-    sota_df.rename(columns={"0": "SOTA Result"}, inplace=True)
+    current_df = _metrics_to_frame(current_result, "Current Result")
+    sota_df = _metrics_to_frame(sota_result, "SOTA Result")
 
     combined_df = pd.concat([current_df, sota_df], axis=1)
     available = [k for k in important_keys if k in combined_df.index]
@@ -44,9 +57,14 @@ def process_results(current_result, sota_result):
     def format_filtered_combined_df(filtered_combined_df: pd.DataFrame) -> str:
         results = []
         for metric, row in filtered_combined_df.iterrows():
-            current = row["Current Result"]
-            sota = row["SOTA Result"]
-            results.append(f"{metric} of Current Result is {current:.6f}, of SOTA Result is {sota:.6f}")
+            current = row.get("Current Result")
+            sota = row.get("SOTA Result")
+            if pd.notna(current) and pd.notna(sota):
+                results.append(f"{metric} of Current Result is {current:.6f}, of SOTA Result is {sota:.6f}")
+            elif pd.notna(current):
+                results.append(f"{metric} of Current Result is {current:.6f}")
+            elif pd.notna(sota):
+                results.append(f"{metric} of SOTA Result is {sota:.6f}")
         return "; ".join(results)
 
     return format_filtered_combined_df(filtered_combined_df)
