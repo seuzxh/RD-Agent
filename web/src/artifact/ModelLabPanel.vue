@@ -10,13 +10,18 @@
       >{{ formatName(s) }}</el-tag>
       <el-tag v-if="activeStrategy" size="small" style="cursor:pointer" @click="activeStrategy=''">清除筛选</el-tag>
     </div>
-    <el-table :data="displayModels" size="small">
+    <el-table :data="displayModels" size="small" @expand-change="onExpandChange">
       <el-table-column type="expand">
         <template #default="{ row }">
           <div class="detail">
             <section v-if="row.features?.length"><b>特征因子</b><p>{{ row.features.join(', ') }}</p></section>
             <section v-if="row.hyperparameters && Object.keys(row.hyperparameters).length"><b>超参数</b><pre>{{ JSON.stringify(row.hyperparameters, null, 2) }}</pre></section>
-            <section v-if="row.code"><b>代码</b><pre>{{ row.code }}</pre></section>
+            <section v-if="row.code_path">
+              <b>代码</b>
+              <pre v-if="rowCode[row._codeKey]">{{ rowCode[row._codeKey] }}</pre>
+              <p v-else-if="loadingCode[row._codeKey]">加载中…</p>
+              <p v-else class="hint">展开后加载代码</p>
+            </section>
           </div>
         </template>
       </el-table-column>
@@ -45,9 +50,12 @@
 </template>
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { fetchCode } from './api'
 
 const props = defineProps<{ models: any[] }>()
 const activeStrategy = ref('')
+const rowCode = ref<Record<string, string>>({})
+const loadingCode = ref<Record<string, boolean>>({})
 
 const strategyNames = computed(() => {
   const names = new Set(props.models.map((m: any) => m.strategy_id || m._strategy_name))
@@ -57,8 +65,27 @@ const strategyNames = computed(() => {
 const displayModels = computed(() => {
   let list = [...props.models]
   if (activeStrategy.value) list = list.filter(m => (m.strategy_id || m._strategy_name) === activeStrategy.value)
-  return list
+  return list.map((m: any) => ({
+    ...m,
+    _codeKey: `${m.strategy_id || m._strategy_name || ''}:${m.name}`,
+  }))
 })
+
+async function onExpandChange(row: any, expandedRows: any[]) {
+  const expanded = (expandedRows || []).some((r: any) => r._codeKey === row._codeKey)
+  if (!expanded) return
+  if (!row.code_path || rowCode.value[row._codeKey] != null) return
+  loadingCode.value[row._codeKey] = true
+  try {
+    const strategyId = row.strategy_id || row._strategy_name
+    const res = await fetchCode(strategyId, row.name, 'model')
+    rowCode.value[row._codeKey] = res.code
+  } catch {
+    rowCode.value[row._codeKey] = ''
+  } finally {
+    loadingCode.value[row._codeKey] = false
+  }
+}
 
 function fmtPct(v: number | undefined | null) {
   if (v == null) return '—'
@@ -74,5 +101,6 @@ function toggleStrategy(s: string) { activeStrategy.value = activeStrategy.value
 .detail section { margin-bottom: 12px; }
 .detail b { display: block; font-size: 12px; color: #909399; margin-bottom: 4px; }
 .detail pre { background: #f5f7fa; padding: 8px; border-radius: 4px; font-size: 12px; max-height: 200px; overflow: auto; }
+.detail .hint { color: #909399; font-size: 12px; }
 .empty { text-align: center; padding: 40px; color: #909399; }
 </style>

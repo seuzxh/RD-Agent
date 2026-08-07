@@ -64,14 +64,14 @@
       <div v-else-if="detailError" class="error">{{ detailError }}</div>
       <div v-else-if="detailData" class="strategy-detail">
         <section class="detail-metrics">
-          <div class="metric-card"><small>总轮次</small><strong>{{ detailData.total_rounds || 0 }}</strong></div>
+          <div class="metric-card"><small>总轮次</small><strong>{{ detailData.experiments?.length || 0 }}</strong></div>
           <div class="metric-card"><small>因子数</small><strong>{{ detailData.factors?.length || Object.keys(detailData.alpha_pool?.factors || {}).length }}</strong></div>
           <div class="metric-card"><small>模型数</small><strong>{{ detailData.models?.length || Object.keys(detailData.model_registry?.models || {}).length }}</strong></div>
         </section>
         <section v-if="detailData.experiments?.length" class="detail-experiments">
           <h4>实验历史</h4>
           <el-table :data="detailData.experiments" size="small" max-height="300">
-            <el-table-column prop="round_number" label="轮次" width="60"/>
+            <el-table-column prop="loop_id" label="轮次" width="60"/>
             <el-table-column prop="type" label="类型" width="80"/>
             <el-table-column prop="hypothesis_text" label="假设" min-width="200"/>
             <el-table-column prop="decision" label="决策" width="80">

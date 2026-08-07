@@ -12,6 +12,8 @@ REST:
     GET    /api/strategies/:id/models   — strategy's models
     GET    /api/strategies/:id/pipeline — strategy's pipeline nodes
     GET    /api/strategies/:id/report   — strategy's experiment report
+    GET    /api/strategies/:id/chart    — strategy's backtest chart HTML
+    GET    /api/strategies/:id/code     — factor/model source code via code_path
     DELETE /api/strategies/:id          — delete strategy + cascade
     GET    /api/factors                 — cross-strategy factors
     GET    /api/models                  — cross-strategy models
@@ -161,6 +163,42 @@ def get_strategy_chart(strategy_id: str):
     return send_file(str(chart_path), mimetype="text/html")
 
 
+@research_bp.route("/strategies/<path:strategy_id>/code", methods=["GET"])
+def get_strategy_code(strategy_id: str):
+    """Return the source code of a factor or model via its code_path.
+
+    Query params:
+        name: factor/model name to fetch; if omitted, the first code-bearing
+              row is returned.
+        type: "factor" or "model" to restrict the search to one table and
+              disambiguate a name shared by both; if omitted, factors are
+              searched first, then models.
+    """
+    name = request.args.get("name")
+    type_ = request.args.get("type")
+    db = _db()
+    if type_ == "model":
+        rows = db.query_models(strategy_id)
+    elif type_ == "factor":
+        rows = db.query_factors(strategy_id)
+    else:
+        rows = db.query_factors(strategy_id) + db.query_models(strategy_id)
+    target = next(
+        (r for r in rows if (name is None or r.get("name") == name) and r.get("code_path")),
+        None,
+    )
+    if not target:
+        return _error("No code available")
+    code_path = Path(target["code_path"])
+    if not code_path.exists():
+        return _error("Code file missing")
+    try:
+        code = code_path.read_text(encoding="utf-8")
+    except Exception:
+        return _error("Code file missing")
+    return _json_resp({"name": target.get("name"), "code": code})
+
+
 @research_bp.route("/strategies/<path:strategy_id>", methods=["DELETE"])
 def delete_strategy(strategy_id: str):
     """Delete a strategy and all cascade data."""
@@ -204,6 +242,7 @@ def list_reports():
         latest = trend[-1] if trend else {}
         summaries.append({
             "id": sid,
+            "description": s.get("description"),
             "total_rounds": len(exps),
             "metrics_trend": trend,
             "latest_metrics": latest,

@@ -116,7 +116,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { fetchLive, fetchStrategyMessages, fetchStrategyDetail } from './api'
 
 const props = defineProps<{ strategies: any[] }>()
@@ -152,9 +152,9 @@ const pipelineStages = computed(() => {
 })
 
 // Available loops from experiments
-const availableLoops = computed(() => {
-  const exps = strategyDetail.value?.experiments || []
-  return [...new Set(exps.map((e: any) => e.loop_id))].sort((a, b) => a - b)
+const availableLoops = computed<number[]>(() => {
+  const exps: any[] = strategyDetail.value?.experiments || []
+  return [...new Set<number>(exps.map((e: any) => e.loop_id as number))].sort((a, b) => a - b)
 })
 
 // Experiments from ResearchDB
@@ -169,13 +169,10 @@ const filteredExperiments = computed(() => {
 // Factors from ResearchDB
 const factors = computed(() => strategyDetail.value?.factors || [])
 
-// Filter factors by selected loop
+// Filter factors by selected loop (factors carry round_number = loop_id)
 const filteredFactors = computed(() => {
   if (selectedLoop.value == null) return factors.value
-  const exp = experiments.value.find((e: any) => e.loop_id === selectedLoop.value)
-  if (!exp) return factors.value
-  // Return factors from all loops (the loop_id is not on factor objects)
-  return factors.value
+  return factors.value.filter((f: any) => f.round_number === selectedLoop.value)
 })
 
 // Metrics from experiments

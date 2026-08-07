@@ -92,3 +92,16 @@ export async function fetchStrategyDetail(id: string): Promise<StrategyDetail> {
 export async function fetchStrategyMessages(id: string): Promise<MessagesResponse> {
   return fetchJson<MessagesResponse>(`/api/strategies/${encodeURIComponent(id)}/messages`)
 }
+
+/** Factor/model source code via code_path */
+export async function fetchCode(
+  strategyId: string,
+  name?: string,
+  type?: 'factor' | 'model',
+): Promise<{ name: string; code: string }> {
+  const params = new URLSearchParams()
+  if (name) params.set('name', name)
+  if (type) params.set('type', type)
+  const qs = params.toString()
+  return fetchJson<{ name: string; code: string }>(`/api/strategies/${encodeURIComponent(strategyId)}/code${qs ? `?${qs}` : ''}`)
+}
