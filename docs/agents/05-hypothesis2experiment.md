@@ -36,7 +36,7 @@ Hypothesis2Experiment 的设计来源于以下学术工作：
 
 - **抽象到具体的结构化映射**：假设生成阶段输出的是方向性、描述性的研究方向（如"探索动量因子"），而编码阶段需要精确的因子名称、LaTeX 公式和变量定义。Hypothesis2Experiment 通过 LLM 将模糊创意转化为结构化任务规格。
 - **任务卡片（Implementation Card）模式**：每个子任务被封装为一张"卡片"，包含完整的实现规格。这使得 CoSTEER 可以并行处理多个子任务（如一次生成 3 个因子），也便于去重和知识检索。
-- **历史感知的任务生成**：生成新任务时，会参考历史假设与反馈、最近一轮实验结果、SOTA 实验信息，避免重复已有因子/模型，并根据历史反馈调整方向。
+- **历史感知的任务生成**：生成新任务时，会参考历史实验信息，主要目的是**避免重复设计已有的因子/模型**（去重），同时构建基线链让 Runner 能继承历史 SOTA。注意：决定"探索什么方向"是 HypothesisGen 的职责，Hypothesis2Experiment 不负责方向决策。
 - **去重即效率**：因子实验中，若新生成的因子名已在历史实验中出现，则自动去重，避免 CoSTEER 重复编写相同因子代码。
 - **与假设生成的解耦**：HypothesisGen 负责"做什么方向"，Hypothesis2Experiment 负责"具体做哪几个"。两者使用不同的提示词和输出格式，可以独立优化。
 
@@ -44,10 +44,30 @@ Hypothesis2Experiment 的设计来源于以下学术工作：
 
 ## 2. 技术架构
 
+### 2.1 与 HypothesisGen 的职责边界
+
+你可能会注意到：Hypothesis2Experiment 和 HypothesisGen 都采用了相似的四步 LLM 流程（prepare_context → 提示词渲染 → LLM 调用 → convert_response），也都会查询历史 trace。但两者的**核心目的和输入输出完全不同**：
+
+| 维度 | HypothesisGen（假设生成） | Hypothesis2Experiment（假设转实验） |
+|------|--------------------------|-----------------------------------|
+| **核心问题** | "基于之前的结果，下一轮**探索什么方向**？" | "为了验证这个假设，**具体要实现哪几个因子/模型**？" |
+| **输入** | 只有 `trace`（历史实验与反馈） | `hypothesis`（Gen 给出的方向）+ `trace` |
+| **参考历史的目的** | 决定研究方向（基于反馈调整策略） | **去重 + 构建基线链**（避免重复造轮子） |
+| **输出** | `Hypothesis`：自然语言描述的方向性想法<br>- hypothesis: 假设描述<br>- reason: 推理理由<br>- concise_*: 知识沉淀用简洁版本 | `Experiment`：结构化可执行任务列表<br>- FactorTask[]/ModelTask[]：名称、公式、变量、架构、超参数<br>- based_experiments：历史基线链 |
+| **抽象层级** | 战略层：做什么方向 | 战术层：具体怎么做，有完整的实现规格 |
+| **类比** | 产品经理决定"这个版本做支付功能" | 技术主管拆解为"实现微信支付、支付宝、银行卡三个接口"，给出接口文档 |
+
+**关键理解**：HypothesisGen 输出的是一个模糊的创意（如"探索换手率因子在震荡市的表现"），CoSTEER 无法直接基于这句话写代码。Hypothesis2Experiment 的职责是将这句话翻译成 CoSTEER 能理解的施工图纸：具体是哪几个因子（TurnoverRate20、TurnoverMomentum...）、每个因子的 LaTeX 公式是什么、用到哪些变量。
+
+查询历史 trace 的目的也完全不同：
+- **HypothesisGen**：看之前做了什么、效果如何，决定"下一步往哪走"
+- **Hypothesis2Experiment**：看之前已经实现过哪些同名因子，避免重复生成；构建基线链让 Runner 能继承历史 SOTA 因子
+
+### 2.2 Hypothesis2Experiment 执行流程
+
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                     RDLoop.direct_exp_gen()                          │
-│                     hypothesis2experiment.convert(hypo, trace)       │
+│  输入: hypothesis (来自 HypothesisGen) + trace (历史轨迹)             │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │
                                 ▼
@@ -59,40 +79,42 @@ Hypothesis2Experiment 的设计来源于以下学术工作：
 │  │  1. prepare_context(hypothesis, trace)                      │    │
 │  │     (子类实现)                                               │    │
 │  │                                                             │    │
-│  │  ① 构建场景描述（scenario）                                  │    │
-│  │  ② 从 trace 中筛选同类型历史实验                             │    │
-│  │  ③ 渲染 hypothesis_and_feedback（历史轨迹）                  │    │
-│  │  ④ 渲染 last_hypothesis_and_feedback（最近一轮）             │    │
-│  │  ⑤ 渲染 SOTA_hypothesis_and_feedback（最优实验）             │    │
-│  │  ⑥ 设置 RAG 启发策略文本                                    │    │
-│  │  ⑦ 加载输出格式规范（experiment_output_format）              │    │
+│  │  ① 构建场景描述（scenario：接口/数据格式/编码规范）          │    │
+│  │  ② 从 trace 中筛选同类型历史实验（仅因子/仅模型）            │    │
+│  │     → 目的：让 LLM 知道哪些已经做过，避免重复设计            │    │
+│  │  ③ 渲染历史/最近/SOTA 反馈（条件渲染，可为空）                │    │
+│  │     → 目的：让 LLM 了解之前的尝试结果，设计更合理的任务       │    │
+│  │  ④ 模型场景：设置数据规模约束 RAG 文本                       │    │
+│  │     注意：因子场景 RAG = None，前15轮策略属于 HypothesisGen  │    │
+│  │  ⑤ 加载输出格式规范（experiment_output_format）              │    │
 │  └─────────────────────────────┬───────────────────────────────┘    │
 │                                │                                     │
 │  ┌─────────────────────────────▼───────────────────────────────┐    │
 │  │  2. 渲染 system/user 提示词                                 │    │
-│  │     system: 角色 + 场景描述 + 输出格式                       │    │
-│  │     user: 目标假设 + 历史反馈 + 最近反馈 + SOTA反馈          │    │
+│  │     system: 角色("你需要根据假设生成具体任务") + 场景 + 格式  │    │
+│  │     user: 目标假设 + [历史反馈] + [最近反馈] + [SOTA反馈]    │    │
 │  └─────────────────────────────┬───────────────────────────────┘    │
 │                                │                                     │
 │  ┌─────────────────────────────▼───────────────────────────────┐    │
 │  │  3. APIBackend LLM 调用（JSON mode）                        │    │
 │  │     json_target_type=dict[str, dict[str, str|dict]]         │    │
+│  │     输出: {factor_name: {description, formulation, vars}}   │    │
 │  └─────────────────────────────┬───────────────────────────────┘    │
 │                                │                                     │
 │  ┌─────────────────────────────▼───────────────────────────────┐    │
 │  │  4. convert_response(response, hypothesis, trace)           │    │
-│  │     (子类实现)                                               │    │
+│  │     (子类实现，纯代码逻辑，不再调用 LLM)                     │    │
 │  │                                                             │    │
 │  │  ① JSON 解析                                                │    │
-│  │  ② 遍历 JSON key 构建 Task 对象                              │    │
-│  │  ③ 构建 Experiment 对象（关联 hypothesis）                   │    │
+│  │  ② 遍历 JSON key 构建 FactorTask/ModelTask 对象              │    │
+│  │  ③ 构建 Experiment 对象（关联传入的 hypothesis）              │    │
 │  │  ④ 从 trace.hist 构建 based_experiments 基线链              │    │
-│  │  ⑤ 因子去重：跳过已存在的因子名                              │    │
+│  │  ⑤ 因子去重：跳过已在历史中存在的同名因子                    │    │
 │  └─────────────────────────────┬───────────────────────────────┘    │
 │                                │                                     │
 │                                ▼                                     │
 │                    返回 Experiment（含 sub_tasks 列表）               │
-│                    → 传递给 CoSTEER 进行编码                         │
+│                    → 传递给 CoSTEER 为每个 Task 编写代码              │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -214,21 +236,17 @@ resp = APIBackend().build_messages_and_create_chat_completion(
 
 **历史轨迹筛选**（[L72-L83](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/factor_proposal.py#L72-L83)）：
 
-从 `trace.hist` 逆序遍历，仅保留因子类型的实验（无 `action` 属性或 `action == "factor"`），构建 `specific_trace`。这确保在量化全流程场景中，模型实验不会干扰因子任务生成。
+从 `trace.hist` 逆序遍历，仅保留因子类型的实验（无 `action` 属性或 `action == "factor"`），构建 `specific_trace`。这确保在量化全流程场景中，模型实验不会干扰因子任务生成——量化场景会交替进行因子和模型实验，Hypothesis2Experiment 需要只参考同类型的历史。
 
-**RAG 启发策略**（[L91](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/factor_proposal.py#L91)）：
+**RAG 策略**（[L91](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/factor_proposal.py#L91)）：
 
 ```python
-"RAG": (
-    "Try the easiest and fastest factors to experiment with from various perspectives first."
-    if len(trace.hist) < 15
-    else "Now, you need to try factors that can achieve high IC (e.g., machine learning-based factors)."
-),
+"RAG": None,
 ```
 
-注意：这里的 `RAG` 不是向量检索，而是根据迭代轮次动态调整的启发式策略文本：
-- 前 15 轮：鼓励从多种角度尝试简单快速的因子（广泛探索）
-- 15 轮后：引导尝试高 IC 因子，如机器学习类因子（深度挖掘）
+因子场景的 Hypothesis2Experiment **不设置额外的 RAG 启发策略**。
+
+> ⚠️ **注意**："前15轮尝试简单因子、15轮后尝试ML因子"的分阶段策略属于 **HypothesisGen**（[factor_proposal.py#L38-L42](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/factor_proposal.py#L38-L42)），用于指导假设生成方向，而非假设转实验。Hypothesis2Experiment 只负责把假设翻译成具体任务，不负责决定探索方向。
 
 ### 5.2 convert_response 任务构建
 
