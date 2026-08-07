@@ -24,6 +24,7 @@ exclude:
   - .jekyll-cache
   - .jekyll-metadata
   - README.md
+  - superpowers
 
 # 页面默认布局
 defaults:

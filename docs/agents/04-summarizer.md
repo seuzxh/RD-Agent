@@ -374,9 +374,11 @@ def process_results(current_result, sota_result):
 - 输出 JSON 格式规范
 
 **User prompt 模板变量**：
+{% raw %}
 - `{{ hypothesis_text }}`：本轮假设文本
 - `{{ task_details }}`：任务列表（因子名称、描述、公式、变量、实现状态）
 - `{{ combined_result }}`：格式化的指标对比文本
+{% endraw %}
 
 ### 8.2 模型反馈提示词
 
