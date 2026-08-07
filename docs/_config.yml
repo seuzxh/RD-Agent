@@ -1,26 +1,31 @@
-title: multialphaV
+title: MultiAlpha
 description: 基于 RD-Agent + Qlib 的量化金融因子挖掘平台文档
-theme: jekyll-theme-primer
-# 显式声明仓库，避免 jekyll-github-metadata 调 GitHub API 探测
-# （CI 中默认 GITHUB_TOKEN 权限不足会报 "No repo name found"）
-repository: seuzxh/RD-Agent
+
+# 项目页面必须设置 baseurl！仓库名是 RD-Agent
+url: "https://seuzxh.github.io"
+baseurl: "/RD-Agent"
+
+# 不使用外部主题，使用自定义 _layouts/default.html
+# theme: minima
 
 # Markdown 处理
 markdown: kramdown
 kramdown:
   parse_block_html: true
+  syntax_highlighter: rouge
 
 # 排除非文档文件
 exclude:
   - Gemfile
   - Gemfile.lock
   - node_modules
-  - vendor       # bundle 装的 gems（含 jekyll 自身模板，否则 _posts 报 Invalid date）
+  - vendor
   - .sass-cache
   - .jekyll-cache
   - .jekyll-metadata
+  - README.md
 
-# 页面辅助
+# 页面默认布局
 defaults:
   - scope:
       path: ""
