@@ -167,6 +167,8 @@ git_ignore_folder/
 
 # DB files
 *.db
+*.db-shm
+*.db-wal
 
 # Docker
 factor_template/mlruns/

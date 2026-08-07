@@ -46,7 +46,6 @@ export const fetchSota = (traceId: string, signal?: AbortSignal) => fetch(`/trac
 export interface HealthCheck { overall: string; checks: Array<{ name: string; icon: string; status: 'pass' | 'warn' | 'fail'; detail: string }> }
 export const fetchHealth = (signal?: AbortSignal) => fetch('/health', { signal }).then(response => parseResponse<HealthCheck>(response))
 export const stdoutUrl = (id: string) => `/stdout?${new URLSearchParams({ id }).toString()}`
-export const logStreamUrl = (id: string) => `/logs/sse?${new URLSearchParams({ trace: id }).toString()}`
 
 /**
  * Range-incremental fetch on /stdout. Returns the new bytes (as string) and the
@@ -109,7 +108,6 @@ export interface PredictExperiment {
 }
 
 export interface Top20Item { rank: number; instrument: string; score: number }
-export interface Top20Result { predict_date: string; top20: Top20Item[] }
 export interface PredictRecord {
   date: string
   source_trace_id: string

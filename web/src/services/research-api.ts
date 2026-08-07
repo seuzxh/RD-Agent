@@ -147,6 +147,9 @@ export const fetchStrategyPipeline = (id: string, signal?: AbortSignal) =>
 export const fetchStrategyReport = (id: string, signal?: AbortSignal) =>
   get<ReportResponse>(`/strategies/${encodeURIComponent(id)}/report`, signal)
 
+export const fetchStrategyMessages = (id: string, signal?: AbortSignal) =>
+  get<{ messages: any[]; total: number }>(`/strategies/${encodeURIComponent(id)}/messages`, signal)
+
 export const deleteStrategy = (id: string) =>
   del(`/strategies/${encodeURIComponent(id)}`)
 

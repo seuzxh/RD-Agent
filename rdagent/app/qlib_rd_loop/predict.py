@@ -30,7 +30,7 @@ def main(trace_id: str, workspace_path: str, sota_factors: list):
     factors_dir = Path(workspace_path) / "_predict_factors"
     factors_dir.mkdir(exist_ok=True)
     for fname, code in sota_factors:
-        (factors_dir / f"{fname}.py").write_text(code)
+        (factors_dir / f"{fname}.py").write_text(code, encoding="utf-8")
     logger.info(f"写入 {len(sota_factors)} 个因子代码到 {factors_dir}")
 
     # 2. 准备 predict_infer.py(从模板目录复制)

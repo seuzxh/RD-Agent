@@ -240,7 +240,7 @@ class FBWorkspace(Workspace):
             else:
                 self.file_dict[k] = v
                 target_file_path.parent.mkdir(parents=True, exist_ok=True)
-                target_file_path.write_text(v)
+                target_file_path.write_text(v, encoding="utf-8")
 
     def remove_files(self, file_names: str | list[str]) -> None:
         """

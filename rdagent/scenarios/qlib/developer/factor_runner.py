@@ -108,20 +108,14 @@ class QlibFactorRunner(CachedRunner[QlibFactorExperiment]):
         # skip custom factor processing and use the baseline config directly.
         if not exp.sub_tasks or not exp.base_feature_codes:
             logger.info("No custom factors to process, running baseline ...")
-            if exp.based_experiments:
-                # SOTA path: use combined factors config
-                result, stdout = executor.execute_and_parse(
-                    exp.experiment_workspace,
-                    qlib_config_name="conf_combined_factors.yaml",
-                    run_env=env_to_use,
-                )
-            else:
-                # Pure baseline: Alpha158 + LGBM, no custom factors
-                result, stdout = executor.execute_and_parse(
-                    exp.experiment_workspace,
-                    qlib_config_name="conf_baseline.yaml",
-                    run_env=env_to_use,
-                )
+            # Always use conf_baseline.yaml in this path — conf_combined_factors.yaml
+            # requires combined_factors_df.parquet to exist, but save_combined_factors
+            # is only called in the new-factor processing path below.
+            result, stdout = executor.execute_and_parse(
+                exp.experiment_workspace,
+                qlib_config_name="conf_baseline.yaml",
+                run_env=env_to_use,
+            )
             if result is not None:
                 exp.result = result
                 exp.stdout = stdout

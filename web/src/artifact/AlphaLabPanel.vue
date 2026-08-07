@@ -29,10 +29,10 @@
       </el-table-column>
       <el-table-column prop="name" label="因子名" min-width="120"/>
       <el-table-column label="IC" width="80">
-        <template #default="{ row }"><span>{{ row.ic?.toFixed(4) ?? '—' }}</span></template>
+        <template #default="{ row }"><span>{{ (row.ic ?? row.factor_metrics?.ic)?.toFixed(4) ?? '—' }}</span></template>
       </el-table-column>
       <el-table-column label="ICIR" width="80">
-        <template #default="{ row }"><span>{{ row.icir?.toFixed(4) ?? '—' }}</span></template>
+        <template #default="{ row }"><span>{{ (row.icir ?? row.factor_metrics?.icir)?.toFixed(4) ?? '—' }}</span></template>
       </el-table-column>
       <el-table-column label="状态" width="80">
         <template #default="{ row }">
@@ -40,7 +40,7 @@
         </template>
       </el-table-column>
       <el-table-column label="策略" min-width="140">
-        <template #default="{ row }"><el-tag size="small">{{ formatName(row._strategy_name) }}</el-tag></template>
+        <template #default="{ row }"><el-tag size="small">{{ formatName(row.strategy_id || row._strategy_name) }}</el-tag></template>
       </el-table-column>
     </el-table>
     <div v-if="!displayFactors.length" class="empty">暂无因子数据</div>
@@ -56,14 +56,14 @@ const activeStrategy = ref('')
 const labelMap: Record<string, string> = { sota: 'SOTA', active: '活跃', deprecated: '已淘汰', pending: '待定' }
 
 const strategyNames = computed(() => {
-  const names = new Set(props.factors.map((f: any) => f._strategy_name))
+  const names = new Set(props.factors.map((f: any) => f.strategy_id || f._strategy_name))
   return Array.from(names).filter(Boolean)
 })
 
 const flatFactors = computed(() => props.factors.map((f: any) => ({
   ...f,
-  ic: f.factor_metrics?.ic,
-  icir: f.factor_metrics?.icir,
+  ic: f.ic ?? f.factor_metrics?.ic,
+  icir: f.icir ?? f.factor_metrics?.icir,
   formulation: f.formulation || f.factor_formulation,
 })))
 
@@ -71,11 +71,11 @@ const displayFactors = computed(() => {
   let list = [...flatFactors.value]
   if (statusFilter.value) list = list.filter(f => f.status === statusFilter.value)
   if (search.value) list = list.filter(f => (f.name || '').toLowerCase().includes(search.value.toLowerCase()))
-  if (activeStrategy.value) list = list.filter(f => f._strategy_name === activeStrategy.value)
+  if (activeStrategy.value) list = list.filter(f => (f.strategy_id || f._strategy_name) === activeStrategy.value)
   return list
 })
 
-function formatName(s: string) { return s.split('/').pop() || s }
+function formatName(s: string) { return (s || '').split('/').pop() || s || '' }
 function toggleStrategy(s: string) { activeStrategy.value = activeStrategy.value === s ? '' : s }
 </script>
 <style scoped>

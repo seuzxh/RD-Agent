@@ -65,8 +65,8 @@
       <div v-else-if="detailData" class="strategy-detail">
         <section class="detail-metrics">
           <div class="metric-card"><small>总轮次</small><strong>{{ detailData.total_rounds || 0 }}</strong></div>
-          <div class="metric-card"><small>因子数</small><strong>{{ Object.keys(detailData.alpha_pool?.factors || {}).length }}</strong></div>
-          <div class="metric-card"><small>模型数</small><strong>{{ Object.keys(detailData.model_registry?.models || {}).length }}</strong></div>
+          <div class="metric-card"><small>因子数</small><strong>{{ detailData.factors?.length || Object.keys(detailData.alpha_pool?.factors || {}).length }}</strong></div>
+          <div class="metric-card"><small>模型数</small><strong>{{ detailData.models?.length || Object.keys(detailData.model_registry?.models || {}).length }}</strong></div>
         </section>
         <section v-if="detailData.experiments?.length" class="detail-experiments">
           <h4>实验历史</h4>
@@ -125,8 +125,9 @@ async function loadAll() {
       fetchReport(),
     ])
     strategies.value = s
-    factors.value = f.factors
-    models.value = m.models
+    // research_api /api/factors returns flat array, not {factors: [...]}
+    factors.value = Array.isArray(f) ? f : (f as any).factors || []
+    models.value = Array.isArray(m) ? m : (m as any).models || []
     reportData.value = r
   } catch (e: any) {
     error.value = e.message
