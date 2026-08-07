@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "doc/**"
+      - "docs/**"
       - ".github/workflows/pages.yml"
   # 允许手动触发
   workflow_dispatch:
@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: doc
+        working-directory: docs
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,7 +36,7 @@ jobs:
         with:
           ruby-version: "3.1"
           bundler-cache: true
-          working-directory: doc
+          working-directory: docs
 
       - name: Setup Pages
         id: pages
@@ -51,7 +51,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: doc/_site
+          path: docs/_site
 
   deploy:
     needs: build
