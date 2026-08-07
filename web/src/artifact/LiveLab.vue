@@ -44,45 +44,28 @@
           </div>
         </div>
 
-        <!-- Experiments from ResearchDB -->
-        <div v-if="experiments.length" class="detail-section">
-          <h5>实验历史</h5>
-          <el-table :data="filteredExperiments" size="small" max-height="200">
-            <el-table-column prop="loop_id" label="轮次" width="60"/>
-            <el-table-column prop="type" label="类型" width="80"/>
-            <el-table-column prop="hypothesis_text" label="假设" min-width="200" show-overflow-tooltip/>
-            <el-table-column label="IC" width="80">
-              <template #default="{ row }">{{ row.ic?.toFixed(4) ?? '—' }}</template>
-            </el-table-column>
-            <el-table-column label="决策" width="70">
-              <template #default="{ row }"><el-tag :type="row.decision?'success':'danger'" size="small">{{ row.decision?'采纳':'拒绝' }}</el-tag></template>
-            </el-table-column>
-          </el-table>
-        </div>
+        <!-- 5-stage collaboration flow -->
+        <AgentFlow :experiments="filteredExperiments" />
 
-        <!-- Factors from ResearchDB -->
-        <div v-if="filteredFactors.length" class="detail-section">
-          <h5>因子 ({{ filteredFactors.length }})</h5>
-          <el-table :data="filteredFactors" size="small">
-            <el-table-column prop="name" label="因子名" min-width="140"/>
-            <el-table-column label="IC" width="80">
-              <template #default="{ row }">{{ row.ic?.toFixed(4) ?? '—' }}</template>
-            </el-table-column>
-            <el-table-column label="ICIR" width="80">
-              <template #default="{ row }">{{ row.icir?.toFixed(4) ?? '—' }}</template>
-            </el-table-column>
-            <el-table-column prop="status" label="状态" width="70"/>
-          </el-table>
-        </div>
-
-        <!-- Metrics from ResearchDB -->
-        <div v-if="metricKeys.length" class="detail-section">
-          <h5>回测指标</h5>
-          <div class="metric-grid">
-            <div v-for="k in metricKeys" :key="k" class="metric-item">
-              <small>{{ k }}</small><strong>{{ metricValues[k] }}</strong>
-            </div>
+        <div class="detail-layout">
+          <div class="detail-main">
+            <!-- Result workspace: conclusion / factors / chart / code -->
+            <ResultWorkspace
+              :factors="factors"
+              :codes="codes"
+              :chart-url="chartUrl"
+              :metrics="metrics"
+              :feedback="feedback"
+              @download="downloadResult"
+            />
           </div>
+          <MetricsPanel
+            :metrics="metrics"
+            :factors="factors"
+            :hypothesis="hypothesis"
+            :feedback="feedback"
+            @download="downloadResult"
+          />
         </div>
 
         <!-- Token Dashboard from pipeline nodes -->
@@ -94,30 +77,19 @@
             <div class="token-item"><small>总调用</small><strong>{{ callCount }}</strong></div>
           </div>
         </div>
-
-        <!-- Feedback -->
-        <div v-if="feedbackText" class="detail-section">
-          <h5>反馈</h5>
-          <p>{{ feedbackText }}</p>
-        </div>
-
-        <!-- Raw messages -->
-        <div class="detail-section">
-          <h5>消息日志 ({{ taskMessages.length }})</h5>
-          <div class="message-list">
-            <div v-for="(msg, i) in taskMessages" :key="i" class="message-item">
-              <span class="msg-tag">{{ msg.tag }}</span>
-              <span class="msg-time">{{ formatTime(msg.timestamp) }}</span>
-            </div>
-          </div>
-        </div>
       </template>
     </section>
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { fetchLive, fetchStrategyMessages, fetchStrategyDetail } from './api'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { fetchLive, fetchStrategyDetail, fetchCode } from './api'
+import AgentFlow from './components/AgentFlow.vue'
+import ResultWorkspace from './components/ResultWorkspace.vue'
+import MetricsPanel from './components/MetricsPanel.vue'
+import { buildFactors, buildMetrics, buildFeedback, buildHypothesis } from './livelab-model'
+import type { CodeFile, FactorItem, FeedbackSummary, MetricItem } from './types'
+import './livelab-detail.css'
 
 const props = defineProps<{ strategies: any[] }>()
 const loading = ref(false)
@@ -126,9 +98,9 @@ const selectedId = ref('')
 const detailLoading = ref(false)
 const detailError = ref('')
 const selectedLoop = ref<number | null>(null)
-const taskMessages = ref<any[]>([])
 const strategyDetail = ref<any>(null)
 const pipelineNodes = ref<any[]>([])
+const codes = ref<CodeFile[]>([])
 
 // SSE event source for the selected strategy
 let eventSource: EventSource | null = null
@@ -166,33 +138,30 @@ const filteredExperiments = computed(() => {
   return experiments.value.filter((e: any) => e.loop_id === selectedLoop.value)
 })
 
-// Factors from ResearchDB
-const factors = computed(() => strategyDetail.value?.factors || [])
-
-// Filter factors by selected loop (factors carry round_number = loop_id)
-const filteredFactors = computed(() => {
-  if (selectedLoop.value == null) return factors.value
-  return factors.value.filter((f: any) => f.round_number === selectedLoop.value)
+// Selected experiment for the current loop (for metrics/feedback/hypothesis)
+const selectedExperiment = computed<Record<string, any> | undefined>(() => {
+  const exps = filteredExperiments.value
+  if (!exps.length) return undefined
+  return exps[exps.length - 1]
 })
 
-// Metrics from experiments
-const metricValues = computed(() => {
-  const exps = experiments.value
-  if (!exps.length) return {}
-  // Latest experiment by selected loop or overall
-  const target = selectedLoop.value != null
-    ? exps.find((e: any) => e.loop_id === selectedLoop.value)
-    : exps[exps.length - 1]
-  if (!target) return {}
-  const m: Record<string, any> = {}
-  if (target.ic != null) m['IC'] = target.ic.toFixed(4)
-  if (target.icir != null) m['ICIR'] = target.icir.toFixed(4)
-  if (target.annualized_return != null) m['年化收益'] = `${(Math.abs(target.annualized_return) * 100).toFixed(2)}%`
-  if (target.max_drawdown != null) m['最大回撤'] = `${(Math.abs(target.max_drawdown) * 100).toFixed(2)}%`
-  if (target.information_ratio != null) m['信息比率'] = target.information_ratio.toFixed(4)
-  return m
+// Factors read from SQLite, filtered by round_number = selected loop
+const factors = computed<FactorItem[]>(() => {
+  const raw = strategyDetail.value?.factors || []
+  return buildFactors(raw, selectedLoop.value ?? -1)
 })
-const metricKeys = computed(() => Object.keys(metricValues.value))
+
+// Metrics from the selected experiment (SQLite)
+const metrics = computed<MetricItem[]>(() => buildMetrics(selectedExperiment.value))
+
+// Feedback from SQLite experiment fields (decision / decision_reason / observations)
+const feedback = computed<FeedbackSummary>(() => buildFeedback(selectedExperiment.value))
+
+// Hypothesis summary for MetricsPanel
+const hypothesis = computed<Record<string, unknown> | null>(() => buildHypothesis(selectedExperiment.value))
+
+// chartUrl is empty for ticket 03 (ticket 04 wires the /chart fetch)
+const chartUrl = computed(() => '')
 
 // Token usage from pipeline nodes
 const promptTokens = computed(() => pipelineNodes.value.reduce((s: number, n: any) => s + (n.prompt_tokens || 0), 0))
@@ -200,16 +169,35 @@ const completionTokens = computed(() => pipelineNodes.value.reduce((s: number, n
 const callCount = computed(() => pipelineNodes.value.reduce((s: number, n: any) => s + (n.call_count || 0), 0))
 const totalTokens = computed(() => promptTokens.value + completionTokens.value)
 
-// Feedback from messages
-const feedbackText = computed(() => {
-  const msg = taskMessages.value.find((m: any) => m.tag === 'feedback.hypothesis_feedback')
-  return msg?.content?.observations || msg?.content?.reason || ''
-})
-
 function formatName(s: string) { return (s || '').split('/').pop() || s || '' }
 function formatTime(ts: string) { return ts ? ts.slice(0, 19) : '' }
 function statusType(s: string) { return s === 'running' ? 'warning' : s === 'completed' ? 'success' : 'info' }
 function statusLabel(s: string) { return s === 'running' ? '运行中' : s === 'completed' ? '已完成' : '待处理' }
+
+function downloadResult() {
+  // Leave the download handling to the parent in ticket 04; no-op for ticket 03.
+}
+
+// Refetch factor code via /code when strategy or loop changes
+async function reloadCodes() {
+  codes.value = []
+  if (!selectedId.value) return
+  const names = factors.value.map(f => f.name).filter(Boolean)
+  if (!names.length) return
+  try {
+    const loaded = await Promise.all(
+      names.map(async name => {
+        try {
+          const res = await fetchCode(selectedId.value, name, 'factor')
+          return { name: res.name, content: res.code }
+        } catch { return null }
+      }),
+    )
+    codes.value = loaded.filter((c): c is CodeFile => !!c && !!c.content)
+  } catch { /* keep empty */ }
+}
+
+watch([selectedId, selectedLoop], () => reloadCodes())
 
 function subscribeSse(strategyId: string) {
   unsubscribeSse()
@@ -234,14 +222,13 @@ function unsubscribeSse() {
 
 async function reloadDetail(id: string) {
   try {
-    const [detail, msgs, nodes] = await Promise.all([
+    const [detail, nodes] = await Promise.all([
       fetchStrategyDetail(id),
-      fetchStrategyMessages(id),
       fetch(`/api/strategies/${encodeURIComponent(id)}/pipeline`).then(r => r.json()),
     ])
     strategyDetail.value = detail
-    taskMessages.value = msgs.messages || []
     pipelineNodes.value = Array.isArray(nodes) ? nodes : []
+    await reloadCodes()
   } catch { /* keep existing data */ }
 }
 
@@ -249,9 +236,12 @@ async function selectTask(row: any) {
   selectedId.value = row.id
   selectedLoop.value = null
   detailLoading.value = true; detailError.value = ''
-  strategyDetail.value = null; taskMessages.value = []; pipelineNodes.value = []
+  strategyDetail.value = null; pipelineNodes.value = []; codes.value = []
   try {
     await reloadDetail(row.id)
+    // Default to the latest round so the per-loop detail view is populated immediately
+    const loops = availableLoops.value
+    selectedLoop.value = loops.length ? loops[loops.length - 1] : null
     subscribeSse(row.id)
     // Fallback polling for strategies that are not in ResearchDB
     refreshTimer = setInterval(() => reloadDetail(row.id), 10000)
@@ -285,19 +275,16 @@ h5 { font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #409eff; }
 .pipeline-item.active { background: #e6f0ff; color: #409eff; }
 .pipeline-item i { margin-left: 4px; color: #ccc; }
 .loop-switcher { display: flex; gap: 6px; margin-bottom: 12px; }
-.reason { font-size: 12px; color: #909399; margin-top: 4px; }
-.metric-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-.metric-item { flex: 1; min-width: 80px; text-align: center; padding: 8px; background: #f5f7fa; border-radius: 4px; }
-.metric-item small { display: block; font-size: 11px; color: #909399; }
-.metric-item strong { font-size: 14px; }
+.detail-layout { display: flex; gap: 16px; align-items: flex-start; }
+.detail-main { flex: 1; min-width: 0; }
 .token-grid { display: flex; gap: 16px; }
 .token-item { text-align: center; padding: 8px 16px; background: #f5f7fa; border-radius: 4px; }
 .token-item small { display: block; font-size: 11px; color: #909399; }
 .token-item strong { font-size: 14px; }
-.message-list { max-height: 300px; overflow-y: auto; }
-.message-item { padding: 4px 8px; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
-.msg-tag { color: #409eff; font-weight: 600; margin-right: 8px; }
-.msg-time { color: #999; font-size: 11px; }
 .error { color: #f56c6c; padding: 20px; }
 :deep(.clickable) { cursor: pointer; }
+@media (max-width: 900px) {
+  .detail-layout { flex-direction: column; }
+  .metrics-panel { width: 100%; border-left: 0; border-top: 1px solid var(--ma-line); }
+}
 </style>
