@@ -97,7 +97,7 @@
 | `QlibFactorExperiment2Feedback` | [feedback.py#L54-L118](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/feedback.py#L54-L118) | 因子实验反馈生成器，对比因子 IC/收益指标 |
 | `QlibModelExperiment2Feedback` | [feedback.py#L121-L186](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/feedback.py#L121-L186) | 模型实验反馈生成器，对比模型绩效并分析训练日志 |
 | `HypothesisFeedback` | [proposal.py#L96-L120](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L96-L120) | 反馈数据结构，含观察、假设评估、新假设、决策 |
-| `Trace` | [proposal.py#L141-L318](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L141-L318) | 实验轨迹，维护历史 (实验, 反馈) DAG，提供 SOTA 检索 |
+| `Trace` | [proposal.py#L141-L341](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L141-L341) | 实验轨迹，维护历史 (实验, 反馈) DAG，提供 SOTA 检索 |
 | `process_results` | [feedback.py#L24-L51](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/feedback.py#L24-L51) | 指标对比格式化函数，筛选关键指标并生成对比文本 |
 
 ---
@@ -155,7 +155,7 @@ class HypothesisFeedback(ExperimentFeedback):
 
 ### 4.2 Trace（实验轨迹）
 
-定义于 [proposal.py#L141-L318](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L141-L318)：
+定义于 [proposal.py#L141-L341](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L141-L341)：
 
 ```python
 class Trace:
