@@ -597,6 +597,311 @@ FactorExperiment (含Hypothesis)
 
 ---
 
+## 三种 `gen()` 实现详解
+
+HypothesisGen 有三个具体子类，分别对应三种场景：`QlibFactorHypothesisGen`（纯因子场景）、`QlibModelHypothesisGen`（纯模型场景）、`QlibQuantHypothesisGen`（全流程场景）。三者都继承自 `LLMHypothesisGen`，复用统一的 `gen()` 流程（prepare_context → 组装提示词 → LLM 调用 → convert_response），仅在 `prepare_context()` 和 `convert_response()` 上有差异。
+
+### 1. QlibFactorHypothesisGen — 因子假设生成
+
+[factor_proposal.py#L15-L58](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/factor_proposal.py#L15-L58)
+
+#### prepare_context 上下文组装
+
+因子场景的 `prepare_context()` 组装以下 5 个键值：
+
+| 键 | 内容 | 来源/逻辑 |
+|----|------|----------|
+| `hypothesis_and_feedback` | 完整历史的假设+反馈链 | 非首轮时用 `T("prompts:hypothesis_and_feedback")` 模板渲染整个 `trace.hist`；首轮返回提示文本 |
+| `last_hypothesis_and_feedback` | 最近一轮的假设+反馈 | 非首轮时取 `trace.hist[-1]` 渲染；首轮返回提示文本 |
+| `RAG` | 渐进式复杂度引导 | `hist < 15` 轮：先简单因子；`hist >= 15` 轮：探索 ML-based 高 IC 因子 |
+| `hypothesis_output_format` | 因子 JSON 输出格式 | `T("prompts:factor_hypothesis_output_format")` — 仅要求 `hypothesis` + `reason` 两个字段 |
+| `hypothesis_specification` | 因子生成规范 | `T("prompts:factor_hypothesis_specification")` — 包含"1-5个因子/轮"、"先简单后复杂"、"失败换方向"等规则 |
+
+**targets 值**：`"factors"`（在基类 `FactorHypothesisGen.__init__` 中设置）
+
+**关键特点**：因子场景**不需要** SOTA 特殊引用——因为因子反馈模板中已经包含了 SOTA 对比信息。
+
+---
+
+### 2. QlibModelHypothesisGen — 模型假设生成
+
+[model_proposal.py#L14-L70](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/model_proposal.py#L14-L70)
+
+#### prepare_context 上下文组装
+
+模型场景比因子场景多一个 `SOTA_hypothesis_and_feedback`：
+
+| 键 | 内容 | 来源/逻辑 |
+|----|------|----------|
+| `hypothesis_and_feedback` | 完整历史链 | 同因子场景，渲染整个 `trace.hist` |
+| `last_hypothesis_and_feedback` | 最近一轮 | 同因子场景，取 `trace.hist[-1]` |
+| `SOTA_hypothesis_and_feedback` | **SOTA 轮的假设+反馈** | 反向遍历 `trace.hist`，找到第一个 `feedback.decision == True` 的实验并渲染；无 SOTA 时返回提示文本 |
+| `RAG` | 模型场景硬约束 | 固定文本：①时序数据适合 GRU/LSTM，不生成 GNN；②训练集约100万样本/验证集约25万，控制模型大小；③可以只调超参不换架构 |
+| `hypothesis_output_format` | 通用 JSON 输出格式 | `T("prompts:hypothesis_output_format")` — 同样是 `hypothesis` + `reason` |
+| `hypothesis_specification` | 模型生成规范 | `T("prompts:model_hypothesis_specification")` — 8条规则（聚焦PyTorch架构、层数/激活函数/正则化、超参调整、创新对标顶会等） |
+
+**targets 值**：`"model tuning"`
+
+**关键特点**：
+- 模型场景额外提供 SOTA 引用，因为模型架构变更成本高，需要明确参考 SOTA 结构
+- RAG 引导是**硬约束**而非渐进式——模型训练成本高，不鼓励早期尝试复杂模型
+- `last_hypothesis_and_feedback` 特别包含了 `training_log`（stdout），帮助 LLM 分析训练问题（过拟合/欠拟合/梯度消失等）
+
+---
+
+### 3. QlibQuantHypothesisGen — 全流程假设生成（含动作选择）
+
+[quant_proposal.py#L46-L179](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/quant_proposal.py#L46-L179)
+
+全流程场景最复杂，额外包含 **action 选择**（决定本轮做 factor 还是 model），并使用定制化的 `QuantTrace`（[quant_proposal.py#L16-L20](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/quant_proposal.py#L16-L20)，在标准 Trace 基础上增加了 Bandit 控制器）。
+
+#### Action 选择的三种策略
+
+由 `QUANT_PROP_SETTING.action_selection` 配置决定：
+
+| 策略 | 实现逻辑 |
+|------|---------|
+| **Bandit**（默认推荐） | 使用 `LinearThompsonTwoArm`（[bandit.py#L55-L92](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/bandit.py#L55-L92)）：①提取上轮实验的 8 维指标向量（IC/ICIR/RankIC/RankICIR/ARR/IR/-MDD/Sharpe）；②计算加权奖励（权重 0.1/0.1/0.05/0.05/0.25/0.15/0.1/0.2，年化收益权重最高0.25）；③线性 Thompson Sampling 更新后验，选择期望奖励更高的 arm；首轮默认 `factor` |
+| **LLM** | 单独调用一次 LLM，使用 `action_gen.system`/`action_gen.user` 提示词（[prompts.yaml#L274-L300](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/prompts.yaml#L274-L300)），输入历史反馈链，输出 JSON `{"action": "factor" | "model"}` |
+| **Random** | `random.choice(["factor", "model"])`，纯随机，用于对照实验 |
+
+#### prepare_context 上下文组装（选择action后）
+
+选定 action 后，历史链**过滤**逻辑不同于纯因子/纯模型场景：
+
+- **action = factor** 时：保留所有 factor 实验 + **最近一个 SOTA model 实验**（factor 优化需要知道当前模型的输入能力边界）
+- **action = model** 时：保留所有 model 实验 + **最近一个 SOTA factor 实验**（model 优化需要知道可用的特征集）
+- 渐进式复杂度：factor 前 6 轮先简单（不是15轮），6 轮后探索 ML-based 高 IC 因子；model 使用与纯模型场景相同的硬约束 RAG
+- 输出格式使用 `hypothesis_output_format_with_action`，额外要求 LLM 返回 `action` 字段
+
+**targets 值**：`"feature engineering and model building"`
+
+**关键特点**：
+- `QlibQuantHypothesis` 比普通 `Hypothesis` 多一个 `action` 字段（`"factor"` 或 `"model"`），用于记录本轮选择
+- Bandit 权重中**年化收益(0.25)和Sharpe(0.2)权重最高**，引导 Bandit 关注盈利能力而非纯 IC
+- 历史链过滤确保 LLM 不会被另一个领域的失败案例误导（factor 决策不看 model 失败，反之亦然）
+
+---
+
+## 提示词组装机制
+
+HypothesisGen 的提示词分两层：**通用框架提示词**（`rdagent/components/proposal/prompts.yaml`）和**场景定制提示词**（`rdagent/scenarios/qlib/prompts.yaml`）。模板引擎使用 Jinja2，通过 `T()` 工具类加载和渲染。
+
+### 系统提示词组装
+
+[LLMHypothesisGen.gen()](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L29-L65) 中系统提示词通过 `T(".prompts:hypothesis_gen.system_prompt")` 加载，填充以下变量：
+
+```
+{{ targets }}                → "factors" / "model tuning" / "feature engineering and model building"
+{{ scenario }}               → 场景描述（过滤后），由 scen.get_scenario_all_desc() 生成
+                               - factor场景: get_scenario_all_desc(filtered_tag="factors")
+                               - model场景:  get_scenario_all_desc(filtered_tag="model")
+                               - quant场景:  get_scenario_all_desc(filtered_tag="hypothesis_and_experiment")
+{{ user_instruction }}       → 用户全局指令（如有，来自ExperimentPlan）
+{{ hypothesis_specification }}→ 场景定制规范（factor_hypothesis_specification 或 model_hypothesis_specification）
+{{ hypothesis_output_format }}→ JSON输出格式要求
+```
+
+**系统提示词核心结构**（[prompts.yaml#L2-L20](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/prompts.yaml#L2-L20)）：
+
+```
+1. 角色设定："你在为{targets}生成新假设"
+2. 场景描述：{{scenario}}（Qlib数据接口、可用字段、baseline模型等）
+3. 用户指令（可选）
+4. 核心任务：分析历史实验→反思成功/失败原因→改进现有方向或探索新方向
+5. 附加规范：{{hypothesis_specification}}（因子/模型场景特定规则）
+6. 输出格式：{{hypothesis_output_format}}（JSON schema）
+```
+
+### 用户提示词组装
+
+用户提示词通过 `T(".prompts:hypothesis_gen.user_prompt")` 加载，条件性地填充区块：
+
+```
+首轮判断（Jinja if）:
+  {% if hypothesis_and_feedback|length == 0 %}
+    "It is the first round..."              → 首轮提示
+  {% else %}
+    "The former hypothesis and feedbacks:"
+    {{ hypothesis_and_feedback }}          → 完整历史链渲染结果
+
+最近一轮（仅factor/model/quant都传了此键时显示）:
+  {% if last_hypothesis_and_feedback %}
+    "Here is the last trial's..."
+    {{ last_hypothesis_and_feedback }}     → 最近一轮的假设+任务+结果+反馈+新假设建议
+    注意：提示词特别说明"The main feedback contains a new hypothesis for your reference only.
+          You need to evaluate the complete trace chain to decide whether to adopt it..."
+          （上轮反馈中的new_hypothesis仅作参考，需自主判断）
+
+SOTA轮（仅model和quant场景传了此键时显示）:
+  {% if sota_hypothesis_and_feedback != "" %}
+    "Here is the SOTA trail's..."
+    {{ sota_hypothesis_and_feedback }}     → SOTA实验详情
+
+RAG引导:
+  {% if RAG %}
+    "To assist you..., we have provided: {{RAG}}"
+```
+
+### 历史反馈链渲染模板
+
+`hypothesis_and_feedback` 使用 [qlib/prompts.yaml#L1-L21](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/prompts.yaml#L1-L21) 的模板，遍历 `trace.hist` 对每个实验渲染：
+
+```
+=========================================================
+# Trial N:
+## Hypothesis
+{experiment.hypothesis}
+## Specific task:
+- {factor_name}: {factor_description}    (每个子任务的简要信息)
+## Backtest Analysis and Feedback:
+Backtest Result: IC=xx, ARR=xx, MDD=xx   (只展示3个核心指标)
+Observation: {feedback.observations}
+Hypothesis Evaluation: {feedback.hypothesis_evaluation}
+Decision: {feedback.decision}            (True/False)
+=========================================================
+```
+
+`last_hypothesis_and_feedback` 和 `sota_hypothesis_and_feedback` 额外包含：
+- **Training Log**（`experiment.stdout`）：模型训练日志，帮助分析训练问题
+- **New Hypothesis**（`feedback.new_hypothesis`）：上轮反馈建议的新方向（仅参考）
+
+### factor_hypothesis_specification 规范要点
+
+[prompts.yaml#L95-L112](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/prompts.yaml#L95-L112)：
+
+1. 每轮生成 1-5 个因子
+2. 先简单有效因子，避免一开始就用复杂/组合因子
+3. 积累结果后逐步增加复杂度（ML-based、多维原始数据）
+4. 连续失败则换方向，可回到简单因子
+5. 超越SOTA的因子已入库，避免重复实现
+6. 不论生成几个因子，**只返回一组 hypothesis + reason**
+
+### model_hypothesis_specification 规范要点
+
+[prompts.yaml#L85-L93](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/prompts.yaml#L85-L93)：
+
+1. 分析整体实验进展，找出去设计不足之处（参数/架构/缺乏创新）
+2. 重点关注 last 和 SOTA 两轮，可基于其一优化或提出新方向
+3. 首轮从简单小架构开始
+4. 连续失败则探索全新方向，可回归简单架构
+5. **只聚焦 PyTorch 模型架构**（层配置、激活函数、正则化、模型结构），不做特征处理
+6. 超参调整也是有效策略
+7. 可用标准库基线，鼓励自定义架构，创新对标 NeurIPS/ICLR/ICML/KDD
+
+---
+
+## Hypothesis 解析与响应处理
+
+### convert_response 解析逻辑
+
+三个场景的 `convert_response()` 结构类似（[factor_proposal.py#L48-L58](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/factor_proposal.py#L48-L58)、[model_proposal.py#L60-L70](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/model_proposal.py#L60-L70)、[quant_proposal.py#L168-L179](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/quant_proposal.py#L168-L179)）：
+
+```python
+def convert_response(self, response: str) -> Hypothesis:
+    response_dict = json.loads(response)          # 1. JSON解析
+    hypothesis = QlibFactorHypothesis(            # 2. 构造Hypothesis对象
+        hypothesis=response_dict.get("hypothesis"),
+        reason=response_dict.get("reason"),
+        concise_reason=response_dict.get("concise_reason"),
+        concise_observation=response_dict.get("concise_observation"),
+        concise_justification=response_dict.get("concise_justification"),
+        concise_knowledge=response_dict.get("concise_knowledge"),
+        # action=response_dict.get("action"),     # quant场景额外有此字段
+    )
+    return hypothesis
+```
+
+### Hypothesis 字段释义
+
+| 字段 | 类型 | 来源 | 含义 |
+|------|------|------|------|
+| `hypothesis` | `str` | LLM JSON 输出的 `hypothesis` 字段 | 核心假设陈述（2-3句话，精确可测试） |
+| `reason` | `str` | LLM JSON 输出的 `reason` 字段 | 提出该假设的理由（基于历史证据，2-3句） |
+| `concise_reason` | `str \| None` | LLM JSON 输出的 `concise_reason` | 理由精简版（供后续提示词压缩上下文用） |
+| `concise_observation` | `str \| None` | LLM JSON 输出的 `concise_observation` | 观察精简版 |
+| `concise_justification` | `str \| None` | LLM JSON 输出的 `concise_justification` | 论证精简版 |
+| `concise_knowledge` | `str \| None` | LLM JSON 输出的 `concise_knowledge` | 可复用知识精简版 |
+| `action` | `str` | 仅 Quant 场景有，`"factor"` 或 `"model"` | 本轮选择的动作类型 |
+
+**注意**：`concise_*` 字段虽然在 `convert_response` 中通过 `.get()` 提取，但当前 factor/model 场景的 `hypothesis_output_format` 提示词**并未要求 LLM 输出这些字段**（factor 只要求 hypothesis+reason，通用格式也只要求 hypothesis+reason）。这些字段是为未来版本预留的，用于在长循环中压缩历史上下文（用精简版替代完整版以节省 token）。Quant 场景的 `hypothesis_output_format_with_action` 多了 `action` 字段。
+
+### LLM 调用参数
+
+[proposal/__init__.py#L59-L61](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L59-L61)：
+
+```python
+resp = APIBackend().build_messages_and_create_chat_completion(
+    user_prompt, system_prompt,
+    json_mode=True,                          # 强制JSON输出
+    json_target_type=dict[str, str]          # 声明目标类型为 {string: string}
+)
+```
+
+- `json_mode=True`：启用 LiteLLM 的 `response_format={"type": "json_object"}`，确保 LLM 输出合法 JSON
+- `json_target_type=dict[str, str]`：用于 Pydantic 校验返回格式
+
+### 重试机制
+
+`gen()` 方法**自身没有重试装饰器**，但 `Hypothesis2Experiment.convert()` 使用了 `@wait_retry(retry_n=5)`（[proposal/__init__.py#L93](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L93)）。HypothesisGen 的 JSON 解析失败会直接抛异常，由 RDLoop 的异常处理兜底（将异常包装为 `HypothesisFeedback(decision=False, reason=str(e))`，见 [rd_loop.py#L104-L111](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py#L104-L111)）。
+
+### 输入输出示例
+
+**输入（user_prompt 第3轮片段）**：
+```
+The former hypothesis and the corresponding feedbacks are as follows:
+=========================================================
+# Trial 1:
+## Hypothesis
+Generate simple momentum factors using close prices over different windows.
+## Specific task:
+MOM_5: [Momentum Factor] 5-day price momentum...
+## Backtest Analysis and Feedback:
+Backtest Result: IC=0.021, ARR=0.03, MDD=-0.12
+Observation: Low IC, momentum effect weak in short window.
+Decision: False
+=========================================================
+# Trial 2:
+## Hypothesis
+Explore turnover-rate-based factors that capture liquidity premium.
+...
+Decision: True     ← 第2轮成为SOTA
+=========================================================
+
+Here is the last trial's hypothesis and the corresponding feedback:
+## Hypothesis
+Explore turnover-rate-based factors...
+Training Log: ...
+Observation: Turnover factors show IC=0.06, significantly above baseline.
+Decision: True
+New Hypothesis: Consider volatility-adjusted turnover factors...
+
+To assist you in generating new factors, we have provided the following information:
+Try the easiest and fastest factors to experiment with from various perspectives first.
+```
+
+**输出（LLM JSON 响应）**：
+```json
+{
+  "hypothesis": "Explore volatility-adjusted momentum factors that combine price momentum with realized volatility to capture risk-adjusted return patterns, as pure momentum showed weak predictive power while liquidity factors demonstrated significant IC.",
+  "reason": "Momentum underperformed in short windows but the SOTA turnover factor confirms liquidity premium exists; volatility adjustment should separate true momentum from noisy price movements, building on the SOTA observation that risk-adjusted metrics outperform raw price-based factors."
+}
+```
+
+**解析后的 Hypothesis 对象**：
+```python
+Hypothesis(
+    hypothesis="Explore volatility-adjusted momentum factors...",
+    reason="Momentum underperformed...",
+    concise_reason=None,        # 当前提示词不要求输出
+    concise_observation=None,
+    concise_justification=None,
+    concise_knowledge=None,
+)
+```
+
+---
+
 ## 相关代码索引
 
 | 模块 | 文件路径 |
