@@ -280,6 +280,78 @@ Runner（[factor_runner.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rda
 
 ---
 
+### CHAT_MODEL_MAP 配置参数说明
+
+`CHAT_MODEL_MAP` 通过 `.env` 文件配置，是一个 JSON 对象，key 为 logger tag（对应 R&D 步骤），value 为该步骤的模型配置。代码实现在 [litellm.py#L106-L125](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/oai/backend/litellm.py#L106-L125)，通过匹配当前日志上下文中的 tag 来选择模型。
+
+#### 配置格式
+
+```json
+CHAT_MODEL_MAP={
+  "<logger_tag>": {
+    "model": "<provider/model_name>",
+    "temperature": "<float>",
+    "max_tokens": "<int>",
+    "reasoning_effort": "<low|medium|high>"
+  }
+}
+```
+
+#### 各参数含义
+
+| 参数 | 类型 | 默认值 | 含义 | 取值范围与说明 |
+|------|------|--------|------|--------------|
+| **model** | string | `gpt-4-turbo` | LLM 模型名称 | 格式为 `provider/model_name`，通过 [LiteLLM](https://docs.litellm.ai/) 统一调用。支持 OpenAI 兼容接口，常用值：`openai/gpt-4o`、`openai/minimax-m3`、`openai/kimi-k2.5`、`openai/deepseek-v4`、`openai/glm-5.2` 等 |
+| **temperature** | float | `0.5` | 采样温度，控制输出随机性 | **0.0** = 确定性输出（总是选最高概率 token），适合精确代码执行；**0.3-0.5** = 平衡稳定与变化，适合代码生成和分析判断；**0.7-1.0** = 高创造性，适合头脑风暴和假设生成。过高（>1.0）容易产生不连贯或格式错误的输出 |
+| **max_tokens** | int | `None`（模型上限） | 单次回复最大生成 token 数 | 控制输出长度。代码生成任务建议不低于 4096，防止代码被截断；纯分析/反馈任务 2048 通常足够。设为 `None` 时使用模型默认上限 |
+| **reasoning_effort** | string | `None` | 推理努力程度（仅推理模型支持） | 可选值：`low`/`medium`/`high`。仅 o1/o3、DeepSeek-R1 等推理模型支持，控制 Chain-of-Thought 的深度。普通聊天模型设置此参数会被忽略 |
+
+#### 模型路由匹配机制
+
+```python
+# litellm.py 中的匹配逻辑（简化）
+for tag, model_config in chat_model_map.items():
+    if tag in logger._tag:  # 当前日志上下文包含该tag
+        model = model_config["model"]
+        temperature = float(model_config.get("temperature", 0.5))
+        max_tokens = int(model_config["max_tokens"]) if "max_tokens" in model_config else None
+        break
+```
+
+系统通过 logger tag 进行子串匹配。例如当日志 tag 为 `coding.factor_coder.evolving` 时，包含子串 `coding`，因此使用 `coding` 对应的模型配置。
+
+#### 其他全局 LLM 参数（.env 中可配置）
+
+除 `CHAT_MODEL_MAP` 外，[llm_conf.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/oai/llm_conf.py) 还定义了以下全局参数：
+
+| 参数 | 环境变量 | 默认值 | 含义 |
+|------|---------|--------|------|
+| `chat_temperature` | `LITELLM_CHAT_TEMPERATURE` | `0.5` | 默认温度（被 CHAT_MODEL_MAP 中的 temperature 覆盖） |
+| `chat_max_tokens` | `LITELLM_CHAT_MAX_TOKENS` | `None` | 默认最大输出 token 数 |
+| `chat_stream` | `LITELLM_CHAT_STREAM` | `True` | 是否流式输出（日志中实时显示） |
+| `chat_seed` | `LITELLM_CHAT_SEED` | `None` | 随机种子（设为固定值可复现输出，调试时有用） |
+| `max_retry` | `LITELLM_MAX_RETRY` | `10` | API 调用失败最大重试次数 |
+| `retry_wait_seconds` | `LITELLM_RETRY_WAIT_SECONDS` | `1` | 重试等待秒数 |
+| `enable_response_schema` | `LITELLM_ENABLE_RESPONSE_SCHEMA` | `True` | 是否启用 JSON Schema 约束输出（设为 False 可兼容不支持 structured output 的模型） |
+| `reasoning_think_rm` | `LITELLM_REASONING_THINK_RM` | `False` | 是否移除推理模型输出中的 `<think>...</think>` 标签 |
+| `use_chat_cache` | `LITELLM_USE_CHAT_CACHE` | `False` | 是否启用 LLM 调用缓存（相同 prompt 直接返回缓存结果，节省成本） |
+| `chat_token_limit` | `LITELLM_CHAT_TOKEN_LIMIT` | `100000` | 输入 token 上限提示（超限时自动截断 RAG 检索结果） |
+| `embedding_model` | `LITELLM_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding 模型（用于知识库向量检索） |
+
+#### 常用模型参考速查
+
+| 模型名（model 字段值） | 提供商 | 特长 | 上下文窗口 | 适合场景 |
+|----------------------|--------|------|-----------|---------|
+| `openai/gpt-4o` | OpenAI | 综合能力最强，代码+推理+JSON 均优 | 128K | 预算充足时的 coding 首选 |
+| `openai/deepseek-v4` | DeepSeek | 代码生成顶尖，数学推理强，JSON 稳定 | 128K | coding 步骤推荐 |
+| `openai/deepseek-v4-flash` | DeepSeek | 速度快，成本低，能力略逊 | 128K | running/简单任务 |
+| `openai/minimax-m3` | MiniMax | 中文创意好，发散性强 | 128K | direct_exp_gen 推荐 |
+| `openai/glm-5.2` | 智谱 AI | 中文金融适配好，结构化输出稳定 | 128K | feedback 推荐 |
+| `openai/kimi-k2.5` | Moonshot | 超长上下文（200K+），代码不错 | 200K+ | RAG 检索结果极长时备选 |
+| `openai/gpt-4o-mini` | OpenAI | 速度快成本低，简单任务够用 | 128K | 开发调试/轻量任务 |
+
+---
+
 ## 三种运行场景
 
 multialpha 支持三个入口场景，均复用相同的五个智能体：
