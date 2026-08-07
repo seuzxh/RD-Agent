@@ -83,7 +83,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { fetchLive, fetchStrategyDetail, fetchCode } from './api'
+import { fetchLive, fetchStrategyDetail, fetchCode, chartUrl as buildChartUrl } from './api'
 import AgentFlow from './components/AgentFlow.vue'
 import ResultWorkspace from './components/ResultWorkspace.vue'
 import MetricsPanel from './components/MetricsPanel.vue'
@@ -160,8 +160,16 @@ const feedback = computed<FeedbackSummary>(() => buildFeedback(selectedExperimen
 // Hypothesis summary for MetricsPanel
 const hypothesis = computed<Record<string, unknown> | null>(() => buildHypothesis(selectedExperiment.value))
 
-// chartUrl is empty for ticket 03 (ticket 04 wires the /chart fetch)
-const chartUrl = computed(() => '')
+// chartUrl for the selected loop's return-curve plotly HTML (ticket 04).
+// Empty when the selected loop has no chart yet, so the chart tab shows an
+// empty state instead of a broken iframe. The guard checks any experiment in
+// the loop (the /chart endpoint serves the first chart-bearing one).
+const chartUrl = computed(() => {
+  if (!selectedId.value || selectedLoop.value == null) return ''
+  const hasChart = filteredExperiments.value.some((e: any) => e.chart_path)
+  if (!hasChart) return ''
+  return buildChartUrl(selectedId.value, selectedLoop.value)
+})
 
 // Token usage from pipeline nodes
 const promptTokens = computed(() => pipelineNodes.value.reduce((s: number, n: any) => s + (n.prompt_tokens || 0), 0))

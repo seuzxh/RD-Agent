@@ -50,6 +50,7 @@ export interface ExperimentItem {
   max_drawdown: number | null
   information_ratio: number | null
   workspace_path: string | null
+  chart_path: string | null
   started_at: string | null
   completed_at: string | null
 }

@@ -93,6 +93,12 @@ export async function fetchStrategyMessages(id: string): Promise<MessagesRespons
   return fetchJson<MessagesResponse>(`/api/strategies/${encodeURIComponent(id)}/messages`)
 }
 
+/** Return-curve chart HTML URL for a strategy (optionally a specific loop). */
+export function chartUrl(strategyId: string, loop?: number): string {
+  const base = `/api/strategies/${encodeURIComponent(strategyId)}/chart`
+  return loop == null ? base : `${base}?loop=${loop}`
+}
+
 /** Factor/model source code via code_path */
 export async function fetchCode(
   strategyId: string,

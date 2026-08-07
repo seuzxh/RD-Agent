@@ -244,6 +244,9 @@ def list_reports():
             "id": sid,
             "description": s.get("description"),
             "total_rounds": len(exps),
+            # Match the /chart endpoint's existence check so a chart-less or
+            # file-cleaned strategy reports an empty state, not a broken iframe.
+            "has_chart": any(e.get("chart_path") and Path(e["chart_path"]).exists() for e in exps),
             "metrics_trend": trend,
             "latest_metrics": latest,
         })

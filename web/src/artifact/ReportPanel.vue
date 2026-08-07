@@ -3,6 +3,20 @@
     <section>
       <h4>策略对比</h4>
       <el-table :data="strategyRows" size="small">
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="report-chart">
+              <h5>最新轮收益曲线</h5>
+              <iframe
+                v-if="row.has_chart"
+                class="report-chart-frame"
+                :src="chartUrl(row.id)"
+                sandbox="allow-scripts"
+              />
+              <div v-else class="empty-chart">该策略暂无收益曲线</div>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="策略" min-width="140">
           <template #default="{ row }"><strong>{{ formatName(row.id) }}</strong></template>
         </el-table-column>
@@ -32,6 +46,7 @@
 </template>
 <script setup lang="ts">
 import { computed } from 'vue'
+import { chartUrl } from './api'
 
 const props = defineProps<{ data: any }>()
 
@@ -68,4 +83,8 @@ function downloadCsv() {
 .report { padding: 8px 0; }
 h4 { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
 .actions { margin-top: 16px; text-align: right; }
+.report-chart { padding: 8px 16px; }
+.report-chart h5 { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #606266; }
+.report-chart-frame { width: 100%; height: 360px; border: 1px solid #e4e7ed; border-radius: 4px; }
+.empty-chart { padding: 24px; text-align: center; color: #909399; font-size: 13px; background: #fafafa; border-radius: 4px; }
 </style>
