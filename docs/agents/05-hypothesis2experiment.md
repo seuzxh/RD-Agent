@@ -197,6 +197,7 @@ Hypothesis2Experiment(ABC, Generic[ASpecificExp])    # rdagent/core/proposal.py
 
 **System prompt**（[components/proposal/prompts.yaml#L42-L52](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/prompts.yaml#L42-L52)）：
 
+{% raw %}
 ```
 The user is trying to generate new {{ targets }} based on the hypothesis generated in the previous step.
 The {{ targets }} are used in certain scenario, the scenario is as follows:
@@ -205,11 +206,13 @@ The {{ targets }} are used in certain scenario, the scenario is as follows:
 Please generate the output following the format below:
 {{ experiment_output_format }}
 ```
+{% endraw %}
 
 > ⚠️ **`scenario` 的实际来源**：模板中的 `{{ scenario }}` 占位符由基类 `convert()` 直接渲染，传入的值是 `trace.scen.get_scenario_all_desc(filtered_tag=self.targets)`（[components/proposal/__init__.py#L98](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L98)），**并不读取** `context["scenario"]`。子类 `prepare_context` 中构建的 `scenario` 局部变量（例如因子场景调用 `get_scenario_all_desc(action="factor")`）虽然被放进了返回字典，但在 system prompt 渲染时被忽略。两者通常恰好都来自同一个 scenario 对象，只是过滤参数不同（基类用 `filtered_tag=self.targets`，子类用 `action="factor"`/`"model"`）。
 
 **User prompt**（[components/proposal/prompts.yaml#L54-L71](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/prompts.yaml#L54-L71)）：
 
+{% raw %}
 ```
 The target hypothesis you are targeting to generate {{ targets }} for is as follows:
 {{ target_hypothesis }}
@@ -218,6 +221,7 @@ The target hypothesis you are targeting to generate {{ targets }} for is as foll
 [SOTA假设与反馈（条件渲染）]
 Please generate the new {{ targets }} based on the information above.
 ```
+{% endraw %}
 
 > 📌 **传入但模板未使用的变量**：基类 `convert()` 在渲染 user_prompt 时额外传入了 `target_list=context["target_list"]` 和 `RAG=context["RAG"]`（[components/proposal/__init__.py#L113-L114](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L113-L114)），但该 YAML 模板里既没有 `{{ target_list }}` 也没有 `{{ RAG }}` 占位符。Jinja2 对未使用的额外变量静默忽略，因此这两个值（无论因子场景的 `RAG=None` 还是模型场景返回的那段数据规模约束文本）都不会出现在最终发给 LLM 的 user prompt 中。
 

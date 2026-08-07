@@ -688,6 +688,7 @@ HypothesisGen 的提示词分两层：**通用框架提示词**（`rdagent/compo
 
 [LLMHypothesisGen.gen()](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L29-L65) 中系统提示词通过 `T(".prompts:hypothesis_gen.system_prompt")` 加载，填充以下变量：
 
+{% raw %}
 ```
 {{ targets }}                → "factors" / "model tuning" / "feature engineering and model building"
 {{ scenario }}               → 场景描述（过滤后），由 scen.get_scenario_all_desc() 生成
@@ -699,9 +700,11 @@ HypothesisGen 的提示词分两层：**通用框架提示词**（`rdagent/compo
 {{ hypothesis_specification }}→ 场景定制规范（factor_hypothesis_specification 或 model_hypothesis_specification）
 {{ hypothesis_output_format }}→ JSON输出格式要求
 ```
+{% endraw %}
 
 **系统提示词核心结构**（[prompts.yaml#L2-L20](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/prompts.yaml#L2-L20)）：
 
+{% raw %}
 ```
 1. 角色设定："你在为{targets}生成新假设"
 2. 场景描述：{{scenario}}（Qlib数据接口、可用字段、baseline模型等）
@@ -710,11 +713,13 @@ HypothesisGen 的提示词分两层：**通用框架提示词**（`rdagent/compo
 5. 附加规范：{{hypothesis_specification}}（因子/模型场景特定规则）
 6. 输出格式：{{hypothesis_output_format}}（JSON schema）
 ```
+{% endraw %}
 
 ### 用户提示词组装
 
 用户提示词通过 `T(".prompts:hypothesis_gen.user_prompt")` 加载，条件性地填充区块：
 
+{% raw %}
 ```
 首轮判断（Jinja if）:
   {% if hypothesis_and_feedback|length == 0 %}
@@ -740,6 +745,7 @@ RAG引导:
   {% if RAG %}
     "To assist you..., we have provided: {{RAG}}"
 ```
+{% endraw %}
 
 ### 历史反馈链渲染模板
 
