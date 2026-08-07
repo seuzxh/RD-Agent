@@ -2,7 +2,6 @@
 title: MultiAlpha 文档
 description: 基于 RD-Agent + Qlib 的量化金融因子挖掘平台文档
 layout: default
-permalink: /
 ---
 
 # MultiAlpha 文档
@@ -94,7 +93,6 @@ permalink: /
 ## 🤝 协作规范
 
 - [多人协作规范](COLLABORATION.md) — 分支策略 / 双仓库分工 / 环境一致性 / LLM·Embedding Key 管理 / trace 共享 / Code Review 流程
-- [CLAUDE.md](../../CLAUDE.md) — Agent 行为约束（外层 multialphaV 仓库根，链接出本目录）
 
 ---
 
