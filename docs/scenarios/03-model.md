@@ -191,11 +191,11 @@ ModelRDLoop
 │  │  │          batch_size(256)/weight_decay(1e-4)            │  │
 │  │  ├─ 根据model_type选择配置路径：                           │  │
 │  │  │   ├─ Tabular + baseline → DatasetH + baseline yaml    │  │
-│  │  │   │   num_features=20(硬编码ALPHA20)                    │  │
+│  │  │   │   num_features=20(模板硬编码，对应ALPHA20)          │  │
 │  │  │   ├─ Tabular + SOTA → DatasetH + sota yaml            │  │
-│  │  │   │   num_features=动态计算(ALPHA20+新因子)             │  │
+│  │  │   │   num_features=动态(基础特征+SOTA因子)             │  │
 │  │  │   ├─ TimeSeries + baseline → TSDatasetH + baseline    │  │
-│  │  │   │   step_len=20, num_timesteps=20                    │  │
+│  │  │   │   step_len=20, num_timesteps=20, num_features=20  │  │
 │  │  │   └─ TimeSeries + SOTA → TSDatasetH + sota            │  │
 │  │  ├─ Docker/Conda内执行qrun:                               │  │
 │  │  │   ├─ 初始化qlib(CSI300数据)                            │  │
@@ -313,8 +313,9 @@ LLM 只需在 `model.py` 中定义一个名为 `model_cls` 的 `nn.Module` 子�
 ### 7.6 错误跳过
 
 `ModelRDLoop.skip_loop_error = (ModelEmptyError,)`：
-- model.py 前向传播失败、训练不收敛、回测异常等导致 `exp is None` → `ModelEmptyError`
-- CoSTEER 所有轮次失败 → `CoderError`，但 **`CoderError` 不在 `skip_loop_error` 中**（与因子场景不同），会终止循环而非跳过
+- model.py 前向传播失败、训练不收敛、回测异常等导致 `result is None` → `ModelEmptyError`
+- CoSTEER 所有轮次失败 → `CoderError`
+- 注意：在 [exception.py:62-64](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/exception.py#L62-L64) 中 `ModelEmptyError = CoderError`（别名），因此 `CoderError` 实际上也会被 `skip_loop_error` 捕获并跳过本轮，不会终止循环（与因子场景行为一致）
 
 ---
 

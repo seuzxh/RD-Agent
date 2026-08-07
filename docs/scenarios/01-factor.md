@@ -111,8 +111,9 @@ FactorRDLoop
 │  │      ├─ LLM将假设转化为FactorTask列表(名称/描述/公式/变量)  │  │
 │  │      ├─ 去重：convert()内部遍历based_experiments，基于trace │  │
 │  │      │   剔除与SOTA/本轮已有因子同名的重复任务              │  │
-│  │      ├─ 设置based_experiments（H2E负责构建）:               │  │
-│  │      │   空基线实验 + trace中feedback非None的历史因子实验   │  │
+│  │  ├─ 设置based_experiments（H2E负责构建）:               │  │
+│  │  │   空基线实验 + trace中decision=True的历史因子实验    │  │
+│  │  │   （注：t[1]作为feedback对象，__bool__返回decision） │  │
 │  │      └─ 注入base_features(ALPHA20)                         │  │
 │  │                                                           │  │
 │  │  ② coding() — QlibFactorCoSTEER.develop(exp)              │  │
@@ -144,11 +145,11 @@ FactorRDLoop
 │  │  ├─ deduplicate_new_factors(): IC去重(≥0.99剔除)           │  │
 │  │  ├─ 拼接: combined = concat([SOTA_factors, new_factors])  │  │
 │  │  ├─ 保存为 combined_factors_df.parquet                    │  │
-│  │  ├─ 注入Docker工作空间，渲染配置yaml:
+│  │  ├─ 注入Docker工作空间，渲染配置yaml:                      │  │
 │  │  │   ├─ based_experiments中无SOTA model → conf_combined_factors.yaml
-│  │  │   │  (LGBM + combined factors)
+│  │  │   │   (由model_selector选择LGBM/Linear/XGBoost/CatBoost + combined factors)
 │  │  │   └─ based_experiments中有SOTA model → conf_combined_factors_sota_model.yaml
-│  │  │       (复用SOTA模型结构+超参 + combined factors)
+│  │  │       (复用SOTA模型结构+超参 + combined factors)        │  │
 │  │  ├─ Docker内执行qrun: 训练模型 + 回测
 │  │  ├─ 解析mlflow结果→IC/ARR/MDD等指标
 │  │  └─ 如果exp为None→抛FactorEmptyError→跳过本轮
@@ -218,8 +219,9 @@ Round 2: [ALPHA20 + 因子1 + 因子2(SOTA)] + [新因子3] → 23个因子 → 
 ### 6.5 错误跳过机制
 
 `FactorRDLoop` 定义了 `skip_loop_error = (FactorEmptyError, CoderError)`：
-- 因子代码执行失败（如运行时错误、输出为空）→ 抛出 `FactorEmptyError`
-- CoSTEER 编码阶段完全失败（所有进化轮次都无法生成可接受实现）→ 抛出 `CoderError`（定义于 [rdagent/core/exception.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/exception.py)，由 CoSTEER 编码流程在任务全部失败时抛出）
+- 因子代码执行失败（如运行时错误、输出为空、IC去重后全部剔除）→ 抛出 `FactorEmptyError`
+- CoSTEER 编码阶段完全失败（所有进化轮次都无法生成可接受实现）→ 抛出 `CoderError`
+- 注意：在 [exception.py:62](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/exception.py#L62) 中 `FactorEmptyError = CoderError`（别名），两者实际是同一个异常类
 - 这些错误不会终止整个循环，而是在 feedback 步骤生成否定反馈（decision=False），继续下一轮
 
 ---
@@ -236,9 +238,9 @@ Round 2: [ALPHA20 + 因子1 + 因子2(SOTA)] + [新因子3] → 23个因子 → 
 | R²类 | RSQR5, RSQR10, RSQR20, RSQR60 | `Rsquare($close, N)` |
 | 相关性 | CORR5, CORR10, CORR20, CORR60 | `Corr($close, Log($volume+1), N)` |
 | 收益率相关 | CORD5, CORD10, CORD60 | `Corr($close/Ref($close,1), Log($volume/Ref($volume,1)+1), N)` |
-| 波动率 | STD5, VSTD5, WVMA5, WVMA60 | `Std(...)`, `Std(Abs(return)*volume, N)/Mean(...)` |
+| 波动率 | STD5, VSTD5, WVMA5, WVMA60 | `Std($close,5)/$close`, `Std($volume,5)/($volume+1e-12)`, `Std(Abs(return)*$volume,N)/Mean(...)` |
 | 动量 | ROC60 | `Ref($close, 60)/$close` |
-| K线 | KLEN, KLOW | `($high-$low)/$open`, `($open-$low)/$open` |
+| K线 | KLEN, KLOW | `($high-$low)/$open`, `(Less($open,$close)-$low)/$open` |
 
 ### 自定义基础因子
 
@@ -268,7 +270,7 @@ Round 2: [ALPHA20 + 因子1 + 因子2(SOTA)] + [新因子3] → 23个因子 → 
 | 入口/主循环 | [rdagent/app/qlib_rd_loop/factor.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/factor.py) |
 | 配置类 | [rdagent/app/qlib_rd_loop/conf.py#L71-L127](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/conf.py#L71-L127) |
 | 假设生成 | [rdagent/scenarios/qlib/proposal/factor_proposal.py#L15-L58](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/factor_proposal.py#L15-L58) |
-| 假设转实验 | [rdagent/scenarios/qlib/proposal/factor_proposal.py#L61-L120](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/factor_proposal.py#L61-L120) |
+| 假设转实验 | [rdagent/scenarios/qlib/proposal/factor_proposal.py#L61-L132](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/factor_proposal.py#L61-L132) |
 | 场景定义 | [rdagent/scenarios/qlib/experiment/factor_experiment.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/experiment/factor_experiment.py) |
 | 因子CoSTEER | [rdagent/components/coder/factor_coder/__init__.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/factor_coder/__init__.py) |
 | 因子Runner | [rdagent/scenarios/qlib/developer/factor_runner.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/developer/factor_runner.py) |

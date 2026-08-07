@@ -110,7 +110,7 @@
 
 ### 3.2 Trace（实验轨迹）
 
-定义于 [proposal.py#L141-L318](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L141-L318)，是假设生成的核心上下文：
+定义于 [proposal.py#L141-L341](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L141-L341)，是假设生成的核心上下文：
 
 | 属性 | 说明 |
 |------|------|

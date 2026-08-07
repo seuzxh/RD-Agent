@@ -14,7 +14,7 @@ Trace 是贯穿整个 R&D 循环的核心数据结构，它解决以下问题：
 4. **断点恢复**：序列化为 pickle 文件，支持从中断处恢复运行
 5. **知识积累**：为 HypothesisGen 和 CoSTEER 提供历史参考
 
-核心定义位于 [proposal.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L141-L318)。
+核心定义位于 [proposal.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L141-L341)。
 
 ---
 
@@ -108,14 +108,19 @@ multialpha 系统中有**两个层级**的反馈，分别对应 R&D 循环的不
 
 #### 3.3.1 编码阶段反馈：CoSTEERSingleFeedback（CoSTEER 评估器）
 
-由 [FactorEvaluatorForCoder](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/factor_coder/evaluators.py#L20) / ModelEvaluatorForCoder 在**编码-演化循环**中生成。单个子任务的反馈（`CoSTEERSingleFeedback`）最终被赋值到该子任务对应工作区的 `Workspace.feedback` 属性上（[experiment.py#L95](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/experiment.py#L95)），随 `sub_workspace_list` 一起在 CoSTEER 演化循环中流转，**不会**直接写入 `Trace.hist`（Trace.hist 存的是回测后的 `HypothesisFeedback`）。CoSTEER 内部确实有一个 `EvolvingItem(Experiment, EvolvableSubjects)` 类（[evolvable_subjects.py#L6](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/evolvable_subjects.py#L6)）作为演化中间载体，但反馈数据本身附着在其 `sub_workspace_list[i].feedback` 上。它通过三级管线评估单个子任务（因子/模型）的代码实现：
+由 [FactorEvaluatorForCoder](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/factor_coder/evaluators.py#L20) / ModelEvaluatorForCoder 在**编码-演化循环**中生成。单个子任务的反馈（`CoSTEERSingleFeedback`）最终被赋值到该子任务对应工作区的 `Workspace.feedback` 属性上（[experiment.py#L95](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/experiment.py#L95)），随 `sub_workspace_list` 一起在 CoSTEER 演化循环中流转，**不会**直接写入 `Trace.hist`（Trace.hist 存的是回测后的 `HypothesisFeedback`）。CoSTEER 内部确实有一个 `EvolvingItem(Experiment, EvolvableSubjects)` 类（[evolvable_subjects.py#L6](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/evolvable_subjects.py#L6)）作为演化中间载体，但反馈数据本身附着在其 `sub_workspace_list[i].feedback` 上。它通过四级管线评估单个子任务（因子/模型）的代码实现：
 
-| 评估级 | 对应字段 | 评估器 | 评估内容 |
-|--------|---------|--------|---------|
-| 执行检查 | `execution` | `FactorFBWorkspace.execute()` | 代码是否能运行，包含 stdout/stderr 和 traceback，过滤 warning 和超长数值列表 |
-| 返回值检查 | `return_checking` | `FactorValueEvaluator`（条件性组合多个子检查器） | 输出 DataFrame 的格式与数值校验：单列检查、Inf值检查、输出格式LLM判定、日频检查、行数比、索引相似度、缺失值、等值率、IC/RankIC 相关性 |
-| **代码评审** | `code` | `FactorCodeEvaluator` | **LLM 驱动的 Code Review**：检查代码逻辑是否与因子任务描述一致、是否与 GT 代码对齐（如有）、结合执行错误和值差异指出关键问题 |
-| 最终决策 | `final_decision` | `FactorFinalDecisionEvaluator` | LLM 综合 execution + return_checking + code 三方信息，输出布尔决策（是否接受该实现） |
+| 评估级 | 对应反馈字段 | 评估器 | 评估内容 |
+|--------|-------------|--------|---------|
+| 执行检查 | `execution_feedback` | `FactorFBWorkspace.execute()` | 代码是否能运行，包含 stdout/stderr 和 traceback，过滤 warning 和超长数值列表 |
+| 返回值检查 | `value_feedback` | `FactorValueEvaluator`（条件性组合多个子检查器） | 输出 DataFrame 的格式与数值校验：单列检查、Inf值检查、输出格式LLM判定、日频检查、行数比、索引相似度、缺失值、等值率、IC/RankIC 相关性 |
+| **代码评审** | `code_feedback` | `FactorCodeEvaluator` | **LLM 驱动的 Code Review**：检查代码逻辑是否与因子任务描述一致、是否与 GT 代码对齐（如有）、结合执行错误和值差异指出关键问题 |
+| 最终决策 | `final_decision` | `FactorFinalDecisionEvaluator` | LLM 综合 execution + value + code 三方信息，输出布尔决策（是否接受该实现） |
+
+> 注意：四个级别并非每次都全部执行。代码中根据值检查结果有三种分支（[evaluators.py#L88-L119](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/factor_coder/evaluators.py#L88-L119)）：
+> - 值检查明确通过（`decision_from_value_check is True`）：跳过 code review 和 final_decision，直接接受；
+> - 值检查明确失败（`decision_from_value_check is False`）：执行 code review 供后续修正参考，但跳过 final_decision，直接拒绝；
+> - 值检查结果不明确（`decision_from_value_check is None`）：执行 code review 和 final_decision，由 LLM 综合判断。
 
 **代码评审（Code Review）详细机制**（[FactorCodeEvaluator](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/factor_coder/eva_utils.py#L67-L117)）：
 
@@ -157,12 +162,12 @@ multialpha 系统中有**两个层级**的反馈，分别对应 R&D 循环的不
 | `new_hypothesis` | `str \| None` | 建议的下一步研究假设 |
 | `reason` | `str` | 决策理由的详细推理 |
 | `decision` | `bool` | 是否替换当前 SOTA（即本次实验是否超越基线） |
-| `acceptable` | `bool \| None` | 是否可接受（由子类 `HypothesisFeedback` 新增，区别于基类 `decision`；用于区分"超越 SOTA"与"虽未超越但可接受"等场景，Summarizer 生成时可能为 `None`） |
+| `acceptable` | `bool \| None` | 是否可接受（由子类 `HypothesisFeedback` 新增，区别于基类 `decision`；Qlib 场景的 Summarizer 正常流程中从不设置此字段，始终为默认值 `None`） |
 | `exception` | `Exception \| None` | 若实验因异常未能生成可运行结果，记录异常对象；正常回测时为 `None`（继承自基类 `ExperimentFeedback`） |
 | `eda_improvement` | `str \| None` | EDA（探索性数据分析）改进建议（继承自基类 `ExperimentFeedback`，量化反馈生成流程通常不设置） |
-| `code_change_summary` | `str \| None` | 代码变更摘要（继承自基类 `ExperimentFeedback`，异常分支中默认置空字符串） |
+| `code_change_summary` | `str \| None` | 代码变更摘要（继承自基类 `ExperimentFeedback`，异常分支中为空字符串） |
 
-**生成过程**：Summarizer 将当前实验结果与 SOTA 结果的关键指标（`IMPORTANT_METRICS` 中的 IC、扣费年化超额收益、扣费最大回撤，见 4.1）拼接成文本，连同假设文本和各子任务信息一起发给 LLM（glm-5.2），LLM 以 JSON 模式返回 `observations`、`hypothesis_evaluation`、`new_hypothesis`、`reason`、`decision` 等字段，其中 `decision` 决定是否更新 SOTA。异常分支（workflow 捕获到异常）会直接构造 `decision=False`、`acceptable=False` 的反馈，而不经过 LLM。
+**生成过程**：Summarizer 将当前实验结果与 SOTA 结果的关键指标（`IMPORTANT_METRICS` 中的 IC、扣费年化超额收益、扣费最大回撤，见 4.1）拼接成文本，连同假设文本和各子任务信息一起发给 LLM（glm-5.2），LLM 以 JSON 模式返回 `observations`、`hypothesis_evaluation`、`new_hypothesis`、`reason`、`decision` 等字段，其中 `decision` 决定是否更新 SOTA。异常分支（workflow 捕获到异常，见 [quant.py#L112-L120](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/app/qlib_rd_loop/quant.py#L112-L120)）会直接构造 `decision=False` 的反馈，`observations` 设为异常字符串，其余字段为空，不经过 LLM，`acceptable` 字段使用默认值 `None`。
 
 > **关键区别**：CoSTEER 反馈评估的是**代码实现是否正确**（编码阶段，含 code review），HypothesisFeedback 评估的是**研究假设是否成立**（回测阶段，基于指标）。前者决定代码是否需要重写，后者决定研究方向是否调整。
 
@@ -496,7 +501,7 @@ GET /traces/{trace_name}/sota
 
 | 模块 | 文件路径 |
 |------|----------|
-| Trace 类定义 | [rdagent/core/proposal.py#L141-L318](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L141-L318) |
+| Trace 类定义 | [rdagent/core/proposal.py#L141-L341](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/proposal.py#L141-L341) |
 | Experiment/Workspace 定义 | [rdagent/core/experiment.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/experiment.py) |
 | RDLoop 五步主循环 | [rdagent/components/workflow/rd_loop.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py) |
 | LoopBase dump/load | [rdagent/utils/workflow/loop.py#L85-L566](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/utils/workflow/loop.py#L85-L566) |

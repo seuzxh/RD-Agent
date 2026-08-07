@@ -193,8 +193,8 @@ PDF文件
 │  │  ├─ 截断因子数: sub_tasks[:max_factors_per_exp=6]         │  │
 │  │  ├─ 设置based_experiments:                                 │  │
 │  │  │   空基线实验 + [t[0] for t in trace.hist if t[1]]      │  │
-│  │  │   (t[1]为feedback对象，truthy意味着feedback非None；    │  │
-│  │  │    异常轮feedback也可能存在但decision=False)           │  │
+│  │  │   (t[1]为feedback对象，__bool__返回decision，故仅     │  │
+│  │  │    decision=True的历史实验进入基线链)                  │  │
 │  │  ├─ 设置base_features = ALPHA20                           │  │
 │  │  └─ 返回exp (直接返回Experiment对象，不是dict)             │  │
 │  │                                                           │  │
@@ -252,7 +252,7 @@ PDF 文本提取和因子提取使用 `multiprocessing_wrapper` 并行处理多�
 1. 一个空基线 `QlibFactorExperiment(sub_tasks=[], hypothesis=exp.hypothesis)`
 2. 所有历史实验 `[t[0] for t in self.trace.hist if t[1]]`
 
-注意 `t[1]` 是 feedback 对象，`if t[1]` 是 truthy 判断（即 feedback 非 `None`），并不严格等于 `feedback.decision=True`。异常轮也会生成 decision=False 的 feedback 进入该列表。这使得 CoSTEER 可以参考之前研报中实现的因子代码作为范例，Runner 也能将之前研报的成功因子合并入 SOTA 库。
+注意 `t[1]` 是 feedback 对象，`if t[1]` 调用的是 `ExperimentFeedback.__bool__`，该方法返回 `self.decision`，因此实际上只包含 `decision=True` 的历史实验（与因子场景 H2E 中的过滤逻辑一致）。异常轮生成的 `decision=False` 反馈不会进入该列表。这使得 Runner 能将之前研报中成功（SOTA）的因子合并入组合回测。
 
 ---
 
