@@ -214,7 +214,7 @@ weights = (0.1, 0.1, 0.05, 0.05, 0.25, 0.15, 0.1, 0.2)
 │  │      ├─ model_runner.develop(exp)                        │  │
 │  │      ├─ 合并所有SOTA factor因子→combined_factors parquet │  │
 │  │      ├─ 根据model_type选DatasetH/TSDatasetH配置          │  │
-│  │      └─ 用plan["features"](累积的因子)作为基础特征       │  │
+│  │      └─ 用plan["features"]即累积的因子作为基础特征       │  │
 │  │                                                           │  │
 │  │  ④ feedback() — 按action路由                              │  │
 │  │  ├─ 异常(FactorEmptyError/ModelEmptyError):               │  │

@@ -8,7 +8,7 @@ layout: default
 
 > 基于 RD-Agent + Qlib 的量化金融因子挖掘平台
 >
-> 文档与代码同仓库管理（位于 `RD-Agent/doc/`），按**文档性质**分类组织。
+> 文档与代码同仓库管理（位于 `docs/`），按**文档性质**分类组织。
 
 ## 分类说明
 
@@ -66,6 +66,17 @@ layout: default
 - [03. Runner 方案执行](agents/03-runner.md) — 隔离环境中执行代码，含缓存机制、因子计算、模型训练与回测
 - [04. Summarizer 反馈总结](agents/04-summarizer.md) — 回测结果分析、SOTA 对比、反馈生成与决策
 - [05. Hypothesis2Experiment 假设转实验](agents/05-hypothesis2experiment.md) — 抽象假设转化为结构化可执行任务列表
+- [06. Trace 实验轨迹](agents/06-trace.md) — 实验历史记录、SOTA追踪、DAG演化关系、目录结构与持久化机制
+
+## 🔄 应用场景
+
+> multialpha 支持四类量化研究场景，从因子挖掘到研报复现、模型调优到全流程协同进化。
+
+- [场景总览（README）](scenarios/README.md) — 四场景对比表、通用数据规范（市场划分/指标/回测策略）
+- [01. Factor 因子挖掘](scenarios/01-factor.md) — LLM自主探索alpha因子，SOTA因子累积、IC去重、渐进复杂度策略
+- [02. Report 研报复现](scenarios/02-report.md) — PDF研报NLP管道，自动提取因子公式并编码验证
+- [03. Model 模型调优](scenarios/03-model.md) — PyTorch模型进化，Tabular/TimeSeries双模式，CoSTEER前向传播单元测试
+- [04. Quant 全流程协同](scenarios/04-quant.md) — 因子+模型双管线，Bandit/LLM/Random动作选择，跨管线知识传递
 
 ## 📚 接口参考
 
