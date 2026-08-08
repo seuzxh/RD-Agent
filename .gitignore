@@ -190,6 +190,8 @@ static/
 # AI assistant
 .cursor/
 .claude/
+.trae/
+.evolve/
 AGENTS.md
 !rdagent/**/AGENTS.md
 
