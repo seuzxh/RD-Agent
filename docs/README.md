@@ -1,8 +1,6 @@
 ---
-title: Multiα1pha 文档
-description: 基于 RD-Agent + Qlib 的量化金融因子挖掘平台文档
+title: 文档分类导航
 layout: default
-permalink: /
 ---
 
 # Multiα1pha 文档

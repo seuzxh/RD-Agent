@@ -1,3 +1,7 @@
+---
+title: 测试文档
+---
+
 # 测试文档
 
 > multiα1pha webUI 测试相关文档索引。测试用例规范、测试报告、问题追踪。
@@ -7,6 +11,8 @@
 | 文档 | 用途 | 更新日期 |
 |------|------|----------|
 | [WEBUI_MULTIALPHA_TEST_CASES.md](WEBUI_MULTIALPHA_TEST_CASES.md) | **测试用例规范**（P0/P1/P2 共 93 条，覆盖创建→挖掘→交互→预测→日志→健康全模块） | 2026-07-24 |
+| [WEBUI_REPORT_UPLOAD_TEST_PLAN.md](WEBUI_REPORT_UPLOAD_TEST_PLAN.md) | **研报上传专项测试文档**（源码核对、真实交互流程、P0/P1 用例、API/落盘验收） | 2026-08-08 |
+| [WEBUI_REPORT_UPLOAD_TEST_REPORT_20260808.md](WEBUI_REPORT_UPLOAD_TEST_REPORT_20260808.md) | **研报上传专项实测报告**（30 条用例，真实浏览器 + API + trace/stdout，含 10 个问题） | 2026-08-08 |
 | [WEBUI_PERF_BROWSER_TEST_REPORT.md](WEBUI_PERF_BROWSER_TEST_REPORT.md) | **当前权威测试报告**（C1–C10 性能改造 + 4 个 bug 修复的浏览器端实测，全部问题已修复并复测通过） | 2026-07-26 |
 | [WEBUI_TEST_ISSUES.md](WEBUI_TEST_ISSUES.md) | **问题追踪清单**（已确认正常项 + 功能缺失 + 待验证项 + 修复 commit 记录） | 2026-07-24 |
 
