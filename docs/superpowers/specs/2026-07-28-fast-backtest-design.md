@@ -132,7 +132,7 @@ data: {"stage":"codegen", "status":"error", "error":"LLM timeout", "detail":"...
 
 **模型配置**:固定 `model_selector="linear"`(LinearModel + OLS 闭式解,无训练,最快)。通过环境变量 `QLIB_FACTOR_MODEL_SELECTOR=linear` 注入,无需改 yaml。
 
-**模板渲染**:`QlibFBWorkspace.__init__` 会 `inject_code_from_folder` 渲染 `conf_combined_factors.yaml` 的 Jinja 变量(`{{ feature_expressions }}` 等)。
+**模板渲染**:`QlibFBWorkspace.__init__` 会 `inject_code_from_folder` 渲染 `conf_combined_factors.yaml` 的 Jinja 变量({% raw %}`{{ feature_expressions }}`{% endraw %} 等)。
 
 ### 4.3 微型 Trace 组装(核心)
 
