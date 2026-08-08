@@ -1,6 +1,6 @@
 import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
-import { controlTask, fetchTrace, fetchTraceIds, fetchTraceStatuses, uploadTask } from './api'
+import { controlTask, fetchTrace, fetchTraceIds, fetchTraceStatuses, pollUploadReady, uploadTask } from './api'
 import { buildTraceView, deriveTraceStatus } from './trace-model'
 import type { TaskMethod, TraceMessage, TraceStatus, TraceTask } from './types'
 
@@ -24,6 +24,8 @@ export function useMultiAlpha() {
   let pollTimer: ReturnType<typeof setTimeout> | null = null
   let pollBusy = false
   let selection = 0
+  const uploading = ref(false)
+  const uploadName = ref('')
 
   const tasks = computed<TraceTask[]>(() => traceIds.value.map(id => {
     const [scenario, ...name] = id.split('/')
@@ -155,8 +157,19 @@ export function useMultiAlpha() {
     payload.files.forEach(file => data.append('files', file))
     const result = await uploadTask(data)
     if (!result.id) throw new Error(result.error || '任务启动失败')
-    cache.delete(result.id); await loadTraceIds(); await selectTrace(result.id)
+    cache.delete(result.id)
     return result.id
+  }
+
+  async function waitForTaskReady(id: string): Promise<void> {
+    for (let i = 0; i < 30; i++) {
+      try {
+        const { ready } = await pollUploadReady(id)
+        if (ready) return
+      } catch { /* 网络错误，继续重试 */ }
+      await new Promise(resolve => setTimeout(resolve, 3000))
+    }
+    throw new Error('任务初始化超时，请检查日志')
   }
 
   async function stopCurrentTask() {
@@ -166,5 +179,5 @@ export function useMultiAlpha() {
   }
 
   onBeforeUnmount(() => { ++selection; activeController?.abort(); stopPolling() })
-  return { traceIds, tasks, currentTraceId, messages, loading, loadingName, listLoading, listError, selectedLoop, statuses, view, loadTraceIds, selectTrace, goHome, createTask, stopCurrentTask }
+  return { traceIds, tasks, currentTraceId, messages, loading, loadingName, listLoading, listError, selectedLoop, statuses, view, loadTraceIds, selectTrace, goHome, createTask, stopCurrentTask, uploading, uploadName, waitForTaskReady }
 }

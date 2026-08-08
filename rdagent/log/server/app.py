@@ -1053,16 +1053,9 @@ def upload_file():
             "auto_mode": auto_mode,
         },
     })
-    # 初始化 catalog 状态投影（C1）
-    external_id = f"{scenario}/{trace_name}"
-    trace_states[external_id] = {
-        "status": "running",
-        "loops": set(),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": None,
-        "has_chart": False,
-        "_tags_seen": set(),
-    }
+    # 注意：不在此处初始化 trace_states（catalog）。
+    # 子进程的第一条 /receive 消息到达时，_update_trace_state 会自动补建。
+    # 这样侧边栏在任务文件真正就绪后才显示该任务。
     return (
         jsonify(
             {
@@ -1071,6 +1064,28 @@ def upload_file():
         ),
         200,
     )
+
+
+@app.route("/upload/poll", methods=["GET"])
+def poll_upload_ready():
+    """轮询任务文件是否就绪。
+
+    子进程启动后写的第一个 pkl 在 scenario/ 目录下（RDLoop.__init__ 里
+    logger.log_object(scen, tag="scenario")），该目录出现 ≈ 子进程已开始运行。
+    前端在 /upload 返回 id 后每 3s 轮询此端点，就绪后才跳转详情页。
+    """
+    trace_id = request.args.get("id", "")
+    if not trace_id:
+        return jsonify({"error": "id is required"}), 400
+    trace_dir = (log_folder_path / trace_id).resolve()
+    # 路径越界校验
+    try:
+        if os.path.commonpath([str(trace_dir), str(log_folder_path)]) != str(log_folder_path):
+            return jsonify({"error": "Invalid id"}), 422
+    except (ValueError, OSError):
+        return jsonify({"error": "Invalid id"}), 422
+    ready = (trace_dir / "scenario").is_dir()
+    return jsonify({"ready": ready}), 200
 
 
 @app.route("/receive", methods=["POST"])
