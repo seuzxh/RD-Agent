@@ -127,9 +127,25 @@ def __extract_factors_name_and_desc_from_content(
             user_prompt=current_user_prompt,
             json_mode=True,
         )
-        ret_dict = json.loads(extract_result_resp)
-        factors = ret_dict["factors"]
-        if len(factors) == 0:
+        try:
+            ret_dict = json.loads(extract_result_resp)
+        except (TypeError, json.JSONDecodeError):
+            logger.warning("Factor extraction returned invalid JSON; keeping factors extracted so far")
+            break
+
+        if not isinstance(ret_dict, dict):
+            logger.warning("Factor extraction returned a non-object JSON value; keeping factors extracted so far")
+            break
+
+        # The follow-up prompt explicitly asks the model to return an empty
+        # object when no new factors remain.  Treat both `{}` and an empty
+        # `factors` mapping as the normal termination condition so factors
+        # accumulated in earlier rounds can still be returned.
+        factors = ret_dict.get("factors", {})
+        if not factors:
+            break
+        if not isinstance(factors, dict):
+            logger.warning("Factor extraction returned a non-object factors value; keeping factors extracted so far")
             break
         for factor_name, factor_description in factors.items():
             extracted_factor_dict[factor_name] = factor_description
