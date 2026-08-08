@@ -65,6 +65,15 @@ export function useMultiAlpha() {
       for (const item of items) {
         statuses.value[item.id] = item.status
       }
+      // /traces/status 已按 created_at DESC, id ASC 排序——据此重排 traceIds
+      const order = new Map(items.map((it, i) => [it.id, i]))
+      traceIds.value = [...traceIds.value].sort((a, b) => {
+        const ia = order.get(a), ib = order.get(b)
+        if (ia !== undefined && ib !== undefined) return ia - ib
+        if (ia !== undefined) return -1
+        if (ib !== undefined) return 1
+        return 0
+      })
     } catch {
       // /traces/status 不可用：状态保持默认（idle），不影响列表展示
     }
