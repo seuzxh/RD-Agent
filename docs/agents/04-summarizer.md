@@ -1,6 +1,6 @@
 # 反馈智能体（Summarizer / Experiment2Feedback）
 
-> **定位**：multialpha R&D 循环的"分析师"与"决策者"。接收 Runner 执行完成的回测结果，通过 LLM 分析当前实验绩效与历史最优（SOTA）的差异，判断本轮假设是否成立、是否应替换 SOTA，并生成下一轮的新假设方向。反馈智能体是闭环迭代的关键枢纽——它的决策直接决定了知识沉淀的方向和后续假设生成的输入。
+> **定位**：multiα1pha R&D 循环的"分析师"与"决策者"。接收 Runner 执行完成的回测结果，通过 LLM 分析当前实验绩效与历史最优（SOTA）的差异，判断本轮假设是否成立、是否应替换 SOTA，并生成下一轮的新假设方向。反馈智能体是闭环迭代的关键枢纽——它的决策直接决定了知识沉淀的方向和后续假设生成的输入。
 
 ---
 
@@ -752,4 +752,4 @@ HypothesisFeedback(
           引导下一轮方向
 ```
 
-反馈智能体输出的 `new_hypothesis` 和 `decision` 结果被写入 Trace，成为下一轮假设生成的上下文输入。当 `decision=True` 时，本轮实验成为新的 SOTA 基线，Runner 在下一轮会自动将本轮因子/模型纳入组合；`new_hypothesis` 则为假设生成智能体提供方向建议。这就是 multialpha 持续进化的闭环核心。
+反馈智能体输出的 `new_hypothesis` 和 `decision` 结果被写入 Trace，成为下一轮假设生成的上下文输入。当 `decision=True` 时，本轮实验成为新的 SOTA 基线，Runner 在下一轮会自动将本轮因子/模型纳入组合；`new_hypothesis` 则为假设生成智能体提供方向建议。这就是 multiα1pha 持续进化的闭环核心。

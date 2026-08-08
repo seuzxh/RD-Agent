@@ -255,7 +255,7 @@ rdagent sota --log-path <log目录> --output code
 > - `416 Range Not Satisfiable` + `Content-Range: bytes */{total}` — offset 超出文件尾（`total >= offset` 表示文件未增长；`total < offset` 表示文件被截断/重写，应 reset offset=0）
 > - `200 OK`（无 Range 处理时）— 全文件回退
 >
-> multialpha webUI 的 `LogConsole.vue` 使用此机制做实时日志轮询（`fetchStdoutRange`，2s 间隔），传输量保持 1.0× 文件大小（vs 全量轮询的 2288× 放大）。历史 task 的 Range 下载同样支持（Strategy 2 回退）。
+> multiα1pha webUI 的 `LogConsole.vue` 使用此机制做实时日志轮询（`fetchStdoutRange`，2s 间隔），传输量保持 1.0× 文件大小（vs 全量轮询的 2288× 放大）。历史 task 的 Range 下载同样支持（Strategy 2 回退）。
 
 ### 2.5 用户交互（双向 IPC）
 

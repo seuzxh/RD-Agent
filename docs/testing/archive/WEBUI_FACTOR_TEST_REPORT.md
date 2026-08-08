@@ -1,4 +1,4 @@
-# 因子挖掘场景 multialpha webUI 测试报告
+# 因子挖掘场景 multiα1pha webUI 测试报告
 
 > 测试场景：新建任务 → "挖掘基于成交量的动量因子" → 因子挖掘 → loop 3 → 启动
 > 测试 task：`Finance Data Building/plain-transformation`

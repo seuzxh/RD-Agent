@@ -563,7 +563,7 @@ POST /predict/run {trace_id}  ──→  Flask run_predict
 
 | PRD 验收项 | 技术实现 |
 |---|---|
-| 侧栏入口 | MultiAlphaApp.vue 侧栏 + 路由 /predict |
+| 侧栏入口 | Multiα1phaApp.vue 侧栏 + 路由 /predict |
 | 实验列表过滤 fin_factor+SOTA+model | API 1 三层过滤 |
 | 异步任务状态可见 | RDAgentTask + fetchTrace 轮询 + deriveTraceStatus |
 | **Top20 ≤ 5 分钟展示** | docker 五步 pipeline 实测 ~2-5 分钟 |

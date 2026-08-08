@@ -1,4 +1,4 @@
-# multialpha webUI 全面测试报告
+# multiα1pha webUI 全面测试报告
 
 > 测试时间：2026-07-24
 > 测试环境：后端 `localhost:19899`（Flask）+ 内置浏览器（OpenPreview）+ Playwright headless Chromium
@@ -26,7 +26,7 @@
 
 > WARN（TC-46 LoopSwitcher）为测试脚本正则匹配问题，功能验证正常（3 个 loop 按钮 + IC 角标）。
 
-**核心结论**：重新构建前端后，multialpha webUI 的**全部功能验证通过**——落地页、任务列表（含状态）、任务详情全组件、结果工作区 4 tab、SOTA、预测看板、健康检查均正常。
+**核心结论**：重新构建前端后，multiα1pha webUI 的**全部功能验证通过**——落地页、任务列表（含状态）、任务详情全组件、结果工作区 4 tab、SOTA、预测看板、健康检查均正常。
 
 ---
 
@@ -165,7 +165,7 @@ dist 产物构建于 **2026-07-23 15:00**，但源码在 **2026-07-24 14:24/14:2
 
 | 编号 | 用例 | 结果 | 证据 |
 |---|---|---|---|
-| TC-DO-01 | 品牌一致性 | ✅ PASS | MultiAlpha + 国新证券 + α 符号 |
+| TC-DO-01 | 品牌一致性 | ✅ PASS | Multiα1pha + 国新证券 + α 符号 |
 | TC-DO-02 | 响应式 1280px | ✅ PASS | 无横向溢出 |
 | TC-DO-02b | 响应式 1024px | ✅ PASS | 无横向溢出 |
 | TC-DO-06 | 状态色一致性 | ✅ PASS | 已完成 badge 可见 |

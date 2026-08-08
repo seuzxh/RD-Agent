@@ -1,6 +1,6 @@
-# webUI（multialpha）API 迁移调研
+# webUI（multiα1pha）API 迁移调研
 
-> 适用：**multialpha webUI 子应用**适配新 RD-Agent 项目（`/home/zxh/projects/1.multialphaV/RD-Agent`）。
+> 适用：**multiα1pha webUI 子应用**适配新 RD-Agent 项目（`/home/zxh/projects/1.multialphaV/RD-Agent`）。
 > 本文是**纯调研文档**，不含代码改动。所有结论附 file:/// 绝对路径 + 行号。
 >
 > 维护约定：webUI 前端或后端 server 的接口契约变更时同步本文档。本文档随讨论持续更新（见 `CLAUDE.md` §11「持续沉淀」）。
@@ -11,7 +11,7 @@
 
 - [0. 一句话结论](#0-一句话结论)
 - [1. 背景与范围](#1-背景与范围)
-- [2. multialpha 依赖的接口清单](#2-multialpha-依赖的接口清单)
+- [2. multiα1pha 依赖的接口清单](#2-multialpha-依赖的接口清单)
 - [3. 老 vs 新项目对比 + 格式校验](#3-老-vs-新项目对比--格式校验)
 - [4. 迁移项与当前状态](#4-迁移项与当前状态)
   - [项 1：实时日志（/logs/sse）— 含性能分析](#项-1实时日志logssse含性能分析)
@@ -25,7 +25,7 @@
 
 ## 0. 一句话结论
 
-本次迁移调研覆盖的 multialpha 6 个核心接口中，5 个新项目原生具备且格式一致；实时日志已采用 **Range 增量轮询 `/stdout`**（传输量 1×），token 面板的 `_obj_to_json` 分支也已接通。msg 结构高度兼容，前端 `trace-model.ts` 可直接复用。
+本次迁移调研覆盖的 multiα1pha 6 个核心接口中，5 个新项目原生具备且格式一致；实时日志已采用 **Range 增量轮询 `/stdout`**（传输量 1×），token 面板的 `_obj_to_json` 分支也已接通。msg 结构高度兼容，前端 `trace-model.ts` 可直接复用。
 
 ---
 
@@ -36,22 +36,22 @@ webUI 是 Vue 3.4 + Vite 8 的**多页应用（MPA）**，入口在 [`web/vite.c
 - `multialpha.html` → `web/src/multialpha/` 子应用（**唯一活动入口**）
 - `index.html` → 老页面（合作者 commit `8331bcde` 已注释掉 main 入口，[`vite.config.ts#L20`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/vite.config.ts#L20) `// main: pathResolve('./index.html')`；老页面文件仍在但不再构建）
 
-multialpha 子应用的 API 调用全部集中在 [`web/src/services/rdagent-api.ts`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/src/services/rdagent-api.ts)，[`web/src/multialpha/api.ts`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/src/multialpha/api.ts) 仅 re-export。
+multiα1pha 子应用的 API 调用全部集中在 [`web/src/services/rdagent-api.ts`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/src/services/rdagent-api.ts)，[`web/src/multialpha/api.ts`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/src/multialpha/api.ts) 仅 re-export。
 
 ### 1.2 后端架构
 - **新项目**：纯 Flask，[`rdagent/log/server/app.py`](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/log/server/app.py)（12 路由）。无 patch 层、无 socketio、无 SSE/streaming。启动 `rdagent server_ui --port 19899`。
 - **老项目**（`/home/zxh/quant_projects/rdagent`）：Flask + `app_patch.py` 补丁层（额外 `/logs/sse`、`/multialpha`、`/kanban` + 覆盖 `/upload`）。webUI 原为老项目前端所写。
 
 ### 1.3 本次范围
-- **迁移范围**：multialpha 依赖的接口（§2）
+- **迁移范围**：multiα1pha 依赖的接口（§2）
 - **待办记录**：老页面专用接口（§5，已停用）
 - **不写代码**：本文只产出调研结论，是否实现迁移由后续决定
 
 ---
 
-## 2. multialpha 依赖的接口清单
+## 2. multiα1pha 依赖的接口清单
 
-multialpha 子应用调用 **6 个后端接口**（全部走相对路径，dev 下由 [`vite.config.ts`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/vite.config.ts#L49) proxy，prod 下同源 Flask 托管）：
+multiα1pha 子应用调用 **6 个后端接口**（全部走相对路径，dev 下由 [`vite.config.ts`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/vite.config.ts#L49) proxy，prod 下同源 Flask 托管）：
 
 | # | HTTP | URL | 请求参数 | 响应格式 | 前端调用点 | 功能 |
 |---|------|-----|----------|----------|------------|------|
@@ -62,7 +62,7 @@ multialpha 子应用调用 **6 个后端接口**（全部走相对路径，dev �
 | 5 | GET | `/stdout?id=<traceId>` | query: `id` | `text/plain` 文件流（`as_attachment`） | [`rdagent-api.ts:31`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/src/services/rdagent-api.ts#L31) → `LogConsole.vue:12` | stdout 下载 |
 | 6 | GET (SSE) | `/logs/sse?trace=<traceId>` | query: `trace` | `text/event-stream`，每行 `data: <logline>\n\n` | [`rdagent-api.ts:32`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/src/services/rdagent-api.ts#L32) → `LogConsole.vue:109` | 实时日志流 |
 
-multialpha 依赖的 msg tag 集合（[`trace-model.ts`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/src/multialpha/trace-model.ts) 解析）：
+multiα1pha 依赖的 msg tag 集合（[`trace-model.ts`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/src/multialpha/trace-model.ts) 解析）：
 `research.hypothesis` / `research.tasks` / `evolving.codes` / `evolving.feedbacks` / `feedback.config` / `feedback.metric` / `feedback.hypothesis_feedback` / `feedback.return_chart` / `token_cost` / `END`
 
 ---
@@ -76,7 +76,7 @@ multialpha 依赖的 msg tag 集合（[`trace-model.ts`](file:///home/zxh/projec
 | `GET /traces` | [`app.py:367`](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/log/server/app.py#L367) | ✅ 一致（`string[]`） |
 | `POST /trace` | [`app.py:300`](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/log/server/app.py#L300) | ✅ msg 结构一致（`tag`/`timestamp`/`content`）；`END` 消息兼容（新项目 content 多带 `error_msg`/`end_code`，前端只判 `tag==END`） |
 | `POST /upload` | [`app.py:375`](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/log/server/app.py#L375) | ✅ scenario 兼容——[`NewTaskDialog.vue:6`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/src/multialpha/components/NewTaskDialog.vue#L6) 用的 3 个值 `Finance Data Building` / `Finance Whole Pipeline` / `Finance Model Implementation` 都在新项目 4 个映射内（第 4 个 `Finance Data Building (Reports)` 未在 UI 暴露但 pdf 上传时触发） |
-| `POST /control` | [`app.py:511`](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/log/server/app.py#L511) | ✅ 一致——multialpha 只发 `stop`，新项目只支持 `stop`（[`app.py:521`](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/log/server/app.py#L521) 硬编码 `if action != "stop": return 400`） |
+| `POST /control` | [`app.py:511`](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/log/server/app.py#L511) | ✅ 一致——multiα1pha 只发 `stop`，新项目只支持 `stop`（[`app.py:521`](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/log/server/app.py#L521) 硬编码 `if action != "stop": return 400`） |
 | `GET /stdout` | [`app.py:349`](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/log/server/app.py#L349) | ✅ 一致（`send_file` `as_attachment`，Flask 3.1.3 已默认支持 HTTP Range，见 §4 项 1） |
 
 ### 3.2 msg content 格式校验（trace-model.ts 依赖的 9 个 tag）
@@ -168,7 +168,7 @@ multialpha 依赖的 msg tag 集合（[`trace-model.ts`](file:///home/zxh/projec
   - 后续：`fetch(stdoutUrl, { headers: { Range: 'bytes={offset}-' } })`，拿 206，解析 `Content-Range` 更新 offset
   - 边界：416 → offset 重置 0（文件被截断/重写）；200 → 全量回退
   - 轮询间隔 2s（静默期 Range 请求返回 0 字节，开销极小）
-- **优先级**：高（multialpha 实时日志面板当前完全不可用）
+- **优先级**：高（multiα1pha 实时日志面板当前完全不可用）
 
 ---
 
@@ -196,7 +196,7 @@ multialpha 依赖的 msg tag 集合（[`trace-model.ts`](file:///home/zxh/projec
 
 #### 格式校验
 - litellm 发：`{prompt_tokens, completion_tokens, cost, accumulated_cost}`
-- multialpha 要：`{accumulated_prompt_tokens, accumulated_completion_tokens, total_tokens, call_count}`
+- multiα1pha 要：`{accumulated_prompt_tokens, accumulated_completion_tokens, total_tokens, call_count}`
 - 前端已有降级：单次 `prompt_tokens` 可显示（非累计）；`call_count` 用 `tokenMessages.length`（消息条数）兜底
 
 #### 迁移建议
@@ -222,19 +222,19 @@ multialpha 依赖的 msg tag 集合（[`trace-model.ts`](file:///home/zxh/projec
 ### 6.1 中文翻译
 - 新项目 `rdagent/` 全量 grep `translate`/`中文`/`glm-4-flash`/`i18n`：**0 命中**
 - 老项目可见源码（`app_patch.py`/`webui_main.py`/`storage.py`）：**同样 0 命中**——之前怀疑的翻译机制在当前代码库不存在（可能是更早版本或归档代码）
-- multialpha 字段映射用英文 key，不依赖翻译
+- multiα1pha 字段映射用英文 key，不依赖翻译
 - **结论**：无可迁之物，不作迁移。若需中文 UI 属新功能（建议前端 vue-i18n，不在后端引入翻译调用）
 
-### 6.2 multialpha 专用后端接口
+### 6.2 multiα1pha 专用后端接口
 - 老项目 `/multialpha`、`/kanban`（[`app_patch.py:361-368`](file:///home/zxh/quant_projects/rdagent/app_patch.py#L361)）只是 `send_from_directory` serve 单文件 HTML
 - 新架构由 vite 多入口（[`vite.config.ts`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/vite.config.ts) 的 `rollupOptions.input`）+ 前端路由接管，**无需后端路由**
-- multialpha 前端复用通用 RD-Agent 接口，无 `/multialpha/*` 数据接口需求
+- multiα1pha 前端复用通用 RD-Agent 接口，无 `/multialpha/*` 数据接口需求
 
 ---
 
 ## 7. 证据链
 
-### multialpha 前端
+### multiα1pha 前端
 - API 定义：[`web/src/services/rdagent-api.ts`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/src/services/rdagent-api.ts)（6 个接口，行 27-32）
 - msg 解析：[`web/src/multialpha/trace-model.ts`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/src/multialpha/trace-model.ts)（9 tag + token_cost）
 - SSE 消费：[`web/src/multialpha/components/LogConsole.vue:109`](file:///home/zxh/projects/1.multialphaV/RD-Agent/web/src/multialpha/components/LogConsole.vue#L109)
@@ -261,7 +261,7 @@ multialpha 依赖的 msg tag 集合（[`trace-model.ts`](file:///home/zxh/projec
 
 | 维度 | 结论 |
 |---|---|
-| multialpha 依赖接口 | 6 个，**5 个新项目已具备且格式一致**（直接可用） |
+| multiα1pha 依赖接口 | 6 个，**5 个新项目已具备且格式一致**（直接可用） |
 | 实时日志缺口 | 后端无 `/logs/sse`，但 **Range 增量轮询 `/stdout` 可替代**（后端零改动，传输量 1×，性能优于 SSE，无 worker 占用问题） |
 | token 面板 | ✅ `_obj_to_json` 分支已接通，实时推送与历史回放可用 |
 | msg 结构 | 高度兼容，`trace-model.ts` 可直接复用（9 个 tag 字段全一致，英文 key） |
@@ -275,6 +275,6 @@ multialpha 依赖的 msg tag 集合（[`trace-model.ts`](file:///home/zxh/projec
 **版本**：v1.0（2026-07-20）
 **适用目录**：`/home/zxh/projects/1.multialphaV`（根仓库）+ `/home/zxh/projects/1.multialphaV/RD-Agent`（代码仓库）
 **配套文档**：[CLAUDE.md](../../../CLAUDE.md)（开发行为约束）、[docs/QLIB_SCENARIOS.md](QLIB_SCENARIOS.md)（Qlib 场景机制）、[docs/reference/API.md](../reference/API.md)（新项目接口参考）
-**更新来源**：2026-07-20 调研沉淀：webUI multialpha 子应用适配新 RD-Agent 项目的接口对比 + 迁移方案（含 Range 增量轮询性能分析、token_cost 断链 6 步定位、老页面停用状态确认）
+**更新来源**：2026-07-20 调研沉淀：webUI multiα1pha 子应用适配新 RD-Agent 项目的接口对比 + 迁移方案（含 Range 增量轮询性能分析、token_cost 断链 6 步定位、老页面停用状态确认）
 
 **更新来源**：2026-07-25 文档同步：token_cost 分支已实现，统一摘要、证据链与结论口径。

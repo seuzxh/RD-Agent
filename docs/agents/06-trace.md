@@ -1,6 +1,6 @@
 # Trace：实验轨迹与记忆系统
 
-> Trace 是 multialpha R&D 循环的"记忆中枢"——它记录每一轮迭代的完整过程，包括假设、实验、代码、执行结果和反馈，并通过 DAG 结构组织实验演化历史，为后续假设生成和 SOTA 追踪提供数据基础。
+> Trace 是 multiα1pha R&D 循环的"记忆中枢"——它记录每一轮迭代的完整过程，包括假设、实验、代码、执行结果和反馈，并通过 DAG 结构组织实验演化历史，为后续假设生成和 SOTA 追踪提供数据基础。
 
 ---
 
@@ -104,7 +104,7 @@ class FBWorkspace(Workspace):
 
 ### 3.3 ExperimentFeedback（实验反馈）
 
-multialpha 系统中有**两个层级**的反馈，分别对应 R&D 循环的不同阶段：
+multiα1pha 系统中有**两个层级**的反馈，分别对应 R&D 循环的不同阶段：
 
 #### 3.3.1 编码阶段反馈：CoSTEERSingleFeedback（CoSTEER 评估器）
 

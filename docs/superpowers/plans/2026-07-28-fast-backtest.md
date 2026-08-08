@@ -5,14 +5,14 @@
 
 **Goal:** 新建快速回测页面,用户勾选 Alpha158 因子和/或自然语言描述策略,绕过 R&D loop 单次生成因子并跑 LinearModel 回测,产出可被 predict 流程自动发现的可预测 trace。
 
-**Architecture:** 后端新增同步 SSE 端点 `POST /fastbacktest/run`,线性编排 4 步(LLM 单次生成 factor.py → 验证因子值 → QlibFBWorkspace qrun 回测 → 写微型 trace);前端新增独立多页入口 `fastbacktest.html`,复用 multialpha 视觉令牌。产出的 trace 让现有 predict 流程零改动自动发现。
+**Architecture:** 后端新增同步 SSE 端点 `POST /fastbacktest/run`,线性编排 4 步(LLM 单次生成 factor.py → 验证因子值 → QlibFBWorkspace qrun 回测 → 写微型 trace);前端新增独立多页入口 `fastbacktest.html`,复用 multiα1pha 视觉令牌。产出的 trace 让现有 predict 流程零改动自动发现。
 
 **Tech Stack:** Python/Flask(SSE)、Vue 3 + TypeScript + Element Plus + ECharts、Qlib(LinearModel)、RD-Agent 已有组件(QlibFBWorkspace/FactorFBWorkspace/LoopBase/Trace/Experiment)
 
 ## Global Constraints
 
 - **后端**:`conf_combined_factors.yaml`(非 conf_baseline.yaml),`model_selector=linear`(OLS,环境变量 `QLIB_FACTOR_MODEL_SELECTOR=linear`),固定 csi300 + 默认日期段(train 2008-2014 / valid 2015-2016 / test 2017-2020)
-- **前端**:严格复用 `web/src/multialpha/styles/tokens.css` 的设计令牌(`--ma-gold:#b99a50` 等);字体 Noto Serif SC(标题/数字)+ Noto Sans SC(正文)+ JetBrains Mono(数据/eyebrow);头部复用 `TopBar.vue` 的国新证券 logo + MultiAlpha 结构
+- **前端**:严格复用 `web/src/multialpha/styles/tokens.css` 的设计令牌(`--ma-gold:#b99a50` 等);字体 Noto Serif SC(标题/数字)+ Noto Sans SC(正文)+ JetBrains Mono(数据/eyebrow);头部复用 `TopBar.vue` 的国新证券 logo + Multiα1pha 结构
 - **trace 命名**:`Finance Data Building/fast-<randomname>-<date>`,满足 `/predict/experiments` 的前缀过滤(`app.py:1497`)
 - **SSE**:用 `fetch` + `ReadableStream` 消费(EventSource 不支持 POST body);Flask 用 `Response(generator, mimetype="text/event-stream")` + `stream_with_context`
 - **不改动**:predict 相关端点、predict_infer.py、query_sota、QlibFBWorkspace/FactorFBWorkspace/LoopBase/Trace 的现有实现
@@ -36,7 +36,7 @@
 | `web/src/fastbacktest/components/ProgressTimeline.vue` | SSE 进度时间线(深色终端风格) |
 | `web/src/fastbacktest/components/MetricsPanel.vue` | 回测指标卡片 |
 | `web/src/fastbacktest/components/EquityChart.vue` | 收益曲线(ECharts) |
-| `web/src/fastbacktest/styles/fastbacktest.css` | 样式(复用 multialpha 令牌) |
+| `web/src/fastbacktest/styles/fastbacktest.css` | 样式(复用 multiα1pha 令牌) |
 
 ### 修改文件
 | 文件 | 改动 |
@@ -826,7 +826,7 @@ export async function runFastBacktest(
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MultiAlpha · 快速回测</title>
+  <title>Multiα1pha · 快速回测</title>
 </head>
 <body>
   <div id="fastbacktest-app"></div>
@@ -1355,7 +1355,7 @@ const option = computed(() => {
   <header class="fb-topbar">
     <button class="fb-brand" @click="$emit('home')">
       <span class="fb-logo-frame"><img src="https://h5.crsec.com.cn/logo.png" alt="国新证券" class="fb-logo"/></span>
-      <span class="fb-brand-text"><small>国新证券</small><strong>MultiAlpha</strong></span>
+      <span class="fb-brand-text"><small>国新证券</small><strong>Multiα1pha</strong></span>
     </button>
     <div class="fb-topbar-actions">
       <button class="fb-topbar-btn" @click="$emit('home')">← 返回主站</button>
@@ -1457,7 +1457,7 @@ git commit -m "test(fast-backtest): end-to-end integration verification" --allow
 - ✅ LinearModel + csi300 固定 → Task 3(_run_qlib_backtest 的 env + 模板变量)
 - ✅ SSE 流式进度 → Task 1(_sse)+ Task 4(端点)+ Task 5(前端 SSE 消费)
 - ✅ 微型 trace(predict 可发现)→ Task 3(_build_and_dump_trace)
-- ✅ 视觉对齐 multialpha → Task 6(令牌)+ Task 8(组件)
+- ✅ 视觉对齐 multiα1pha → Task 6(令牌)+ Task 8(组件)
 - ✅ predict 零改动复用 → Task 9 Step 4 验证
 
 **2. 占位符扫描**:Task 6 Step 4 标注了"骨架后续填充"但 Task 7-8 立即填充,无遗留 TODO。所有代码块完整。

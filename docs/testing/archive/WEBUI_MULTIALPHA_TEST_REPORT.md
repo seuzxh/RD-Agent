@@ -1,7 +1,7 @@
-# multialpha webUI 测试报告（第一轮 + 修复验证）
+# multiα1pha webUI 测试报告（第一轮 + 修复验证）
 
 > 测试时间：2026-07-24
-> 测试目标：multialpha webUI 业务功能、页面交互、页面展示优化
+> 测试目标：multiα1pha webUI 业务功能、页面交互、页面展示优化
 > 测试环境：
 > - 后端：`rdagent server_ui` 运行在本机 `0.0.0.0:19899`（Python）
 > - 前端：vite dev server（使用修复后的 `vite.config.ts`）

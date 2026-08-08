@@ -1,4 +1,4 @@
-# multialpha webUI 测试问题清单
+# multiα1pha webUI 测试问题清单
 
 > 基于 2026-07-20 浏览器实测（后端 19899 + 前端 vite）+ 代码分析 + 老项目（官方 Vue PlaygroundPage）对照。
 > 测试目标：保证因子挖掘场景的信息展示、交互、输出无问题。
@@ -51,14 +51,14 @@
 
 ### 🔴 问题 2.1：user_interaction 交互闭环完全缺失（严重，但被 description 修复部分规避）
 
-- **现象**：multialpha 前端**完全没有**处理 `user_interaction.request` 消息——`trace-model.ts` 不解析该 tag，没有弹窗/表单 UI，从不调用 `/user_interaction/submit`。
-- **根因**：multialpha 设计时未实现此交互（老项目的官方 Vue `PlaygroundPage.vue` 有完整实现：三种 payload 形态 user_instruction/features/hypothesis+reason 各自的表单 + 回传逻辑）。
+- **现象**：multiα1pha 前端**完全没有**处理 `user_interaction.request` 消息——`trace-model.ts` 不解析该 tag，没有弹窗/表单 UI，从不调用 `/user_interaction/submit`。
+- **根因**：multiα1pha 设计时未实现此交互（老项目的官方 Vue `PlaygroundPage.vue` 有完整实现：三种 payload 形态 user_instruction/features/hypothesis+reason 各自的表单 + 回传逻辑）。
 - **当前规避**：description 修复（commit `204427e4`）让有描述的任务跳过 `_interact_init_params`，避免 init 阶段卡死。**但运行中的反馈交互（`_interact_feedback`，rd_loop.py:154）仍会触发**——如果 task 配置了运行中假设反馈交互，会卡死。
 - **影响**：
   - fin_factor/fin_model/fin_quant 用 description 启动时，**init 阶段不卡**（已修复）
   - 但 fin_factor 默认 `FactorBasePropSetting` 是否启用运行中反馈交互，需确认（`_interact_feedback` 的触发条件同 `_interact_init_params`：`hasattr(self, "user_request_q")`）
 - **参考实现**：`/home/zxh/projects/1.multialphaV/RD-Agent/web/src/views/PlaygroundPage.vue` 的 `openUserInteraction`（L641）+ `submitUserInteractionForm`（L776）
-- **建议**：如需完整交互，移植 PlaygroundPage 的 user_interaction 弹窗到 multialpha。当前用 description 可跑通主链路，暂不阻塞。
+- **建议**：如需完整交互，移植 PlaygroundPage 的 user_interaction 弹窗到 multiα1pha。当前用 description 可跑通主链路，暂不阻塞。
 - **优先级**：中（主链路已通；仅在需要运行中反馈交互时才阻塞）
 
 ### 🟡 问题 2.2：pdf 上传路径（fin_factor_report）的 description 处理未确认
@@ -72,7 +72,7 @@
 
 - **现象**：TaskSidebar 的状态过滤 chip 只有「全部/完成/运行中」三项（components/TaskSidebar.vue），**无法过滤 idle/error**。
 - **影响**：idle（待查看）和 error（异常）的任务只能从「全部」里看，无法快速筛选异常任务。
-- **对比**：老项目官方 Vue 无此过滤器，算 multialpha 特有的半成品。
+- **对比**：老项目官方 Vue 无此过滤器，算 multiα1pha 特有的半成品。
 - **建议**：补充 idle/error 过滤 chip，或改为下拉多选。
 - **优先级**：低（体验问题，不影响功能）
 
@@ -95,16 +95,16 @@
 
 ## 4. 设计观察（非 bug）
 
-这些是 multialpha 的设计选择，不是问题：
+这些是 multiα1pha 的设计选择，不是问题：
 
 | 观察 | 说明 |
 |---|---|
 | Landing 页隐藏右侧 results 面板 | `goHome()` 显式隐藏，设计如此 |
-| 任务完成无浏览器通知（仅 ElMessage toast） | 老项目官方 Vue 用 ElNotification + localStorage；multialpha 简化为 toast。非 bug |
+| 任务完成无浏览器通知（仅 ElMessage toast） | 老项目官方 Vue 用 ElNotification + localStorage；multiα1pha 简化为 toast。非 bug |
 | selectedLoop 一旦用户手动切换后不再自动跟随新 loop | `use-multialpha.ts` poll 里只在 selectedLoop 为 null 时设 max loop，用户选择优先。合理设计 |
 | `/trace` 增量返回条数随机 1-10 | 后端 `app.py:306` `random.randint(1,10)`，前端 5s 轮询固定。会导致单次拉取波动，不影响功能 |
-| pdf/optimize 路径前端不显示 scenario 选择器 | use-multialpha 硬编码映射（pdf→Reports, optimize→fin_factor），用户无法覆盖。设计如此 |
-| multialpha 不用 socketio（直接 polling） | 老项目有 socketio 代码但后端是裸 Flask 从不 emit，实际也是 polling fallback。multialpha 更诚实 |
+| pdf/optimize 路径前端不显示 scenario 选择器 | use-multiα1pha 硬编码映射（pdf→Reports, optimize→fin_factor），用户无法覆盖。设计如此 |
+| multiα1pha 不用 socketio（直接 polling） | 老项目有 socketio 代码但后端是裸 Flask 从不 emit，实际也是 polling fallback。multiα1pha 更诚实 |
 
 ---
 
@@ -122,7 +122,7 @@
 
 ## 6. 2026-07-24 综合测试新增问题
 
-> 本轮基于浏览器实测（integrated browser MCP）+ 本地 `localhost:19899` 后端 + `vite --port 8082` 前端，覆盖 multialpha 全功能。详细报告见 [WEBUI_MULTIALPHA_TEST_REPORT.md](archive/WEBUI_MULTIALPHA_TEST_REPORT.md)。
+> 本轮基于浏览器实测（integrated browser MCP）+ 本地 `localhost:19899` 后端 + `vite --port 8082` 前端，覆盖 multiα1pha 全功能。详细报告见 [WEBUI_MULTIALPHA_TEST_REPORT.md](archive/WEBUI_MULTIALPHA_TEST_REPORT.md)。
 
 ### 🔴 问题 6.1：vite dev proxy 硬编码不可达外网 IP
 
@@ -161,5 +161,5 @@
 **适用目录**：`/home/zxh/projects/1.multialphaV`（根仓库）+ `/home/zxh/projects/1.multialphaV/RD-Agent`（代码仓库）
 **配套文档**：[../design/WEBUI_API_MIGRATION.md](../architecture/WEBUI_API_MIGRATION.md)（接口迁移调研）、[../design/QLIB_SCENARIOS.md](../architecture/QLIB_SCENARIOS.md)（Qlib 场景机制）
 **更新来源**：
-- 2026-07-20 测试沉淀：multialpha webUI 因子挖掘场景测试（核心链路已通：description 跳过交互✅；功能缺口：user_interaction 闭环缺失；6 项待验证因 task 中断未完成）
+- 2026-07-20 测试沉淀：multiα1pha webUI 因子挖掘场景测试（核心链路已通：description 跳过交互✅；功能缺口：user_interaction 闭环缺失；6 项待验证因 task 中断未完成）
 - 2026-07-24 浏览器实测沉淀：新增 vite proxy / 任务列表状态 / TokenDashboard / 健康检查弹窗 4 项问题，核心链路验证通过

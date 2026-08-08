@@ -1,9 +1,9 @@
-# multialpha webUI 浏览器端到端测试报告
+# multiα1pha webUI 浏览器端到端测试报告
 
 > **测试日期**：2026-07-24
 > **测试工具**：agent-browser MCP（Chromium 内核内置浏览器）
 > **测试环境**：`http://localhost:19899/multialpha.html#/`
-> **测试范围**：multialpha 全功能（依据 `WEBUI_MULTIALPHA_TEST_CASES.md` v1.0 全部用例）
+> **测试范围**：multiα1pha 全功能（依据 `WEBUI_MULTIALPHA_TEST_CASES.md` v1.0 全部用例）
 > **测试数据**：plain-transformation（3轮完整因子挖掘）、mild-exercise-20260723（运行中预测任务）、10 个历史任务
 
 ---
@@ -34,7 +34,7 @@
 
 | 编号 | 用例 | 结果 | 证据 |
 |------|------|------|------|
-| TC-BF-01 | 落地页正常展示 | ✅ 通过 | 品牌"国新证券MultiAlpha"、H1"Multiα1pha"、H2"量化因子挖掘终端·V.4"、5智能体架构、6入口+历史、LIVE ticker、统计(AGENTS:05/TASKS:10/9完成1运行中) |
+| TC-BF-01 | 落地页正常展示 | ✅ 通过 | 品牌"国新证券Multiα1pha"、H1"Multiα1pha"、H2"量化因子挖掘终端·V.4"、5智能体架构、6入口+历史、LIVE ticker、统计(AGENTS:05/TASKS:10/9完成1运行中) |
 | TC-BF-02 | 任务列表加载 | ✅ 通过 | 10 任务正确列出（7因子挖掘+3预测），`GET /traces` 200 |
 | TC-BF-03 | 状态过滤 | ✅ 通过 | 「运行中」→1条(mild-exercise)；「完成」→9条；「全部」→10条 |
 | TC-BF-04 | 场景过滤 | ✅ 通过 | 「Finance Prediction」→3条(grouchy-clerk/immense-instructor/mild-exercise) |

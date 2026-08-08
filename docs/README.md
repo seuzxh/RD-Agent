@@ -1,11 +1,11 @@
 ---
-title: MultiAlpha 文档
+title: Multiα1pha 文档
 description: 基于 RD-Agent + Qlib 的量化金融因子挖掘平台文档
 layout: default
 permalink: /
 ---
 
-# MultiAlpha 文档
+# Multiα1pha 文档
 
 > 基于 RD-Agent + Qlib 的量化金融因子挖掘平台
 >
@@ -59,7 +59,7 @@ permalink: /
 
 ## 🤖 核心智能体说明
 
-> multialpha 的 R&D 循环由五个核心智能体协作驱动：从假设生成到实验设计、代码编写、执行回测、反馈总结的完整闭环。
+> multiα1pha 的 R&D 循环由五个核心智能体协作驱动：从假设生成到实验设计、代码编写、执行回测、反馈总结的完整闭环。
 
 - [智能体总览（README）](agents/README.md) — 五个智能体总览、闭环流程图、多 LLM 配置、数据流转、场景入口
 - [01. HypothesisGen 假设生成](agents/01-hypothesis-gen.md) — 基于历史反馈生成研究方向，支持 Bandit/LLM/Random 动作选择
@@ -85,7 +85,7 @@ permalink: /
 - [测试用例规范](testing/WEBUI_MULTIALPHA_TEST_CASES.md) — P0/P1/P2 全功能用例（68+13+12 条）
 - [性能优化分支浏览器实测报告](testing/WEBUI_PERF_BROWSER_TEST_REPORT.md) — C1-C10 实测，当前权威报告（2026-07-26）
 - [测试问题清单](testing/WEBUI_TEST_ISSUES.md) — 已知问题追踪 + 修复 commit 记录
-- [历史测试归档](testing/archive/) — 5 份早期测试报告（FACTOR / MULTIALPHA / FULL / BROWSER_E2E 等）
+- [历史测试归档](testing/archive/) — 5 份早期测试报告（FACTOR / MULTIα1PHA / FULL / BROWSER_E2E 等）
 
 ## ❓ FAQ
 

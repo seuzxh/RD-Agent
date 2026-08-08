@@ -230,7 +230,7 @@ qlib.contrib.model.linear.LinearModel 训练 + 回测
 |---|---|
 | `d0348280` | 核心功能（conf + YAML + factor_runner） |
 | `25de8ffe` | mlflow docker 修复（冒烟时发现） |
-| `0c37bebf` | webUI 支持（NewTaskDialog + /upload + use-multialpha） |
+| `0c37bebf` | webUI 支持（NewTaskDialog + /upload + use-multiα1pha） |
 
 ---
 

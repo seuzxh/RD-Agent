@@ -176,7 +176,7 @@ curl -X POST http://localhost:19899/trace \
 
 **✅ 已修复**（commit `d7bd5e7b`）：
 - AgentFlow.vue 接收 `status` prop，当 `status='running'` 且 `agent.done=false` 时显示「⏳ 等待产出」
-- MultiAlphaApp.vue 向 AgentFlow 传 `:status="currentTask?.status||'idle'"`
+- Multiα1phaApp.vue 向 AgentFlow 传 `:status="currentTask?.status||'idle'"`
 - 复测 bipartite-module：5 阶段全部从「○ 待启动」→「⏳ 等待产出」
 
 ---

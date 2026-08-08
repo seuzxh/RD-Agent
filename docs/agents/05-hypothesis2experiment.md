@@ -1,7 +1,7 @@
 {% raw %}
 # 假设转实验智能体（Hypothesis2Experiment）
 
-> **定位**：multialpha R&D 循环的"任务规划师"。位于假设生成（HypothesisGen）与编码进化（CoSTEER）之间，将自然语言描述的抽象假设（如"高换手率因子在震荡市中具有超额收益"）转化为结构化的、可执行的具体任务列表（FactorTask / ModelTask），包括因子名称、描述、数学公式、变量定义、模型架构、超参数等。Hypothesis2Experiment 是连接"创意"与"工程实现"的桥梁，它的输出直接决定了 CoSTEER 需要编写什么代码。
+> **定位**：multiα1pha R&D 循环的"任务规划师"。位于假设生成（HypothesisGen）与编码进化（CoSTEER）之间，将自然语言描述的抽象假设（如"高换手率因子在震荡市中具有超额收益"）转化为结构化的、可执行的具体任务列表（FactorTask / ModelTask），包括因子名称、描述、数学公式、变量定义、模型架构、超参数等。Hypothesis2Experiment 是连接"创意"与"工程实现"的桥梁，它的输出直接决定了 CoSTEER 需要编写什么代码。
 
 ---
 

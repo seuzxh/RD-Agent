@@ -22,15 +22,15 @@
 
 ### 1.3 非目标
 
-- 不做多轮迭代、不做 feedback 评审、不做 SOTA 对比(那是 multialpha 的职责)
+- 不做多轮迭代、不做 feedback 评审、不做 SOTA 对比(那是 multiα1pha 的职责)
 - 不支持自定义市场/时间范围/模型(首版固定)
-- 不支持研报 PDF / 图片输入(那是 multialpha 的入口)
+- 不支持研报 PDF / 图片输入(那是 multiα1pha 的入口)
 
 ## 2. 核心设计决策(已确认)
 
 | 决策点 | 选择 | 理由 |
 |--------|------|------|
-| 定位 | 绕过 R&D loop,直跑单因子 | 与 multialpha 差异化,追求最快 |
+| 定位 | 绕过 R&D loop,直跑单因子 | 与 multiα1pha 差异化,追求最快 |
 | NL→代码 | 单次 LLM 生成,不修正 | 最快出图,失败返回原始错误 |
 | 结果展示 | 核心指标 + 收益曲线 | 精简,覆盖判断因子好坏的核心维度 |
 | 数据范围 | 固定 csi300 + 默认日期段 | 零配置,最快上手 |
@@ -223,7 +223,7 @@ web/
 
 `services/rdagent-api.ts` 新增 `runFastBacktest(payload)` —— 用 `fetch` + `ReadableStream` 手动解析 SSE 帧(EventSource 不支持 POST body)。
 
-### 5.2 视觉规范(对齐 multialpha,从 `tokens.css` 提取)
+### 5.2 视觉规范(对齐 multiα1pha,从 `tokens.css` 提取)
 
 **设计令牌**(严格复用 `web/src/multialpha/styles/tokens.css`):
 ```css
@@ -250,7 +250,7 @@ web/
 - 数据/代码/eyebrow 标签:`'JetBrains Mono','SF Mono',Consolas,monospace`
 
 **组件模式**(从首页复用):
-- **头部 TopBar**:国新证券 logo(`https://h5.crsec.com.cn/logo.png`)+ 小字"国新证券"(letter-spacing 2.5px)/ 大字"MultiAlpha"(Noto Serif SC)。右侧 text 文字按钮。**直接复用 `TopBar.vue` 或复制其结构。**
+- **头部 TopBar**:国新证券 logo(`https://h5.crsec.com.cn/logo.png`)+ 小字"国新证券"(letter-spacing 2.5px)/ 大字"Multiα1pha"(Noto Serif SC)。右侧 text 文字按钮。**直接复用 `TopBar.vue` 或复制其结构。**
 - **章节标题 section-heading**:金色边框编号块(38×38,`1px solid #b99a50`,JetBrains Mono 编号)+ eyebrow 小标签(letter-spacing 2px)+ Serif 大标题 + 灰色 small 副标题。
 - **白卡片**:白底 + `1px solid #d7d5ce` 边 + 6px 圆角 + 微阴影。
 - **深色终端 terminal-frame**(进度时间线用):`#0a0d13` 底 + 网格背景(`#ffffff0b` 1px 线,48px 间距)+ 金色径向光晕 + 金色 LIVE 指示。
@@ -345,7 +345,7 @@ function run(payload: { alpha158?: string[]; description?: string }) {
 | `web/src/fastbacktest/use-fastbacktest.ts` | composable(SSE + 状态机) |
 | `web/src/fastbacktest/api.ts` | re-export |
 | `web/src/fastbacktest/components/*.vue` | 6 个组件(Picker/Input/Timeline/Metrics/Chart) |
-| `web/src/fastbacktest/styles/fastbacktest.css` | 复用 multialpha 令牌 |
+| `web/src/fastbacktest/styles/fastbacktest.css` | 复用 multiα1pha 令牌 |
 | `rdagent/app/fast_backtest.py`(或直接在 app.py 内) | 编排函数 `run_fastbacktest` |
 
 ### 修改
@@ -374,4 +374,4 @@ function run(payload: { alpha158?: string[]; description?: string }) {
 - [ ] 两者可组合输入
 - [ ] 回测产出的 trace 在 `/predict/experiments` 列表中可见
 - [ ] 该 trace 可成功触发 `POST /predict/run` 并产出 T+1 预测
-- [ ] 视觉与 multialpha 首页一致(浅色 + 金色 + Serif + 深色终端进度)
+- [ ] 视觉与 multiα1pha 首页一致(浅色 + 金色 + Serif + 深色终端进度)

@@ -150,7 +150,7 @@
 | P1-4 | `messages.value = [...messages.value, ...updates]` 全数组重建（触发所有 computed 失效） | ✅ 已修（改 `push`） | `bdd45209` |
 | P1-5 | `AgentFlow.vue` 5 个 `latest(tag)` 重复扫描（5 × 数组复制+反转） | ✅ 间接优化 | `117081a1` |
 | P1-6 | iframe plotly chart 无 hash 约束，每次 poll 可能重建（50-150ms 重绘） | ✅ 已修（加 `stableChartHtml` 长度比较） | `117081a1` |
-| P2-7 | LogConsole + use-multialpha 双轮询无合并（42 req/min） | ✅ 已修（LogConsole 退避 2s→8s） | `117081a1` |
+| P2-7 | LogConsole + use-multiα1pha 双轮询无合并（42 req/min） | ✅ 已修（LogConsole 退避 2s→8s） | `117081a1` |
 | P2-12 | LRU 缓存上限 2 太小 | ✅ 已修（提到 5） | `bdd45209` |
 
 **结论**：消息条数不大，主要放大项是多轮图表 HTML。优化数组循环只能降次要 CPU 开销，不能解决首页和详情的数据体积问题。
