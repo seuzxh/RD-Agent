@@ -1,4 +1,3 @@
-{% raw %}
 # 假设生成智能体（HypothesisGen）
 
 > **定位**：multiα1pha R&D 循环的"大脑"与"研究员"。基于历史实验反馈、SOTA 结果和领域知识，生成可验证、可执行的科学假设，为后续的代码实现与实验验证提供方向。
@@ -640,7 +639,7 @@ HypothesisGen 有三个具体子类，分别对应三种场景：`QlibFactorHypo
 
 **targets 值**：`"model tuning"`
 
-> ⚠️ **代码 bug：SOTA 键名大小写不匹配**：`prepare_context` 返回字典中使用大写 `SOTA_hypothesis_and_feedback`（[model_proposal.py#L53](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/model_proposal.py#L53)），但基类 `gen()` 读取时用的是小写 `sota_hypothesis_and_feedback`（[components/proposal/__init__.py#L53-L55](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L53-L55)）。由于 `"sota_hypothesis_and_feedback" in context_dict` 判断为 `False`，基类会取默认值 `""`，导致 user prompt 中 `{% if sota_hypothesis_and_feedback != "" %}` 分支**永远不渲染**——即模型场景虽然计算了 SOTA 文本，但实际上并未发送给 LLM。同样的问题也存在于全流程场景（[quant_proposal.py#L157](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/quant_proposal.py#L157)）。这是代码缺陷，不是预期行为。
+> ⚠️ **代码 bug：SOTA 键名大小写不匹配**：`prepare_context` 返回字典中使用大写 `SOTA_hypothesis_and_feedback`（[model_proposal.py#L53](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/model_proposal.py#L53)），但基类 `gen()` 读取时用的是小写 `sota_hypothesis_and_feedback`（[components/proposal/__init__.py#L53-L55](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/proposal/__init__.py#L53-L55)）。由于 `"sota_hypothesis_and_feedback" in context_dict` 判断为 `False`，基类会取默认值 `""`，导致 user prompt 中 {% raw %}`{% if sota_hypothesis_and_feedback != "" %}`{% endraw %} 分支**永远不渲染**——即模型场景虽然计算了 SOTA 文本，但实际上并未发送给 LLM。同样的问题也存在于全流程场景（[quant_proposal.py#L157](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/scenarios/qlib/proposal/quant_proposal.py#L157)）。这是代码缺陷，不是预期行为。
 
 **关键特点**：
 - 模型场景**意图**额外提供 SOTA 引用（但受上述大小写 bug 影响，当前实际未送达 LLM）
@@ -933,4 +932,3 @@ Hypothesis(
 | 主循环调用 | [rdagent/components/workflow/rd_loop.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/workflow/rd_loop.py#L199-L210) |
 | LiteLLM路由 | [rdagent/oai/backend/litellm.py](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/oai/backend/litellm.py) |
 
-{% endraw %}
