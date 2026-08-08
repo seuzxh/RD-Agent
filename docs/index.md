@@ -67,6 +67,7 @@ layout: default
 - [04. Summarizer 反馈总结](agents/04-summarizer.md) — 回测结果分析、SOTA 对比、反馈生成与决策
 - [05. Hypothesis2Experiment 假设转实验](agents/05-hypothesis2experiment.md) — 抽象假设转化为结构化可执行任务列表
 - [06. Trace 实验轨迹](agents/06-trace.md) — 实验历史记录、SOTA追踪、DAG演化关系、目录结构与持久化机制
+- [07. Prompt 模板系统](agents/07-prompts.md) — 12个prompts.yaml、40+模板的作用/变量/渲染示例/调用链路
 
 ## 🔄 应用场景
 
