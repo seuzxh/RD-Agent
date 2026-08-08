@@ -247,6 +247,69 @@ Loop_0.record
 
 [base.py#L316](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/oai/backend/base.py#L316) 中定义了 `session_{conversation_id}` 上下文 tag，但实际走 litellm backend 时不经过该 wrapper，所以实际产物中通常看不到这一层。
 
+### 6.2 evo_loop 的执行粒度
+
+一个常见误解是：每个 evo_loop 只处理一个因子，如果有 10 个因子、max_loop=5，就会执行 50 次。**实际并非如此。**
+
+每个 evo_loop 处理的是**当前实验中的全部因子**，而不是逐个因子。关键代码在 [CoSTEER/__init__.py#L129](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/components/coder/CoSTEER/__init__.py#L129)：
+
+```python
+logger.log_object(evo_exp.sub_workspace_list, tag="evolving code")
+```
+
+`sub_workspace_list` 是一个列表，包含所有因子的 workspace。因此 `evolving.codes` 消息的内容是一个列表，10 个因子就有 10 个元素。
+
+以 10 个因子、max_loop=5 为例：
+
+```
+coding 步开始，调用 CoSTEER.develop(experiment)  （experiment 含10个因子）
+│
+├── evo_loop_0  ── 同时为10个因子生成代码，一起运行、一起评估
+│   ├── evolving code     → [因子0, 因子1, ..., 因子9]  ← 一个列表，10个元素
+│   ├── evolving feedback → [通过, 失败, 通过, ..., 失败]
+│   └── 假设3个失败，7个通过
+│
+├── evo_loop_1  ── 只修复那3个失败的因子（通过的7个直接复用，不再调LLM）
+│   ├── evolving code     → [因子0, 因子1', ..., 因子9]  ← 部分更新
+│   ├── evolving feedback → [通过, 通过, ..., 失败]
+│   └── 还剩1个失败
+│
+├── evo_loop_2  ── 修复最后1个
+│   └── 全部通过 → feedback.finished() = True → 提前 break
+│
+└── 结束（实际只跑了3轮，不是5轮，更不是50轮）
+```
+
+终止条件有两个（[evolving_agent.py#L196-L198](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/evolving_agent.py#L196-L198)）：
+
+1. **全部因子通过** → `feedback.finished()` 返回 True，提前退出
+2. **达到 max_loop 上限**（如5）→ 强制结束，未通过的因子保留最近一次可接受的版本（fallback 机制）
+
+所以实际 evo_loop 轮数取决于代码质量，通常远小于 max_loop。
+
+### 6.3 evo_loop 与遗传算法的关系
+
+CoSTEER 的名字虽然包含"Evolutionary"，但它**不是传统意义上的遗传算法**。代码中没有染色体交叉（crossover）、随机变异（mutation）、锦标赛选择等经典遗传算子。它的"进化"本质是 **RAG 增强的 LLM 迭代纠错循环**。
+
+不过，两者在概念上确实有对应关系，可以帮助理解：
+
+| 遗传算法概念 | CoSTEER 中的对应机制 | 区别 |
+|-------------|---------------------|------|
+| **种群** | 一个 `EvolvingItem` 中的多个 `sub_tasks`（多个因子） | 不是多种群竞争，而是单个体内多个子任务并行修复 |
+| **适应度（Fitness）** | `final_decision`（bool）+ 回测指标 | 只有通过/不通过的二元判断，没有连续适应度分数 |
+| **选择（Selection）** | 每轮开始时任务三分类：已成功→复用，失败超限→淘汰，其余→修复 | 由 RAG 知识库和上轮反馈决定，不是概率选择 |
+| **变异（Mutation）** | LLM 根据反馈生成修正代码 | 是**定向修复**而非随机变异，提示词明确要求"基于上一轮修改，不要推倒重来" |
+| **交叉（Crossover）** | RAG 检索到的相似成功实现注入 prompt | LLM 借鉴参考代码，不做字面拼接 |
+| **精英保留（Elitism）** | fallback 机制：每轮保存可接受版本的快照，退化时回退 | 保留最后一个通过的版本，防止越改越差 |
+
+核心循环见 [evolving_agent.py#L145-L198](file:///home/zxh/projects/1.multialphaV/RD-Agent/rdagent/core/evolving_agent.py#L145-L198)，每轮做三件事：
+
+1. **RAG 查询**：检索相似成功代码、相似错误修复对、历史失败轨迹
+2. **LLM 修复**：把"上一轮代码 + 错误反馈 + 参考知识"喂给 LLM，生成修正版
+3. **评估**：运行代码，收集反馈，判断是否全部通过
+
+用一句话概括：**evo_loop 是"写代码 → 跑代码 → 看报错 → 让 LLM 改"的迭代循环，不是遗传算法中的代际进化。** 它借用了"进化"的隐喻（逐代改进、适者生存），但驱动力是 LLM 的代码理解能力 + RAG 知识检索，而非随机搜索。
+
 ---
 
 ## 7. 设计上的注意事项
