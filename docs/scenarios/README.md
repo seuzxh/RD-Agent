@@ -33,6 +33,7 @@ multiα1pha 提供四种量化研究挖掘场景，适用于不同的研究需�
 |------|------|---------|
 | 🔍 因子挖掘 | [01-factor.md](01-factor.md) | 从零开始自动探索 alpha 因子，发现新的量价/基本面/ML 因子 |
 | 📄 研报复现 | [02-report.md](02-report.md) | 从券商 PDF 研报中提取因子公式并自动编码验证 |
+| 📄 研报复现 ↳ PDF 上传与识别流程 | [02-report-pdf-pipeline.md](02-report-pdf-pipeline.md) | PDF 上传、文本提取、NLP 因子识别管道的详细技术解析 |
 | 🧠 模型调优 | [03-model.md](03-model.md) | 基于固定因子集优化 PyTorch 预测模型架构和超参数 |
 | 🔄 全流程协同 | [04-quant.md](04-quant.md) | 因子和模型协同进化，Bandit/LLM 自动分配探索资源 |
 
