@@ -24,46 +24,7 @@
 > - 🟡 **待补充**：⚠️ **必须找项目负责人提供的内容**（数字/截图/文案）
 > - 🖼 **需截图**：📸 **必须准备的真实产品截图清单**
 > - 💡 **讲述要点**：路演时这一页要讲什么话（给主讲人）
-> - 🎨 **视觉建议**：排版、颜色、布局建议
 > - ✅ **交付物**：这一页做完后要包含哪些元素（给制作人员核对）
-
----
-
-## 🎨 全局视觉规范（所有页必须统一）
-
-### 配色方案
-| 用途 | 色值 | 说明 |
-|---|---|---|
-| 页面背景 | `#0d0d12` / `#161616` | 深色底，科技感 |
-| 主色（蓝） | `#33b1ff` | 主要强调、kicker、链接 |
-| 辅色（紫） | `#8a3ffc` | 反馈智能体、第二强调 |
-| 强调色（金） | `#f1c21b` | 核心亮点、关键数据、NeurIPS |
-| 成功色（绿） | `#42be65` | 正面结果、入库、提升 |
-| 警示色（粉） | `#ff7ab6` | 待补充占位符、失败状态 |
-| 正文文字 | `#f4f4f4` | 白色 |
-| 次要文字 | `#c6c6c6` | 灰色，用于 lead 说明、注释 |
-
-### 字体规范
-| 用途 | 字体（英文） | 字体（中文） |
-|---|---|---|
-| 大标题 | IBM Plex Sans Condensed | 思源黑体 Bold |
-| 正文 | IBM Plex Sans | 思源黑体 Regular |
-| 代码/数字/标签 | IBM Plex Mono / JetBrains Mono | - |
-
-### 页面规格
-- **尺寸**：16:9，**1920×1080** 输出
-- **页边距**：四周 72px
-- **每页固定元素**：
-  - 🔝 左上：彩色 kicker（小节标签，全大写、字距 0.06em、蓝色 `#33b1ff`，如 "RD-AGENT · 项目总览"）
-  - 🔝 右上：页码 `XX / 09`（小字号、灰色、固定位置）
-  - 📝 标题下方：一句话 lead（灰色 `#c6c6c6`、不超过 52 字符宽，概括这页内容）
-  - 🔚 底部：必要时放"关键指标条"（4 个数字并排展示）
-
-### 组件样式
-- **卡片/面板**：圆角 8px，1px 半透明白描边 `rgba(244,244,244,0.14)`，内边距 22-26px，背景 `rgba(255,255,255,0.025)`
-- **标签/tag**：药丸形（圆角 999px）、边框+淡底色、等宽字体、12-13px
-- **占位符样式**：所有待填数据统一用粉色虚框 `__`（`#ff7ab6` 色），方便查找替换
-- **图标/示意图**：优先用简约线性图标，避免复杂 3D 效果
 
 ---
 
@@ -168,8 +129,6 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 - 🧪 **一键测试按钮**：不消耗正式 run token，独立验证模型连通性
 - 💾 Prefect 缓存：相同 prompt 命中即 ¥0
 
-🎨 视觉建议：右栏用"路由"示意图——4 个 phase 卡片，每个卡片右侧一个芯片图标代表"可插拔模型"，用不同颜色区分"强模型/中等模型/轻模型"。
-
 📖 引用：`web/src/multialpha/use-multialpha.ts`（分步路由）、`rdagent/oai/backend/`（多后端）
 🟡 待补充：当前默认用哪 4 个模型（填到表格里）
 
@@ -186,7 +145,7 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 - [ ] 左栏：4 个场景入口卡片（蓝/紫/金/绿 4 色区分），每个含图标色点+名称+CLI命令+一句话说明
 - [ ] 中栏：5 智能体横排流程图（HypothesisGen→Developer→Runner→Summarizer→H2E↺），每个节点有标签+名称+一句话职责；H2E/Summarizer 用紫色
 - [ ] 右栏（金色高亮！重点突出）："多 LLM 分步路由"面板，4 行小表（HypothesisGen/Developer/Summarizer/H2E 各配什么模型），下方 3 个标签（任意OpenAI端点/一键测试/Prefect缓存）
-- [ ] 底部标签云：7 个药丸标签
+- [ ] 底部标签云：7 个标签
 - [ ] 页码：01 / 09（右上角）
 
 ---
@@ -228,8 +187,6 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 | 学术认可 | 粉（NeurIPS） | NeurIPS'25 | R&D-Agent-Quant 录用 |
 | 效果提升 | 绿（成功） | +🟡 __% | IC vs Alpha158+Linear 基线 |
 
-🎨 视觉建议：每个卡片数字用 64px 超大号字体，单位/副标灰色 15px；NeurIPS 卡片可加 🏆 图标。
-
 ### 下半左 · 🖼 **必需要的 3 张截图（重要！）**
 这一页必须有真实产品截图，否则像 PPT 项目。请按优先级准备：
 
@@ -244,7 +201,7 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 🟡 **行动项**：请你启动前端跑一个真实任务，截上述 3 张 P0 截图发我，或者告诉我截图路径。
 
 ### 下半右 · 论文列表 + 关键效率指标
-**论文标签**（药丸形）：
+**论文标签**：
 - 蓝色：R&D-Agent (2505.14738)
 - 紫色：R&D-Agent-Quant NeurIPS'25
 - 蓝色：Data-Centric R&D (2404.11276)
@@ -288,9 +245,9 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 - [ ] 主标题："不是 PPT 项目——我们跑出来了"
 - [ ] Lead："端到端量化流水线已落地..."
 - [ ] 上半：4 个大数字卡片（等宽 4 栏），分别是累计任务数/V2成功率/NeurIPS'25/IC提升，数字用超大字号
-- [ ] 下半左（2/3 宽度）：**3 张真实截图拼图**（P0-1 主界面、P0-2 Trace详情、P1 回测面板），用卡片框起来；如果还没截图，放粉色虚线占位框标注 `[P0 截图待补]`
+- [ ] 下半左（2/3 宽度）：**3 张真实截图拼图**（P0-1 主界面、P0-2 Trace详情、P1 回测面板），用卡片框起来；如果还没截图，放占位框标注 `[P0 截图待补]`
 - [ ] 下半右（1/3 宽度）：
-  - [ ] 6 个论文标签（药丸形，蓝/紫色区分）
+  - [ ] 6 个论文标签（蓝/紫色区分）
   - [ ] "另有 B1~B5 五篇 GNN 模型..."小字说明
   - [ ] 紫色 accent-card：4 行效率指标（单任务loop/收敛时间/SOTA因子/KB节点）
 - [ ] 页码：02 / 09
@@ -331,8 +288,6 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 | **LLM**（默认） | 默认配置 | 基于历史 Trace + 当前 SOTA，LLM 直接生成新假设 | 默认路径，质量最高 | [qlib/proposal/*.py](file:///workspace/rdagent/scenarios/qlib/proposal/) |
 | **Random** | 知识库为空 / 冷启动 | 在假设空间均匀采样 | 冷启动、探索新方向 | [core/proposal.py](file:///workspace/rdagent/core/proposal.py) |
 | **Bandit (LinTS)** ⭐ | `action_selection=bandit` | 线性汤普森采样，把"研究因子/研究模型"当两个臂，按历史 IC 奖励更新后验 | 均衡探索-利用，长期自动分配精力 | [qlib/proposal/bandit.py](file:///workspace/rdagent/scenarios/qlib/proposal/bandit.py) `LinearThompsonTwoArm` |
-
-🎨 视觉建议：LinTS 那一行用金色高亮，标出"LinTS (ICML 2013)"。Bandit 用一个"双臂老虎机"小图标——左臂写"因子"、右臂写"模型"，当前哪个概率大就把哪个臂画高一点。
 
 📖 引用：`docs/papers/07-contextual-thompson-sampling.md`
 
@@ -424,8 +379,6 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 | 05 | **Debug** | Evaluator 在 Docker 里跑，收集报错/指标 | 常规 |
 | 06 | **Evolve** | 失败则进入下一轮，成功则入库；最多 10 轮，兜底回退到最近可接受方案 | 常规 |
 
-🎨 视觉建议：6 个卡片用箭头连接，Retrieve 卡片金色加粗描边；右下角加一个循环箭头"↻ 最多 10 轮"。
-
 🔧 代码锚点：
 - [CoSTEER/evolving_strategy.py](file:///workspace/rdagent/components/coder/CoSTEER/evolving_strategy.py) 主循环
 - [CoSTEER/evaluators.py](file:///workspace/rdagent/components/coder/CoSTEER/evaluators.py) 评估器
@@ -452,8 +405,6 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 - B4 PMLP：🟡 __%（★★ 路径 MLP，基线）
 - B5 LinkX：🟡 __%（★★★★ 十亿边大图）
 
-🎨 视觉建议：柱图横向，每根柱子右侧标注难度星数；B2 ViSNet 用粉色标出"最困难"；画一条参考线表示"V1 水平"，体现 V2 全面超过。
-
 📖 引用：
 - `docs/papers/04-costeer.md`（CoSTEER 论文 2407.18690）
 - `docs/papers/benchmarks/`（B1~B5 5 篇 GT 论文）
@@ -472,7 +423,7 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 - [ ] 主标题："编码智能体：像工程师一样多轮迭代"
 - [ ] Lead："LLM 一次写不对没关系——写、跑、看报错、查资料、改..."
 - [ ] 上半：6 步流水线横排卡片（Role→Retrieve→Think→Code→Debug→Evolve）
-  - [ ] Retrieve 卡片金色高亮加粗描边（标注 ⭐ V2 新增）
+  - [ ] Retrieve 卡片金色高亮（标注 ⭐ V2 新增）
   - [ ] Evolve 卡片有循环箭头"↻ 最多 10 轮"
 - [ ] 下半左（2/3 宽度）：
   - [ ] V2 三连查 3 个卡片（former_trace/component/error），每个有人话解释（别再犯/照着写/照着修）
@@ -528,12 +479,6 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 | ③ | RAG 通用外挂 | [components/agent/rag/](file:///workspace/rdagent/components/agent/rag/) | 任意 phase，自定义源 | 任意 phase 主动挂载 | 外部 MCP server | 接券商研报、会议纪要、自定义文档问答 |
 | ④ | SOTA 知识库 | [core/knowledge_base.py](file:///workspace/rdagent/core/knowledge_base.py) + [log/sota_query.py](file:///workspace/rdagent/log/sota_query.py) | 项目内，量化经验 | Runner 跑完每个因子自动查同 model 下 SOTA 继承 | pickle 文件持久化 | 因子继承、实验反查、避免重造轮子 |
 
-🎨 视觉建议：
-- ① V2 用蓝色描边、蓝底，占 2 列 × 2 行（左半主要区域）
-- ②③④ 用小卡片，分别用紫/金/绿边
-- 4 个卡片之间用细线连接成"田"字形，但 ① 是明显的大块
-- 每个卡片内：编号圆圈 + 名称（标题）+ 标签（范围/触发时机）+ 2-3 条要点
-
 📖 引用：`docs/papers/04-costeer.md`（V2 详述）
 🟡 待补充：
 - V2 图谱节点数（component/task/trace/impl/error 各多少）
@@ -548,7 +493,7 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 - [ ] 主标题："V2 知识图谱为主 · 3 个配套补充"
 - [ ] Lead："项目内编码经验 + 跨项目三方库文档 + ..."
 - [ ] 4 象限田字布局：
-  - [ ] ① V2 知识图谱（左侧 2×1 大块，蓝色描边蓝底，明显大于其他三个）：含标题、标签（项目内·编码阶段·每轮必查）、3 个要点（5类节点/三连查/自动写回）
+  - [ ] ① V2 知识图谱（左侧 2×1 大块，明显大于其他三个）：含标题、标签（项目内·编码阶段·每轮必查）、3 个要点（5类节点/三连查/自动写回）
   - [ ] ② Context7 外部文档（右上小卡，紫色边）：跨项目·报错修复·MCP外挂
   - [ ] ③ RAG 通用外挂（右中小卡，金色边）：任意Phase·自定义文档源
   - [ ] ④ SOTA 知识库（右下小卡，绿色边）：项目内·量化经验·pickle
@@ -609,8 +554,6 @@ T2  [蓝-迭代]  Dev: error_query命中修复 → Run: IC=0.07
 T3  [绿-入库]  Run: IC=0.08, 年化+__% → Sum: 超越SOTA, 写入知识库 🎉
 ```
 
-🎨 视觉建议：每行左边一条 4px 粗竖线（红/红/蓝/绿），等宽字体显示流程；T3 加绿色🎉标记入库动作。
-
 🖼 截图需求：
 - 🔴 **P0**：从 `log/ui` 前端截一个真实 trace 的时间线详情页（最好能看到 T0→T3 这种演化过程）
 
@@ -630,7 +573,7 @@ T3  [绿-入库]  Run: IC=0.08, 年化+__% → Sum: 超越SOTA, 写入知识库 
   - [ ] 右栏 Summarizer 卡片（紫色）：4 维反馈（可执行性/信号质量/vs SOTA/下一步建议）
 - [ ] 下半 Trace 时序示例（4 行）：
   - [ ] T0 红（失败）→ T1 红（报错）→ T2 蓝（迭代修复）→ T3 绿（成功入库🎉）
-  - [ ] 每行左边有颜色竖线，用等宽字体
+  - [ ] 每行左边有颜色竖线
   - [ ] 🔴 P0 可替换为真实前端 Trace 时间线截图
 - [ ] 页码：06 / 09
 
@@ -676,8 +619,6 @@ T3  [绿-入库]  Run: IC=0.08, 年化+__% → Sum: 超越SOTA, 写入知识库 
 | Summarizer | 🟡 __% | 紫色 |
 | H2E | 🟡 __% | 绿色 |
 | Runner | 0%（不调 LLM） | 灰色 |
-
-🎨 视觉建议：横向条形图（按占比从大到小排），Developer 那条金色加粗；或者环形饼图中间放"单任务 ¥__"。
 
 ### 右 · "为什么要多模型"饼图解读（3 条 bullet）
 - 🔑 **Developer 是 token 大户**（占 __%）→ 必须用 coding 专精模型（kimi-k2.7-code / deepseek-v4-flash），提升成功率等于直接降本
@@ -801,7 +742,7 @@ POC 进展：🟡 如有试点客户/合作机构，写"已与 __ 家机构沟�
 - [ ] Kicker："应用场景 · 商业价值"
 - [ ] 主标题："三类客群 · 一条朴素商业逻辑"
 - [ ] Lead："一个资深量化研究员年薪 50-100w..."
-- [ ] 上半：3 个等宽客群卡片（蓝/紫/金），每个含图标编号+客群名+痛点（粉色小字）+价值说明
+- [ ] 上半：3 个客群卡片（蓝/紫/金），每个含图标编号+客群名+痛点（小字）+价值说明
   - [ ] 01 券商自营/公募（蓝）：合规内网、顶N人
   - [ ] 02 量化私募（紫）：跨市场、24h跑
   - [ ] 03 教育/研究机构（金）：可复现、一键起
@@ -846,12 +787,10 @@ POC 进展：🟡 如有试点客户/合作机构，写"已与 __ 家机构沟�
 | 03 | 金 | 产品创新 | 多 LLM 分步路由 + 模型测试按钮，不绑定单一厂商，按任务挑模型降本 |
 | 04 | 绿 | 评估创新 | 端到端 Paper-to-Code Benchmark（B1~B5 五个 GNN 模型），可量化可复现 |
 
-🎨 视觉建议：4 个小卡片，每个左边 3px 彩色竖条（蓝/紫/金/绿），右上显示编号 INNOV·01 等（等宽字体、彩色）。
-
 ### 右上 · 学术成果
 - **🏆 NeurIPS 2025（金色大字）**
   - R&D-Agent-Quant: Automating Quantitative Finance Research with LLM-based Multi-Agent System (arXiv:2505.15155)
-- **论文标签云**（药丸）：
+- **论文标签云**：
   - 蓝：R&D-Agent (2505.14738)、Data-Centric R&D (2404.11276)、Multi-Agent Quant (2505.13172)
   - 紫：CoSTEER (2407.18690)
   - 金：LinTS (ICML 2013)
@@ -885,7 +824,7 @@ POC 进展：🟡 如有试点客户/合作机构，写"已与 __ 家机构沟�
   - [ ] 右上（金色高亮！学术背书）：
     - 🏆 NeurIPS 2025 大金字
     - 论文标题 + arXiv 号
-    - 5 个论文标签药丸
+    - 5 个论文标签
     - "B1~B5 GT: GPS · ViSNet · DiGNet · PMLP · LinkX"
     - 在投论文（有则填）
 - [ ] 下半：3列路线图（蓝/紫/金）
@@ -912,9 +851,7 @@ POC 进展：🟡 如有试点客户/合作机构，写"已与 __ 家机构沟�
 - [ ] P5 紧跟 P4，知识库在 CoSTEER 之后（逻辑顺：编码→存经验）
 - [ ] P7 Token 条形图在多LLM路由页（逻辑顺：先看花在哪→再讲怎么省钱）
 - [ ] P3 4个入口场景（因子/模型/组合/研报）区分清楚了
-- [ ] P1 右栏多LLM映射是金色高亮（差异化亮点）
-- [ ] 字体统一：标题用无衬线粗体，代码/数字用等宽字体
-- [ ] 配色统一：蓝/紫/金/绿/粉，没有乱加颜色
+- [ ] P1 右栏多LLM映射是差异化亮点
 - [ ] 按「💡 讲述要点」顺一遍，8-10分钟能讲完
 - [ ] 导出PDF备份一份
 
