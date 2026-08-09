@@ -144,34 +144,53 @@ RD-Agent 官方 [Issue #918](https://github.com/microsoft/RD-Agent/issues/918) �
 
 ---
 
-## 四、发现的问题
+## 四、发现的问题与修复
 
-### 4.1 🔴 前端 Bug：新建任务跳转后偶发 404（复现）
+### 4.1 ✅ 已修复：新建任务跳转后偶发 404
 
-**现象**：新建任务经 `handleCreate` 跳转到详情页时，偶发显示「404 · TRACE NOT FOUND」。刷新页面后恢复。
+**现象**：新建任务经 `handleCreate` 跳转到详情页时，偶发显示「404 · TRACE NOT FOUND」。刷新后恢复。
 
-**复现**：
-- Quant 任务 `grilled-lard`：首次打开 URL → 404 → 刷新后正常
-- Model 任务 `drab-guide`：首次导航 → 404 → 刷新后正常
-- 两场景均复现
+**根因**：`/upload/poll` 检查 `scenario/` 目录存在（`is_dir`），但 `/traces` 要求目录下有 `.pkl` 文件（`rglob("*.pkl")`）。子进程 `FileStorage.log` 先 `mkdir` 后写 pkl，两者之间的窗口导致 `ready=true` 但 `/traces` 看不到任务。
 
-**根因**：`/upload` 不初始化 `trace_states`（commit `bfc7bd72`），`loadTraceIds` 调 `/traces` 时新任务可能尚未在列表中 → `invalidTrace` 判 true → 404。
+**修复**（`04df5b25`）：`/upload/poll` 改为 `any((trace_dir / "scenario").rglob("*.pkl"))`，与 `/traces` 标准对齐。
 
-**影响**：每次新建任务后首次访问有概率 404（取决于 `/traces` 响应速度 vs pkl 落盘速度）。
+### 4.2 ✅ 已修复：CoSTEER 超时 600s 太短
 
-**修复建议**：`handleCreate` 在 `waitForTaskReady` 后，应确认 `/traces` 返回包含新 id 再跳转；或在 `invalidTrace` 中增加宽限期（loading 完成后延迟几秒再判 404）。
+**现象**：LSTM 训练在 Epoch 0 evaluating 阶段被 600s 超时 kill。
 
-### 4.2 🟡 Model 场景：LSTM 训练超时（环境限制）
+**根因**：`model_coder/conf.py` 和 `factor_coder/config.py` 的 `get_model_env/get_factor_env` 默认 `running_timeout_period=600`，覆盖了 `QlibDockerConf` 的 3600s 默认值。
 
-**现象**：LSTM 模型在 47 万样本上训练，单 epoch > 600 秒被 kill。
+**修复**（`bff66ae6`）：两个文件的默认值改为 3600。
 
-**影响**：fin_model 场景中复杂模型（LSTM/GRU）容易超时。简单模型（LightGBM/Linear）不受影响。
+### 4.3 ✅ 已修复：Model 场景 DataLoader 死锁
 
-**建议**：
-- 提高 Docker 超时限制（当前 600s）或使其可配置
-- 或在模型描述中提示用户选择轻量模型
+**现象**：超时改为 3600s 后，LSTM 训练在 evaluating 阶段永久死锁（CPU/GPU 均 0%）。
 
-### 4.3 🟢 Quant 场景：无问题
+**根因**：Qlib `GeneralPTNN` 的 DataLoader `n_jobs > 0` 在 Docker 容器内 epoch 切换时 IPC 死锁。
+
+**修复**（三轮验证）：
+
+| 配置 | 结果 |
+|---|---|
+| `n_jobs=20` + `ipc=private` | ❌ Epoch 1 死锁 |
+| `n_jobs=5` + `ipc=host` | ❌ Epoch 3 死锁 |
+| **`n_jobs=1` + `ipc=host`** | **✅ 连续 12 epoch 无死锁** |
+
+**最终修复**：
+- `7e770cd2`：`env.py` `DockerConf.ipc_mode = "host"`
+- `fae925ee`：`conf_baseline_factors_model.yaml` + `conf_sota_factors_model.yaml` `n_jobs: 1`
+
+### 4.4 ⚠️ 升级注意：未来复查清单
+
+升级 Qlib 或 RD-Agent 后，以下三项配置可能被覆盖回默认值，需复查：
+
+| 配置 | 文件 | 修复值 | 官方默认值 |
+|---|---|---|---|
+| `n_jobs` | `model_template/conf_*.yaml` | **1** | 20 |
+| `ipc_mode` | `rdagent/utils/env.py` DockerConf | **host** | None (private) |
+| `running_timeout_period` | `model_coder/conf.py` + `factor_coder/config.py` | **3600** | 600 |
+
+### 4.5 🟢 Quant 场景：无问题
 
 Quant 场景完整跑完，所有前端渲染正确，无任何问题。
 
@@ -181,10 +200,10 @@ Quant 场景完整跑完，所有前端渲染正确，无任何问题。
 
 | 维度 | Factor | Quant | Model |
 |---|---|---|---|
-| R&D 循环完成 | ✅ | ✅ | ⚠️ 回测超时 |
-| 消息流完整性 | 全部 tag | 全部 tag | 缺 metric/chart |
-| 详情页渲染 | ✅ 全正确 | ✅ 全正确 | ✅ 正确（含空态处理） |
-| 运行时长 | ~1-3 分钟 | ~6 分钟 | ~11 分钟 |
+| R&D 循环完成 | ✅ | ✅ | ✅（修复后） |
+| 消息流完整性 | 全部 tag | 全部 tag | 全部 tag |
+| 详情页渲染 | ✅ 全正确 | ✅ 全正确 | ✅ 全正确 |
+| 运行时长 | ~1-3 分钟 | ~6 分钟 | ~12 分钟 |
 | Tab 禁用逻辑 | — | — | ✅ 曲线 Tab 正确 disabled |
 
-**核心结论**：三个场景共享相同的前端组件和渲染逻辑，Factor 和 Quant 完全通过，Model 因 LSTM 超时未产出指标但前端展示正确。
+**核心结论**：三个场景共享相同的前端组件和渲染逻辑，全部通过。Model 场景的 DataLoader 死锁已通过 `n_jobs=1` + `ipc=host` 彻底修复。
