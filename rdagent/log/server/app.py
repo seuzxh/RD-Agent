@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import random
+import threading
 import traceback
 from collections import defaultdict
 from contextlib import redirect_stderr, redirect_stdout
@@ -109,6 +110,7 @@ class RDAgentTask:
         trace_name: str,
         ui_server_port: int | None = None,
         create_process: bool = True,
+        assigned_gpu: int | None = None,
     ) -> None:
         self.target_name = target_name
         self.kwargs = kwargs
@@ -117,6 +119,7 @@ class RDAgentTask:
         self.scenario = scenario
         self.trace_name = trace_name
         self.ui_server_port = ui_server_port
+        self.assigned_gpu = assigned_gpu
         self.process: Process | None = None
 
         # Two IPC queues for user interaction.
@@ -165,6 +168,9 @@ class RDAgentTask:
 
     def _run(self) -> None:
         import os as _os
+        # GPU 轮转：子进程隔离到分配的物理 GPU
+        if self.assigned_gpu is not None:
+            _os.environ["CUDA_VISIBLE_DEVICES"] = str(self.assigned_gpu)
         # Ensure critical env vars survive into the forked subprocess.
         # Some environments (nohup, systemd) don't propagate these properly.
         if not _os.environ.get("CONDA_DEFAULT_ENV"):
@@ -224,6 +230,37 @@ class RDAgentTask:
 
 rdagent_processes: dict[str, RDAgentTask] = {}
 log_folder_path = Path(UI_SETTING.trace_folder).absolute()
+
+# ==================== GPU 池（多任务轮转分配）====================
+def _detect_gpu_count() -> int:
+    """启动时自动探测可用 GPU 数量。"""
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=index", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=5)
+        return len([l for l in result.stdout.strip().split("\n") if l.strip()])
+    except Exception:
+        return 0
+
+_gpu_pool_lock = threading.Lock()
+_gpu_pool: set[int] = set()       # 已分配的 GPU id
+_gpu_total: int = _detect_gpu_count()
+
+def _acquire_gpu() -> int | None:
+    """分配一个空闲 GPU。全部占用时返回 None（降级为共享全部 GPU）。"""
+    if _gpu_total == 0:
+        return None
+    with _gpu_pool_lock:
+        for gid in range(_gpu_total):
+            if gid not in _gpu_pool:
+                _gpu_pool.add(gid)
+                return gid
+    return None
+
+def _release_gpu(gpu_id: int) -> None:
+    with _gpu_pool_lock:
+        _gpu_pool.discard(gpu_id)
 
 # ==================== Catalog 状态投影层（C1）====================
 # 轻量读模型：trace_id → 状态快照，由事件流投影而来，列表/状态查询只读这里。
@@ -968,9 +1005,15 @@ def upload_file():
             else:
                 return jsonify({"error": "Invalid file path"}), 400
 
-    # 并发限制：运行中任务达上限时拒绝新建
+    # 并发限制 + GPU 回收：顺便释放已结束任务的 GPU
     max_concurrent = getattr(UI_SETTING, 'max_concurrent_tasks', 10)
-    running_count = sum(1 for t in rdagent_processes.values() if t.is_alive())
+    running_count = 0
+    for t in rdagent_processes.values():
+        if t.is_alive():
+            running_count += 1
+        elif t.assigned_gpu is not None:
+            _release_gpu(t.assigned_gpu)
+            t.assigned_gpu = None
     if running_count >= max_concurrent:
         return jsonify({
             "error": f"当前有 {running_count} 个任务正在运行（上限 {max_concurrent}），请等待部分任务完成后再新建"
@@ -1029,6 +1072,11 @@ def upload_file():
         os.environ.pop("QLIB_FACTOR_MODEL_SELECTOR", None)
 
     app.logger.info(f"Started process for {log_trace_path} with target: {target_name}, kwargs: {kwargs}")
+    assigned_gpu = _acquire_gpu()
+    if assigned_gpu is not None:
+        app.logger.info(f"GPU allocation: assigned GPU {assigned_gpu} for {log_trace_path}")
+    else:
+        app.logger.info(f"GPU allocation: no free GPU, using shared mode for {log_trace_path}")
     task = RDAgentTask(
         target_name=target_name,
         kwargs=kwargs,
@@ -1037,6 +1085,7 @@ def upload_file():
         scenario=scenario,
         trace_name=trace_name,
         ui_server_port=app.config["UI_SERVER_PORT"],
+        assigned_gpu=assigned_gpu,
     )
     task.start()
     app.logger.warning(f"Task {log_trace_path} started.")
