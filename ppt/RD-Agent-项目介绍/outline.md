@@ -1,54 +1,30 @@
 # RD-Agent 项目介绍 PPT · 制作提纲（9 页 · v2.1）
 
-## 📋 快速开始（给 PPT 制作人员）
-
-> **位置**：`ppt/RD-Agent-项目介绍/`
-> - `outline.md`：本制作提纲（**你正在读的这个文件——照着做就行**）
-> - `index.html`：9 张 16:9 HTML 卡片初稿（可直接在浏览器打开看布局参考）
->
-> **目标读者**：第三方 PPT 制作人员 / 路演主讲人
-> **讲述时长**：约 8-10 分钟（每页 45-75 秒）
-> **叙事逻辑**：我们是谁 → 做成什么样 → 每个模块怎么做 → 为什么这么设计 → 值多少钱 → 下一步
->
-> **制作步骤（按顺序）**：
-> 1. 先读本文件「全局视觉规范」和「页面顺序」
-> 2. 打开 `index.html` 在浏览器中看每一页的布局参考
-> 3. 对照本文件每页的「页面布局图」「内容详表」制作 PPT
-> 4. 找到所有 `🟡 待补充` 标记，找项目负责人补数字/截图/文案
-> 5. 所有截图按「🖼 需截图」清单准备
-> 6. 最后用「💡 讲述要点」顺一遍口播逻辑
->
-> **标记约定**：
-> - 📖 引用的 `docs/` 文档/论文（需要细节可以去查）
-> - 🔧 引用的代码锚点（绝对路径，需要验证可以去看代码）
-> - 🟡 **待补充**：⚠️ **必须找项目负责人提供的内容**（数字/截图/文案）
-> - 🖼 **需截图**：📸 **必须准备的真实产品截图清单**
-> - 💡 **讲述要点**：路演时这一页要讲什么话（给主讲人）
-> - ✅ **交付物**：这一页做完后要包含哪些元素（给制作人员核对）
-
----
-
-## 页面顺序（v2 调整后）
+## 页面目录（P1-P9）
 
 | # | 页标题 | 核心目的 |
 |---|---|---|
 | P1 | 项目概述与架构 | 一页看懂"我们是谁、能干啥、怎么干、用了几个 LLM" |
 | P2 | 成果与对标 | 30 秒说服评委"项目做完了，有数字有图" |
-| P3 | 假设生成智能体（分 4 入口） | 讲清 loop 起点"研究假设从哪来" |
-| P4 | 编程智能体 CoSTEER | 技术重头戏，讲编码循环 + 成功率提升 |
-| **P5** | **知识库全景**（**紧跟 CoSTEER**） | 讲清"经验怎么沉淀、下次怎么复用" |
-| P6 | 回测执行 + 反馈总结 | 闭环收尾：跑出来、总结好、沉淀进去 |
-| **P7** | **多 LLM 差异化路由**（**这里放 token 饼图**） | 产品亮点 + 成本逻辑：看完饼图再看"我们怎么降本" |
+| P3 | 假设生成智能体 | 讲清 loop 起点"研究假设从哪来"，分 4 个入口场景讲差异 |
+| P4 | 编程智能体 CoSTEER | 技术重头戏，讲编码循环 + B1~B5 论文代码还原能力 |
+| P5 | 知识库全景 | 紧跟 CoSTEER，讲清"经验怎么沉淀、下次怎么复用" |
+| P6 | 回测执行 + 反馈总结 | 闭环收尾：跑出来、总结好、沉淀进下一轮 |
+| P7 | 多 LLM 差异化路由 | 产品亮点 + 成本逻辑：先讲 token 花在哪，再讲怎么降本 |
 | P8 | 应用与商业价值 | 客群 / 成本对比 / 商业化路径 |
-| P9 | 创新点 + 论文 + 路线图 | 收尾：创新是啥、论文在哪、下一步做什么 |
-
-> **调整说明**：
-> - P5 知识库紧跟 P4 CoSTEER（因为 V2 知识图谱是 CoSTEER 的内置检索，叙事最顺）
-> - P7 多 LLM 路由承接 token 饼图（先告诉评委"token 花在哪"，再告诉评委"我们怎么按任务挑模型省钱"，逻辑闭环）
-> - P1 扩充：场景描述 + 智能体描述 + 多 LLM 映射
-> - P3 改造：按 4 个入口场景（因子/模型/组合/研报抽取）分别讲假设生成差异
+| P9 | 创新点 + 论文 + 路线图 | 收尾：创新是什么、论文在哪、下一步做什么 |
 
 ---
+
+## 项目特点（P1 展开）
+
+- **多智能体**：5 个角色（HypothesisGen / Developer / Runner / Summarizer / H2E）串成完整 R&D Loop。
+- **自然语言策略生成因子**：用户用一句话描述研究想法，系统自动生成可回测因子/模型/策略。
+- **多 LLM 分步路由**：每个 phase 独立选模型，不绑定单一厂商。
+
+---
+
+
 
 ## P1 · 项目概述与整体架构（1 页）
 
@@ -102,11 +78,13 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 #### 5 个智能体职责描述（给 PPT 制作人员 / 主讲人）
 | 智能体 | 类比 | 一句话职责 | 输入 | 输出 | 主要调用的能力 |
 |---|---|---|---|---|---|
-| **① HypothesisGen**（假设生成） | 研究总监 | 决定"这一轮研究什么" | 历史 Trace、SOTA 结果、自然语言方向 | 结构化 Hypothesis 对象（类型/目标/数据集/实验配置） | LLM / Random / **Bandit(LinTS)** 三种策略 |
-| **② Developer**（编码） | 资深工程师 | 把假设写成可运行代码 | Hypothesis、V2 KB 检索结果 | Python 代码（因子/模型/策略） | CoSTEER 6 步演化循环、V2 三连查 |
-| **③ Runner**（执行回测） | 回测平台 | 真跑代码，出硬指标 | 代码、数据集配置 | IC/IR/年化/夏普 + 日志 | Docker/qlib backtest、SOTA 因子继承 |
-| **④ Summarizer**（反馈总结） | 评审委员会 | 判断"跑得好不好，下一步怎么改" | Runner 结果、当前 SOTA | 4 维反馈（可执行/信号/对比/建议）、新 Trace | LLM 总结、Trace 持久化 |
-| **⑤ H2E**（假设→实验反馈） | 映射官 | 把"实验结果"翻译成"假设是否成立" | Summarizer 反馈 | 假设层面的 go/no-go 信号 | LLM（把执行层反馈升维到假设层） |
+| **① HypothesisGen**（假设生成） | 金工分析师 / 策略分析师 | 决定"这一轮研究什么" | 历史 Trace、SOTA 结果、自然语言方向 | 结构化 Hypothesis 对象（类型/目标/数据集/实验配置） | LLM / Random / **Bandit(LinTS)** 三种策略 |
+| **② Developer**（编码） | 资深量化工程师 | 把假设写成可运行代码 | Hypothesis、V2 KB 检索结果 | Python 代码（因子/模型/策略） | CoSTEER 6 步演化循环、V2 三连查 |
+| **③ Runner**（执行回测） | 回测平台 | 在回测平台中运行代码，执行回测分析，产出硬指标 | 代码、数据集配置 | IC/IR/年化/夏普 + 日志 | Docker/qlib backtest、SOTA 因子继承 |
+| **④ Summarizer**（反馈总结） | 量化评审 / 绩效归因 | 判断"跑得好不好，下一步怎么改" | Runner 结果、当前 SOTA | 4 维反馈（可执行/信号/对比/建议）、新 Trace | LLM 总结、Trace 持久化 |
+| **⑤ H2E**（假设→实验反馈） | 假设验证官 | 把本轮实验结果反馈到下一轮假设生成：上一轮假设是否成立、下一轮该朝哪个方向改进 | Summarizer 反馈 + 历史 Trace | 下一轮 Hypothesis 的输入信号、假设层面的 go/no-go 判断 | LLM（把执行层反馈升维到假设层） |
+
+**H2E 的作用补充**：不是简单翻译，而是连接"实验层"和"研究层"。它读 Summarizer 的 4 维反馈，判断这个研究方向是否继续、是否换方向、是否调参复用，并把结论写回下一轮 HypothesisGen 的上下文。
 
 🔧 代码锚点：
 - 主循环：[rdagent/components/workflow/rd_loop.py](file:///workspace/rdagent/components/workflow/rd_loop.py)
@@ -124,10 +102,12 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 | Summarizer | 轻量总结模型（便宜即可） |
 | H2E | 轻量映射模型 |
 
+可配置模型类型的原因：不同 phase 任务难度和对模型能力的要求差异很大。编码 phase 最吃模型能力、token 消耗最大，必须用 coding 专精模型；总结和映射 phase 对推理深度要求低，用便宜模型即可；这样就可以按任务选模型，避免所有 phase 都用最贵的模型，显著降低成本。
+
 下方一行：
-- 🔌 任意 OpenAI 兼容端点都可接（火山方舟/Coding Plan/本地部署）
-- 🧪 **一键测试按钮**：不消耗正式 run token，独立验证模型连通性
-- 💾 Prefect 缓存：相同 prompt 命中即 ¥0
+- 任意 OpenAI 兼容端点都可接（火山方舟/Coding Plan/本地部署）
+- **一键测试按钮**：不消耗正式 run token，独立验证模型连通性
+- Prefect 缓存：相同 prompt 命中即 ¥0
 
 📖 引用：`web/src/multialpha/use-multialpha.ts`（分步路由）、`rdagent/oai/backend/`（多后端）
 🟡 待补充：当前默认用哪 4 个模型（填到表格里）
@@ -143,8 +123,8 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 - [ ] 主标题："多智能体自动化量化研究平台"
 - [ ] Lead 一句话："让大模型代替研究员完成'提假设→写代码→回测→反馈'完整 R&D 循环..."
 - [ ] 左栏：4 个场景入口卡片（蓝/紫/金/绿 4 色区分），每个含图标色点+名称+CLI命令+一句话说明
-- [ ] 中栏：5 智能体横排流程图（HypothesisGen→Developer→Runner→Summarizer→H2E↺），每个节点有标签+名称+一句话职责；H2E/Summarizer 用紫色
-- [ ] 右栏（金色高亮！重点突出）："多 LLM 分步路由"面板，4 行小表（HypothesisGen/Developer/Summarizer/H2E 各配什么模型），下方 3 个标签（任意OpenAI端点/一键测试/Prefect缓存）
+- [ ] 中栏：5 智能体横排流程图（HypothesisGen→Developer→Runner→Summarizer→H2E↺），每个节点有标签+名称+一句话职责
+- [ ] 右栏（重点突出）："多 LLM 分步路由"面板，4 行小表（HypothesisGen/Developer/Summarizer/H2E 各配什么模型）+ 可配置原因说明，下方 3 个标签（任意OpenAI端点/一键测试/Prefect缓存）
 - [ ] 底部标签云：7 个标签
 - [ ] 页码：01 / 09（右上角）
 
@@ -286,14 +266,14 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 | 策略 | 触发条件 | 逻辑 | 适用场景 | 代码锚点 |
 |---|---|---|---|---|
 | **LLM**（默认） | 默认配置 | 基于历史 Trace + 当前 SOTA，LLM 直接生成新假设 | 默认路径，质量最高 | [qlib/proposal/*.py](file:///workspace/rdagent/scenarios/qlib/proposal/) |
-| **Random** | 知识库为空 / 冷启动 | 在假设空间均匀采样 | 冷启动、探索新方向 | [core/proposal.py](file:///workspace/rdagent/core/proposal.py) |
-| **Bandit (LinTS)** ⭐ | `action_selection=bandit` | 线性汤普森采样，把"研究因子/研究模型"当两个臂，按历史 IC 奖励更新后验 | 均衡探索-利用，长期自动分配精力 | [qlib/proposal/bandit.py](file:///workspace/rdagent/scenarios/qlib/proposal/bandit.py) `LinearThompsonTwoArm` |
+| **Random** | 知识库为空 / 冷启动 / 用户未给方向 | 在假设空间均匀采样；即使没有明确输入方向，Random 也能作为兜底探索策略，给系统一个起点 | 冷启动、探索新方向、所有入口场景无先验时均可触发 | [core/proposal.py](file:///workspace/rdagent/core/proposal.py) |
+| **Bandit (LinTS)** | `action_selection=bandit` | 线性汤普森采样，把"研究因子/研究模型"当两个臂，按历史 IC 奖励更新后验 | 均衡探索-利用，长期自动分配精力 | [qlib/proposal/bandit.py](file:///workspace/rdagent/scenarios/qlib/proposal/bandit.py) `LinearThompsonTwoArm` |
 
 📖 引用：`docs/papers/07-contextual-thompson-sampling.md`
 
 ### 下半 · 4 个入口场景的假设差异（2×2 卡片，每张卡片独立）
 
-#### 卡片 1：🔵 因子研究（qlib_factor）
+#### 卡片 1：因子研究（qlib_factor）
 - **假设是什么**：一个"价量/基本面因子"的公式表达式
 - **典型输入**：「试试换手率加权的动量背离」
 - **假设对象字段**：`factor_formula`、`window`、`universe`（股票池）
@@ -301,15 +281,15 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 - **特有机制**：SOTA 因子继承（新假设自动合并历史优秀因子集）
 🔧 代码：[factor_proposal.py](file:///workspace/rdagent/scenarios/qlib/proposal/factor_proposal.py)
 
-#### 卡片 2：🟣 模型研究（qlib_model）
+#### 卡片 2：模型研究（qlib_model）
 - **假设是什么**：一个预测模型的架构/超参/训练策略
 - **典型输入**：「试试用 Transformer 替换 LSTM，加 3 层注意力」
 - **假设对象字段**：`model_cls`、`model_hyperparameters`、`training_config`
 - **评估标准**：IC、MSE、回测收益（端到端）
-- **特有机制**：CoSTEER 编码压力最大（模型代码复杂），V2 KB 命中收益最高
+- **特有机制**：CoSTEER 编码压力最大（模型代码复杂），V2 KB 命中收益最高；RAG 引导偏好 LSTM/GRU/MLP，暂不生成 GNN
 🔧 代码：[model_proposal.py](file:///workspace/rdagent/scenarios/qlib/proposal/model_proposal.py)
 
-#### 卡片 3：🟡 组合策略（qlib_quant）
+#### 卡片 3：组合策略（qlib_quant）
 - **假设是什么**：因子+模型+权重+风控约束的完整组合
 - **典型输入**：「在中证 500 上用多因子模型，行业中性 + 5% 单股上限」
 - **假设对象字段**：`alpha_list`、`model`、`risk_constraints`、`portfolio_method`
@@ -317,7 +297,7 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 - **特有机制**：LLM 主导（约束复杂，Bandit 难建模），需要 RAG 外挂查风控规则
 🔧 代码：[quant_proposal.py](file:///workspace/rdagent/scenarios/qlib/proposal/quant_proposal.py)
 
-#### 卡片 4：🟢 研报因子抽取（factor_from_report）
+#### 卡片 4：研报因子抽取（factor_from_report）
 - **假设是什么**：从 PDF 研报中抽取的、可直接回测的因子公式
 - **典型输入**：《XX 证券-量价因子之换手率背离》PDF
 - **假设对象字段**：从 PDF 解析出的 `factor_formula`（无需 LLM 自由发挥）
@@ -335,11 +315,11 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 - [ ] 主标题："假设生成：不同入口，不同生成逻辑"
 - [ ] Lead："3 种通用策略 + 4 个入口场景定制的假设模板..."
 - [ ] 上半：3 种通用策略对比表（LLM/Random/Bandit），Bandit 行金色高亮，标注"LinTS ICML 2013"
-- [ ] 下半：2×2 卡片布局，4 个场景卡片（蓝/紫/金/绿 左边色条区分）
-  - [ ] 🔵 因子研究：假设是公式，字段 factor_formula/window/universe，SOTA 继承机制
-  - [ ] 🟣 模型研究：假设是网络结构，字段 model_cls/hyperparams，CoSTEER压力最大
-  - [ ] 🟡 组合策略：假设是完整组合，字段 alpha_list/risk_constraints，LLM主导
-  - [ ] 🟢 研报抽取：假设从PDF抽取，不经过Bandit，字段直接从PDF解析
+- [ ] 下半：2×2 卡片布局，4 个场景卡片
+  - [ ] 因子研究：假设是公式，字段 factor_formula/window/universe，SOTA 继承机制
+  - [ ] 模型研究：假设是网络结构，字段 model_cls/hyperparams，CoSTEER 压力最大
+  - [ ] 组合策略：假设是完整组合，字段 alpha_list/risk_constraints，LLM 主导
+  - [ ] 研报抽取：假设从 PDF 抽取，不经过 Bandit，字段直接从 PDF 解析
 - [ ] 页码：03 / 09
 
 ---
@@ -362,22 +342,21 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 │  │  Role → Retrieve → Think → Code → Debug → Evolve     │ │
 │  └────────────────────────────────────────────────────────┘ │
 │                                                             │
-│  ┌─ 下半左：V2 三连查（3 个卡片）────┐ ┌─ 下半右：V1 vs V2 对比 + B1~B5 还原率 ─┐ │
-│  │  former_trace / component / error│ │  V1 __% → V2 __% （+__pp）              │ │
-│  │                                  │ │  B1~B5 5 个 GNN 模型还原率柱图          │ │
+│  ┌─ 下半左：V2 三连查（3 个卡片）────┐ ┌─ 下半右：B1~B5 还原率柱图 ─────────────┐ │
+│  │  former_trace / component / error│ │  B1~B5 5 个 GNN 模型从零还原成功率      │ │
 │  └──────────────────────────────────┘ └────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 上半 · 6 步循环（6 个等宽卡片，Retrieve 用金色高亮）
-| # | 步骤名 | 做什么 | 颜色 |
-|---|---|---|---|
-| 01 | **Role** | System prompt 代入"资深量化工程师"角色 | 常规 |
-| 02 | **Retrieve** ⭐ | 调 V2 三连查捞历史经验（金色高亮——这是 V2 新增） | **金色** |
-| 03 | **Think** | Chain-of-Thought 推理改动方案 | 常规 |
-| 04 | **Code** | 生成/修改 Python 代码 | 常规 |
-| 05 | **Debug** | Evaluator 在 Docker 里跑，收集报错/指标 | 常规 |
-| 06 | **Evolve** | 失败则进入下一轮，成功则入库；最多 10 轮，兜底回退到最近可接受方案 | 常规 |
+### 上半 · 6 步循环（6 个等宽卡片，Retrieve 重点突出）
+| # | 步骤名 | 做什么 |
+|---|---|---|
+| 01 | **Role** | System prompt 代入"资深量化工程师"角色 |
+| 02 | **Retrieve** | 调 V2 三连查捞历史经验 |
+| 03 | **Think** | Chain-of-Thought 推理改动方案 |
+| 04 | **Code** | 生成/修改 Python 代码 |
+| 05 | **Debug** | Evaluator 在 Docker 里跑，收集报错/指标 |
+| 06 | **Evolve** | 失败则进入下一轮，成功则入库；最多 10 轮，兜底回退到最近可接受方案 |
 
 🔧 代码锚点：
 - [CoSTEER/evolving_strategy.py](file:///workspace/rdagent/components/coder/CoSTEER/evolving_strategy.py) 主循环
@@ -392,13 +371,8 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 
 🔧 代码锚点：[CoSTEER/knowledge_management.py](file:///workspace/rdagent/components/coder/CoSTEER/knowledge_management.py) `CoSTEERRAGStrategyV2.query()`
 
-### 下半右 · V1 vs V2 对比 + B1~B5 还原率
-**上半：V1 vs V2 数字对比**
-- V1（无三连查，单轮）：成功率 🟡 __%，平均 🟡 __ 轮
-- V2（三连查 + 多轮演化）：成功率 **🟡 __%**，平均 🟡 __ 轮
-- 提升：**+🟡 __ pp**，轮次 -🟡 __%
-
-**下半：B1~B5 Benchmark 还原率柱图**（5 根柱子，每根代表一个 GNN 模型从零还原成功率）
+### 下半右 · B1~B5 Benchmark 还原率柱图
+**B1~B5 Benchmark 还原率柱图**（5 根柱子，每根代表一个 GNN 模型从零还原成功率）
 - B1 GPS：🟡 __%（★★★ 通用 Transformer）
 - B2 ViSNet：🟡 __%（★★★★★ 最难，分子力场）
 - B3 DiGNet：🟡 __%（★★★ 异亲和图）
@@ -411,27 +385,24 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 - 已有单页 PPT：[ppt/CoSTEER机制详解/CoSTEER机制详解.html](file:///workspace/ppt/CoSTEER机制详解/CoSTEER机制详解.html)（可直接复用图）
 
 🟡 待补充：
-- V1 vs V2 成功率数字（最关键）
 - B1~B5 每个的还原率百分比
 - 平均轮数
 
 💡 讲述要点（75 秒）：
-> "这是我们最核心的技术模块 CoSTEER——出自我们自己的论文 arXiv:2407.18690。LLM 一次写不对代码没关系，我们让它像工程师一样迭代：**代入角色→查资料→想→写→跑→改，最多 10 轮**。关键是第 2 步 Retrieve——V2 新加的三连查：别再犯、照着写、照着修，每次写码前先查知识库里的历史经验。右下是 V1 到 V2 的提升，编码成功率从 __% 到 __%，提升 __ 个百分点；下面是 B1~B5 五个 GNN 模型从零还原的成功率——可以看到连最难的 ViSNet 也能到 __%。这些经验存在哪？就是下一页讲的知识库。"
+> "这是我们最核心的技术模块 CoSTEER。LLM 一次写不对代码没关系，我们让它像工程师一样迭代：**代入角色→查资料→想→写→跑→改，最多 10 轮**。关键是第 2 步 Retrieve——V2 新加的三连查：别再犯、照着写、照着修，每次写码前先查知识库里的历史经验。下面是 B1~B5 五个 GNN 模型从零还原的成功率——连最难的 ViSNet 也能到 __%。这些经验存在哪？就是下一页讲的知识库。"
 
 ✅ **交付物清单（做完 P4 后核对）**：
 - [ ] Kicker："智能体 ② · CoSTEER Developer"
 - [ ] 主标题："编码智能体：像工程师一样多轮迭代"
 - [ ] Lead："LLM 一次写不对没关系——写、跑、看报错、查资料、改..."
 - [ ] 上半：6 步流水线横排卡片（Role→Retrieve→Think→Code→Debug→Evolve）
-  - [ ] Retrieve 卡片金色高亮（标注 ⭐ V2 新增）
+  - [ ] Retrieve 卡片重点突出
   - [ ] Evolve 卡片有循环箭头"↻ 最多 10 轮"
 - [ ] 下半左（2/3 宽度）：
   - [ ] V2 三连查 3 个卡片（former_trace/component/error），每个有人话解释（别再犯/照着写/照着修）
-  - [ ] 紫色 accent-card：V1 vs V2 数字对比（3 个大数字：V1% / V2% / +pp）
 - [ ] 下半右（1/3 宽度）：
   - [ ] B1~B5 GNN 还原率横向条形图（5 根柱子，按难度从易到难排）
-  - [ ] B2 ViSNet 用粉金色标★"最困难"
-  - [ ] 画一条 V1 基线参考线
+  - [ ] B2 ViSNet 标注"最困难"
 - [ ] 页码：04 / 09
 - [ ] 🔧 可选：已有单页PPT `ppt/CoSTEER机制详解/CoSTEER机制详解.html` 可直接复用图
 
@@ -474,10 +445,44 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 
 | # | 名称 | 位置（代码） | 范围 | 触发时机 | 存储 | 核心作用 |
 |---|---|---|---|---|---|---|
-| **①** | **CoSTEER V2 知识图谱** ⭐ | [CoSTEER/knowledge_management.py](file:///workspace/rdagent/components/coder/CoSTEER/knowledge_management.py) + [knowledge_management/graph.py](file:///workspace/rdagent/components/knowledge_management/graph.py) | 项目内，编码阶段 | 每轮编码前自动三连查 | `graph.pkl`（无向图 + 多个 dict） | 别再犯 / 照着写 / 照着修——让编码越跑越准 |
+| **①** | **CoSTEER V2 知识图谱** | [CoSTEER/knowledge_management.py](file:///workspace/rdagent/components/coder/CoSTEER/knowledge_management.py) + [knowledge_management/graph.py](file:///workspace/rdagent/components/knowledge_management/graph.py) | 项目内，编码阶段 | 每轮编码前自动三连查 | `graph.pkl`（无向图 + 多个 dict） | 别再犯 / 照着写 / 照着修——让编码越跑越准 |
 | ② | Context7 外部文档 | [components/agent/context7/](file:///workspace/rdagent/components/agent/context7/) | **跨项目**，查第三方库 | Evaluator 抛错时自动触发 | 外部 MCP server（本地搭建） | 查 timm/qlib/torch 官方文档和源码，找正确 API 用法 |
 | ③ | RAG 通用外挂 | [components/agent/rag/](file:///workspace/rdagent/components/agent/rag/) | 任意 phase，自定义源 | 任意 phase 主动挂载 | 外部 MCP server | 接券商研报、会议纪要、自定义文档问答 |
 | ④ | SOTA 知识库 | [core/knowledge_base.py](file:///workspace/rdagent/core/knowledge_base.py) + [log/sota_query.py](file:///workspace/rdagent/log/sota_query.py) | 项目内，量化经验 | Runner 跑完每个因子自动查同 model 下 SOTA 继承 | pickle 文件持久化 | 因子继承、实验反查、避免重造轮子 |
+
+### CoSTEER V2 知识图谱的组成
+
+V2 知识图谱是**无向图**——节点之间没有方向性，只表示"这个任务/组件/错误/成功实现之间有经验上的关联"。这样查询时可以灵活跳转：从当前任务 → 相似组件 → 成功案例，或从当前报错 → 同款报错 → 修复案例。
+
+图中主要有 5 类节点（对应 5 类经验）：
+
+| 节点类型 | 代表什么 | 在三连查中的作用 |
+|---|---|---|
+| **task_description** | 任务描述/目标 | 入口节点，先找到和当前任务相似的任务 |
+| **component** | 任务拆分出的组件/子能力 | component 查询用：找到和当前任务共享组件的历史成功案例 |
+| **task_trace** | 一次失败的实现尝试（代码+反馈） | former_trace 查询用：别再犯同样的错 |
+| **task_success_implement** | 一次成功的实现（代码+反馈） | component/error 查询用：照着写 |
+| **error** | 报错类型/错误信息 | error 查询用：照着修 |
+
+节点之间的连接方式：
+- `task_description` ↔ `component`：这个任务涉及哪些组件
+- `task_description` ↔ `task_trace` / `task_success_implement`：这个任务有哪些失败/成功尝试
+- `task_trace` ↔ `error`：这次失败报了什么错
+- `task_success_implement` ↔ `error`：成功案例之前也踩过这个错，但后来修好了（用于 error 查询）
+
+🔧 代码锚点：
+- 三连查入口：[CoSTEER/knowledge_management.py#L431-L455](file:///workspace/rdagent/components/coder/CoSTEER/knowledge_management.py#L431-L455)
+- 无向图实现：[components/knowledge_management/graph.py](file:///workspace/rdagent/components/knowledge_management/graph.py)
+- 写入图谱：[CoSTEER/knowledge_management.py#L884-L924](file:///workspace/rdagent/components/coder/CoSTEER/knowledge_management.py#L884-L924)
+
+### 4 个知识库之间的关系
+
+- **V2 知识图谱是核心**：直接服务 CoSTEER 编码阶段，每轮必查，承载"自己项目里学出来的经验"。
+- **Context7 是跨项目外援**：解决"第三方库 API 变了/用法不熟"导致的报错，不替代 V2。
+- **RAG 通用外挂是扩展入口**：允许用户挂任何自定义文档（研报、内部规范），给其他 phase 用。
+- **SOTA 知识库是量化专用经验**：服务 Runner 的"抄作业"和"去重"逻辑，和 V2 互补。
+
+简言之：V2 负责"怎么把代码写对"，另外三个分别负责"查外部文档""接自定义源""记量化结果"。
 
 📖 引用：`docs/papers/04-costeer.md`（V2 详述）
 🟡 待补充：
@@ -494,9 +499,9 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 - [ ] Lead："项目内编码经验 + 跨项目三方库文档 + ..."
 - [ ] 4 象限田字布局：
   - [ ] ① V2 知识图谱（左侧 2×1 大块，明显大于其他三个）：含标题、标签（项目内·编码阶段·每轮必查）、3 个要点（5类节点/三连查/自动写回）
-  - [ ] ② Context7 外部文档（右上小卡，紫色边）：跨项目·报错修复·MCP外挂
-  - [ ] ③ RAG 通用外挂（右中小卡，金色边）：任意Phase·自定义文档源
-  - [ ] ④ SOTA 知识库（右下小卡，绿色边）：项目内·量化经验·pickle
+  - [ ] ② Context7 外部文档（右上小卡）：跨项目·报错修复·MCP外挂
+  - [ ] ③ RAG 通用外挂（右中小卡）：任意Phase·自定义文档源
+  - [ ] ④ SOTA 知识库（右下小卡）：项目内·量化经验·pickle
 - [ ] 底部关键指标条：V2图谱节点数 / SOTA因子 / Trace总数 / "4层协同"
 - [ ] 页码：05 / 09
 - [ ] **位置确认**：这页必须紧跟 P4 CoSTEER 之后！
@@ -530,8 +535,8 @@ HypothesisGen → Developer → Runner → Summarizer → (H2E 反馈回 Hypothe
 ```
 
 ### 左栏 · Runner 三大职责
-1. **SOTA 因子继承**：跑新因子前自动"抄作业"——加载同 model 下历史最优因子集作为基础，不从头造轮子（出自论文 02 §3.2）
-2. **因子去重/合并**：余弦相似度 > 80% 的因子自动合并，避免重复劳动
+1. **SOTA 继承**：跑新实验前自动"抄作业"——加载同 model 下历史最优因子集/模型超参作为基础，不从头造轮子（在因子场景最典型，模型场景也可复用历史模型配置）
+2. **去重/合并**：因子场景下余弦相似度 > 80% 的因子自动合并，避免重复劳动
 3. **真实回测**：调用 qlib 在 Docker 隔离环境中跑，产出 IC / IR / 年化 / 夏普 4 项硬指标
 
 🔧 代码：`rdagent/components/runner/`
@@ -695,8 +700,8 @@ T3  [绿-入库]  Run: IC=0.08, 年化+__% → Sum: 超越SOTA, 写入知识库 
 │  Lead：一个资深量化研究员年薪 50-100w，系统一年远低于此       │
 │        还能 24h 不停跑。                                     │
 │                                                             │
-│  ┌─ 上：3 类客群卡片 ────────────────────────────────────┐ │
-│  │  [券商自营/公募] [量化私募] [教育/研究机构]             │ │
+│  ┌─ 上：4 类客群卡片 ────────────────────────────────────┐ │
+│  │  [券商自营/公募] [量化私募] [经纪业务客户] [教育/研究机构]│ │
 │  └────────────────────────────────────────────────────────┘ │
 │                                                             │
 │  ┌─ 下左：单因子成本对比表 ──────┐ ┌─ 下右：3 条商业化路径 ─┐ │
@@ -709,11 +714,12 @@ T3  [绿-入库]  Run: IC=0.08, 年化+__% → Sum: 超越SOTA, 写入知识库 
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 上半 · 3 类客群（3 个等宽卡片，不同颜色图标）
+### 上半 · 4 类客群（4 个等宽卡片，不同颜色图标）
 | 客群 | 颜色 | 痛点 | 我们的价值 |
 |---|---|---|---|
 | **券商自营 / 公募量化** | 蓝 | 研究员稀缺、年度人力成本 50-100w/人、合规要求内网部署 | 自动挖因子+回测+SOTA 继承，1 套系统顶 N 人，内网部署合规 |
 | **量化私募** | 紫 | 模型更新慢、跨市场（A股/港美/加密）适配贵 | 双管线（因子+模型）+ Bandit 自动分配精力，24h 不停跑 |
+| **经纪业务客户** | 绿 | 有自己的策略思路，但量化上手门槛高、不会写代码、不会回测 | 自然语言描述想法即可自动生成因子/策略并回测验证，降低参与门槛 |
 | **量化教育 / 研究机构** | 金 | 论文复现难、教学成本高、学生难上手 | Paper-to-Code Benchmark 端到端可复现，教学/科研一键起 |
 
 ### 下左 · 单因子成本对比表（3 行表格）
@@ -736,18 +742,19 @@ T3  [绿-入库]  Run: IC=0.08, 年化+__% → Sum: 超越SOTA, 写入知识库 
 POC 进展：🟡 如有试点客户/合作机构，写"已与 __ 家机构沟通 POC"；没有就删这行。
 
 💡 讲述要点（45 秒）：
-> "朴素逻辑：一个资深量化研究员年薪 50-100w，我们一套系统远低于此还能 24h 跑。三类客群分别对应不同痛点：券商要合规内网、私募要跨市场效率、教育要可复现。左下是单因子的成本对比，人工几天几千块，我们几小时几块钱。三条商业化路径从易到难：先做授权，再做 SaaS，长期做按产出分成。"
+> "朴素逻辑：一个资深量化研究员年薪 50-100w，我们一套系统远低于此还能 24h 跑。四类客群分别对应不同痛点：券商要合规内网、私募要跨市场效率、经纪业务客户有想法但不会写代码、教育/科研机构要可复现。左下是单因子的成本对比，人工几天几千块，我们几小时几块钱。三条商业化路径从易到难：先做授权，再做 SaaS，长期做按产出分成。理论上可以持续做因子/策略挖掘。"
 
 ✅ **交付物清单（做完 P8 后核对）**：
 - [ ] Kicker："应用场景 · 商业价值"
-- [ ] 主标题："三类客群 · 一条朴素商业逻辑"
+- [ ] 主标题："四类客群 · 一条朴素商业逻辑"
 - [ ] Lead："一个资深量化研究员年薪 50-100w..."
-- [ ] 上半：3 个客群卡片（蓝/紫/金），每个含图标编号+客群名+痛点（小字）+价值说明
+- [ ] 上半：4 个客群卡片（蓝/紫/绿/金），每个含图标编号+客群名+痛点（小字）+价值说明
   - [ ] 01 券商自营/公募（蓝）：合规内网、顶N人
   - [ ] 02 量化私募（紫）：跨市场、24h跑
-  - [ ] 03 教育/研究机构（金）：可复现、一键起
+  - [ ] 03 经纪业务客户（绿）：有策略思路但不会写代码，自然语言即可生成并回测
+  - [ ] 04 教育/研究机构（金）：可复现、一键起
 - [ ] 下半双栏：
-  - [ ] 左：单因子成本对比表（3行：人工/自动/降幅，绿色显示降幅），底部小字注释"人工成本估算：年薪60w÷250天≈¥2400/天"
+  - [ ] 左：单因子成本对比表（3行：人工/自动/降幅），底部小字注释人工成本估算
   - [ ] 右：3条商业化路径卡片（蓝→紫→金按易到难），POC进展行（有则填，无则删）
 - [ ] 页码：08 / 09
 
@@ -790,10 +797,13 @@ POC 进展：🟡 如有试点客户/合作机构，写"已与 __ 家机构沟�
 ### 右上 · 学术成果
 - **🏆 NeurIPS 2025（金色大字）**
   - R&D-Agent-Quant: Automating Quantitative Finance Research with LLM-based Multi-Agent System (arXiv:2505.15155)
-- **论文标签云**：
-  - 蓝：R&D-Agent (2505.14738)、Data-Centric R&D (2404.11276)、Multi-Agent Quant (2505.13172)
-  - 紫：CoSTEER (2407.18690)
-  - 金：LinTS (ICML 2013)
+  - 注：该论文为项目团队参与工作，R&D-Agent 系列为本项目基础参考与扩展来源。
+- **论文标签云**（项目引用/扩展的论文）：
+  - R&D-Agent (2505.14738)
+  - Data-Centric R&D (2404.11276)
+  - Multi-Agent Quant (2505.13172)
+  - CoSTEER (2407.18690)
+  - LinTS (ICML 2013)
 - **Benchmark GT**：GPS、ViSNet、DiGNet、PMLP、LinkX（B1~B5）
 - 在投/准备中：🟡 有就填
 
@@ -821,10 +831,10 @@ POC 进展：🟡 如有试点客户/合作机构，写"已与 __ 家机构沟�
     - 02 方法创新（紫）：CoSTEER V2三连查，成功率20%→__%
     - 03 产品创新（金）：多LLM路由+测试按钮，不绑厂商
     - 04 评估创新（绿）：Paper-to-Code B1~B5 Benchmark
-  - [ ] 右上（金色高亮！学术背书）：
-    - 🏆 NeurIPS 2025 大金字
-    - 论文标题 + arXiv 号
-    - 5 个论文标签
+  - [ ] 右上（学术背书）：
+    - NeurIPS 2025
+    - 论文标题 + arXiv 号 + 归属说明
+    - 5 个论文标签（项目引用/扩展）
     - "B1~B5 GT: GPS · ViSNet · DiGNet · PMLP · LinkX"
     - 在投论文（有则填）
 - [ ] 下半：3列路线图（蓝/紫/金）

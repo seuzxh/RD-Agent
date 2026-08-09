@@ -172,7 +172,7 @@
     .mm-row>div:first-child{font-family:var(--font-mono);color:var(--ink);font-weight:600;}
     .mm-row>div:last-child{border-right:none;}
     /* Value props (P8) */
-    .value-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--block-gap);}
+    .value-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--block-gap);}
     .value-card{border:var(--panel-border);border-radius:var(--panel-radius);padding:18px;background:rgba(255,255,255,0.025);display:grid;gap:8px;}
     .value-card .vc-head{display:flex;align-items:center;gap:10px;}
     .value-card .vc-icon{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font-family:var(--font-mono);font-weight:700;font-size:13px;}
@@ -275,11 +275,11 @@
                 <div class="flow-panel">
                   <h3>🧠 5 智能体职责</h3>
                   <ul style="margin-top:6px;">
-                    <li><b style="color:var(--ink);">HypothesisGen</b> 研究总监——决定研究什么</li>
-                    <li><b style="color:var(--ink);">Developer</b> 工程师——把假设写成代码</li>
+                    <li><b style="color:var(--ink);">HypothesisGen</b> 金工分析师 / 策略分析师——决定研究什么</li>
+                    <li><b style="color:var(--ink);">Developer</b> 资深量化工程师——把假设写成代码</li>
                     <li><b style="color:var(--ink);">Runner</b> 回测平台——真跑出硬指标</li>
-                    <li><b style="color:var(--ink);">Summarizer</b> 评审——4 维反馈判断好坏</li>
-                    <li><b style="color:var(--accent-2);">H2E</b> 映射官——实验结果→假设层信号</li>
+                    <li><b style="color:var(--ink);">Summarizer</b> 量化评审 / 绩效归因——4 维反馈判断好坏</li>
+                    <li><b style="color:var(--accent-2);">H2E</b> 假设验证官——实验结果→假设层信号</li>
                   </ul>
                 </div>
                 <div class="flow-panel" style="border-color:rgba(241,194,27,0.4);background:rgba(241,194,27,0.05);">
@@ -304,6 +304,7 @@
                 <span class="tag tag-gold">多 LLM 路由</span>
                 <span class="tag tag-ok">4 层知识库</span>
                 <span class="tag tag-warn">NeurIPS'25</span>
+                <span class="tag tag-gold">Bandit</span>
                 <span class="tag">Paper-to-Code Benchmark</span>
               </div>
             </div>
@@ -380,7 +381,7 @@
               <div class="strat-table">
                 <div class="strat-head"><div>策略</div><div>触发条件</div><div>核心逻辑</div><div>适用场景</div></div>
                 <div class="strat-row"><div>LLM（默认）</div><div>默认配置</div><div>基于历史 Trace + SOTA，LLM 直接生成假设</div><div>默认路径，质量最高</div></div>
-                <div class="strat-row"><div>Random</div><div>知识库为空 / 冷启动</div><div>假设空间均匀采样</div><div>冷启动 / 探索新方向</div></div>
+                <div class="strat-row"><div>Random</div><div>知识库为空 / 冷启动 / 用户未给方向</div><div>在假设空间均匀采样；无明确输入时作为兜底探索策略，给系统一个起点</div><div>冷启动 / 探索新方向 / 所有入口场景无先验时均可触发</div></div>
                 <div class="strat-row hl"><div>Bandit (LinTS) ⭐</div><div>action_selection=bandit</div><div>线性汤普森采样（ICML 2013），"因子/模型"双臂按历史 IC 更新后验</div><div>长期均衡探索-利用</div></div>
               </div>
               <div class="flow-stack" style="gap:10px;">
@@ -423,7 +424,7 @@
             <div class="slide-content layout-argument-grid" style="gap:20px;">
               <div class="flow-stack" style="gap:8px;">
                 <h2 class="slide-title title-sm">编码智能体：像工程师一样多轮迭代</h2>
-                <p class="slide-lead">LLM 一次写不对没关系——写、跑、看报错、查资料、改，最多 10 轮；V2 三连查把成功率从 ~20% 收敛到 <span class="placeholder">__%</span>。</p>
+                <p class="slide-lead">LLM 一次写不对代码没关系——写、跑、看报错、查资料、改，最多 10 轮；配合 V2 三连查，成功率收敛到 <span class="placeholder">__%</span>。</p>
               </div>
               <div class="pipeline">
                 <div class="pipe-step"><div class="step-no">01</div><div class="step-name">Role</div><div class="step-desc">代入资深工程师角色</div></div>
@@ -441,15 +442,7 @@
                     <div class="flow-panel"><h4>② component</h4><p style="font-size:12px;"><b style="color:var(--ink);">照着写</b>——捞组件相似的成功实现作参考</p></div>
                     <div class="flow-panel"><h4>③ error</h4><p style="font-size:12px;"><b style="color:var(--ink);">照着修</b>——捞同款报错的修复案例</p></div>
                   </div>
-                  <div class="accent-card" style="padding:14px 18px;">
-                    <h3 style="font-size:15px;">V1 vs V2 成功率对比</h3>
-                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:8px;">
-                      <div><div style="font-family:var(--font-mono);font-size:11px;color:var(--muted);">V1 单轮</div><div style="font-family:var(--font-display);font-size:28px;color:var(--muted);"><span class="placeholder">__%</span></div></div>
-                      <div><div style="font-family:var(--font-mono);font-size:11px;color:var(--gold);">V2 多轮+三连查</div><div style="font-family:var(--font-display);font-size:28px;color:var(--gold);"><span class="placeholder">__%</span></div></div>
-                      <div><div style="font-family:var(--font-mono);font-size:11px;color:var(--ok);">提升</div><div style="font-family:var(--font-display);font-size:28px;color:var(--ok);">+<span class="placeholder">__pp</span></div></div>
-                    </div>
-                    <p style="margin-top:6px;font-size:11px;color:var(--muted);">平均轮数 <span class="placeholder">__</span> → <span class="placeholder">__</span>（-<span class="placeholder">__%</span>）</p>
-                  </div>
+
                 </div>
                 <div class="flow-stack" style="gap:12px;">
                   <div class="content-meta">B1~B5 GNN 还原率（从零还原）</div>
@@ -489,8 +482,9 @@
                   <div class="kb-sub">项目内 · 编码阶段 · 每轮必查</div>
                   <div class="kb-desc">无向图 graph.pkl 存储"任务-组件-错误-实现"关联。每轮写码前自动三连查（失败痕迹/相似成功/错误修复），实验成功后三元组自动写回图谱，跨会话积累。</div>
                   <ul>
-                    <li>5 类节点：component / task / trace / success_impl / error</li>
-                    <li>former_trace_limit=3 · component_limit=1 · error_limit=1</li>
+                    <li><b style="color:var(--ink);">5 类节点</b>：task_description · component · task_trace · task_success_implement · error</li>
+                    <li><b style="color:var(--ink);">无向图连接</b>：任务↔组件、任务↔失败/成功实现、失败/成功实现↔错误</li>
+                    <li>三连查：former_trace_limit=3 · component_limit=1 · error_limit=1</li>
                     <li>对应 CoSTEER 论文 arXiv:2407.18690</li>
                   </ul>
                 </div>
@@ -540,7 +534,7 @@
                 <div class="flow-panel">
                   <h3>🏃 Runner · 回测执行</h3>
                   <ul style="margin-top:8px;">
-                    <li><b style="color:var(--ink);">SOTA 因子继承</b>：跑新因子前自动加载同 model 下历史最优因子集，不从零开始</li>
+                    <li><b style="color:var(--ink);">SOTA 继承</b>：跑新实验前自动“抄作业”——加载同 model 下历史最优因子集 / 模型超参作为基础</li>
                     <li><b style="color:var(--ink);">因子去重/合并</b>：余弦相似度 &gt;80% 的因子自动合并，避免重复劳动</li>
                     <li><b style="color:var(--ink);">Docker + qlib 真实回测</b>：隔离环境产出 IC / IR / 年化 / 夏普 4 项硬指标</li>
                   </ul>
@@ -650,7 +644,7 @@
             <div class="slide-kicker">应用场景 · 商业价值</div>
             <div class="slide-content layout-argument-grid" style="gap:20px;">
               <div class="flow-stack" style="gap:8px;">
-                <h2 class="slide-title title-sm">三类客群 · 一条朴素商业逻辑</h2>
+                <h2 class="slide-title title-sm">四类客群 · 一条朴素商业逻辑</h2>
                 <p class="slide-lead">一个资深量化研究员年薪 50-100w，系统一年远低于此，还能 24h 不停跑。</p>
               </div>
               <div class="value-grid">
@@ -665,7 +659,12 @@
                   <div class="vc-value">双管线（因子+模型）+ Bandit 自动分配精力，多市场（A 股/港美/加密）可扩展。</div>
                 </div>
                 <div class="value-card">
-                  <div class="vc-head"><div class="vc-icon g">03</div><div class="vc-name">教育 / 研究机构</div></div>
+                  <div class="vc-head"><div class="vc-icon" style="background:rgba(66,190,101,0.12);color:var(--ok);">03</div><div class="vc-name">经纪业务客户</div></div>
+                  <div class="vc-pain">痛点：有策略思路 · 量化上手门槛高 · 不会写代码/回测</div>
+                  <div class="vc-value">自然语言描述想法即可自动生成因子/策略并回测验证，显著降低参与门槛。</div>
+                </div>
+                <div class="value-card">
+                  <div class="vc-head"><div class="vc-icon g">04</div><div class="vc-name">教育 / 研究机构</div></div>
                   <div class="vc-pain">痛点：论文复现难 · 教学成本高</div>
                   <div class="vc-value">Paper-to-Code Benchmark（B1~B5）端到端可复现，教学/科研一键起。</div>
                 </div>
@@ -721,6 +720,7 @@
                   <div class="flow-panel" style="border-color:rgba(241,194,27,0.4);background:rgba(241,194,27,0.06);">
                     <h3 style="color:var(--gold);font-size:22px;">🏆 NeurIPS 2025</h3>
                     <p style="font-size:13px;margin-top:4px;color:var(--ink);">R&amp;D-Agent-Quant: Automating Quantitative Finance Research with LLM-based Multi-Agent System<br><span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);">arXiv:2505.15155</span></p>
+                    <p style="margin:6px 0 0;font-size:11px;color:var(--muted);">注：该论文为项目团队参与工作，R&amp;D-Agent 系列为本项目基础参考与扩展来源。</p>
                     <div class="tag-row" style="margin-top:10px;">
                       <span class="tag">R&amp;D-Agent 2505.14738</span>
                       <span class="tag tag-2">CoSTEER 2407.18690</span>
