@@ -3,881 +3,494 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RD-Agent 项目介绍 · 9 页</title>
+  <title>RD-Agent 项目介绍 · 9 页 v2.1</title>
   <style>
     :root {
-      --page: #f1f1f0;
-      --paper: #161616;
-      --ink: #f4f4f4;
-      --muted: #c6c6c6;
-      --accent: #33b1ff;
-      --accent-2: #8a3ffc;
-      --accent-soft: rgba(51,177,255,0.16);
-      --accent-2-soft: rgba(138,63,252,0.12);
-      --warn: #ff7ab6;
-      --ok: #42be65;
-      --gold: #f1c21b;
-      --font-display: "IBM Plex Sans Condensed", "Avenir Next Condensed", "Arial Narrow", Bahnschrift, "Segoe UI", Arial, "Microsoft YaHei UI", "Noto Sans SC", sans-serif;
-      --font-body: "IBM Plex Sans", "Avenir Next", "Segoe UI", Arial, "Microsoft YaHei UI", "Noto Sans SC", sans-serif;
-      --font-mono: "IBM Plex Mono", Menlo, Consolas, "Cascadia Mono", monospace;
-      --panel-border: 1px solid rgba(244, 244, 244, 0.14);
+      --page: #f1f1f0; --paper: #161616; --ink: #f4f4f4; --muted: #c6c6c6;
+      --accent: #33b1ff; --accent-2: #8a3ffc; --accent-soft: rgba(51,177,255,0.16); --accent-2-soft: rgba(138,63,252,0.12);
+      --warn: #ff7ab6; --ok: #42be65; --gold: #f1c21b;
+      --font-display: "IBM Plex Sans Condensed","Avenir Next Condensed","Arial Narrow",Bahnschrift,"Segoe UI",Arial,"Microsoft YaHei UI","Noto Sans SC",sans-serif;
+      --font-body: "IBM Plex Sans","Avenir Next","Segoe UI",Arial,"Microsoft YaHei UI","Noto Sans SC",sans-serif;
+      --font-mono: "IBM Plex Mono",Menlo,Consolas,"Cascadia Mono",monospace;
+      --panel-border: 1px solid rgba(244,244,244,0.14);
       --card-radius: 0px;
-      --gap: clamp(22px, 3vw, 40px);
-      --caption-gap: clamp(18px, 2.4vw, 32px);
-      --caption-width: 74ch;
-      --slide-width: 1600;
-      --slide-height: 900;
-      --slide-pad: 58px;
-      --stage-gap: 30px;
-      --content-gap: 30px;
-      --section-gap: 22px;
-      --block-gap: 18px;
-      --block-pad: 22px;
-      --panel-radius: 8px;
-      --title-size: 64px;
-      --title-leading: 1.08;
-      --lead-size: 24px;
-      --lead-width: 52ch;
+      --caption-gap: clamp(18px,2.4vw,32px); --caption-width: 74ch;
+      --slide-width: 1600; --slide-height: 900; --slide-pad: 58px;
+      --stage-gap: 28px; --content-gap: 28px; --section-gap: 20px; --block-gap: 16px;
+      --block-pad: 20px; --panel-radius: 8px;
+      --title-size: 56px; --title-leading: 1.1; --lead-size: 22px; --lead-width: 56ch;
     }
-    * { box-sizing: border-box; }
-    html { background: var(--page); color: var(--ink); }
-    body { margin: 0; font-family: var(--font-body); line-height: 1.45; background: var(--page); }
-    img, svg, video { max-width: 100%; display: block; }
-
-    .deck-shell {
-      width: min(1440px, calc(100% - 48px));
-      margin: 0 auto;
-      padding: clamp(18px, 3vw, 40px) 0 clamp(56px, 8vw, 104px);
-    }
-    .deck-shell.is-zoomed,
-    .deck-shell.is-zoomed .waterfall,
-    .deck-shell.is-zoomed .deck-card,
-    .deck-shell.is-zoomed .slide-frame { max-width: none; }
-
-    .viewer-tools {
-      position: fixed; top: 10px; left: 50%; z-index: 30;
-      display: flex; align-items: center; gap: 4px; width: max-content;
-      margin: 0; padding: 3px;
-      border: 1px solid rgba(30,30,30,0.16); border-radius: 6px;
-      background: rgba(255,255,255,0.92); box-shadow: 0 8px 22px rgba(0,0,0,0.13);
-      font-family: var(--font-body); opacity: 0; pointer-events: none;
-      transform: translateX(-50%) translateY(-8px);
-      transition: opacity 160ms ease, transform 160ms ease;
-    }
-    .viewer-tools.is-visible, .viewer-tools:focus-within, .viewer-tools:hover {
-      opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0);
-    }
-    .viewer-tools button {
-      width: 24px; height: 24px; padding: 0;
-      border: 1px solid rgba(30,30,30,0.18); border-radius: 5px;
-      background: #fff; color: #202020; font-size: 15px; line-height: 1; cursor: pointer;
-    }
-    .viewer-tools button:hover { background: rgba(0,0,0,0.055); }
-    .viewer-tools output { min-width: 44px; color: #303030; font-size: 11px; text-align: center; font-variant-numeric: tabular-nums; }
-
-    .waterfall { width: 100%; column-count: 1; column-gap: 0; }
-    .deck-card { display: inline-block; width: 100%; margin: 0; break-inside: avoid; outline: none; }
-
-    .slide-frame {
-      position: relative; width: 100%; min-width: 0; aspect-ratio: 16/9;
-      overflow: hidden; border-radius: var(--card-radius);
-      background: var(--paper); color: var(--ink);
-      --slide-scale: 1;
-    }
-    .slide-stage {
-      position: absolute; inset: 0 auto auto 0;
-      width: calc(var(--slide-width)*1px); height: calc(var(--slide-height)*1px);
-      display: grid; grid-template-rows: auto minmax(0, 1fr); gap: var(--stage-gap);
-      padding: var(--slide-pad);
-      transform: scale(var(--slide-scale)); transform-origin: top left;
-      background: inherit; color: inherit;
-    }
-    .slide-frame.theme-grid {
-      background:
-        linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px),
-        var(--paper);
-      background-size: 64px 64px;
-    }
-    .slide-frame.theme-ink { --paper: #080808; --ink: #ffffff; --muted: #bdbdbd; background: var(--paper); color: var(--ink); }
-
-    .page-badge {
-      position: absolute; top: 14px; right: 16px; z-index: 5;
-      padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,0.08);
-      color: #fff; font-size: 13px; font-weight: 500; font-family: var(--font-mono);
-      letter-spacing: 0.06em; opacity: 0; transform: translateY(-3px);
-      transition: opacity 160ms ease, transform 160ms ease; pointer-events: none;
-    }
-    .deck-card:hover .page-badge, .deck-card:focus-within .page-badge { opacity: 1; transform: translateY(0); }
-
-    .slide-kicker {
-      font-family: var(--font-body); font-size: 24px; line-height: 1;
-      font-weight: 700; letter-spacing: 0.06em; color: var(--accent);
-      text-transform: uppercase;
-    }
-    .slide-title {
-      font-family: var(--font-display); font-weight: 700; line-height: var(--title-leading);
-      letter-spacing: -0.01em; margin: 0; max-width: 100%;
-    }
-    .title-xl { font-size: 96px; }
-    .title-lg { font-size: var(--title-size); }
-    .title-md { font-size: 50px; }
-    .title-sm { font-size: 36px; }
-    .title-xs { font-size: 26px; }
-    .slide-lead {
-      font-family: var(--font-body); font-size: var(--lead-size); line-height: 1.4;
-      font-weight: 400; color: var(--muted); max-width: var(--lead-width); margin: 0;
-    }
-    .content-meta {
-      font-family: var(--font-mono); font-size: 15px; letter-spacing: 0.14em;
-      text-transform: uppercase; color: var(--muted); margin: 0;
-    }
-    .flow-stack { display: grid; gap: var(--section-gap); align-content: start; }
-    .flow-grid { display: grid; gap: var(--block-gap); align-content: stretch; }
-    .flow-grid.two { grid-template-columns: repeat(2, minmax(0,1fr)); }
-    .flow-grid.three { grid-template-columns: repeat(3, minmax(0,1fr)); }
-    .flow-grid.four { grid-template-columns: repeat(4, minmax(0,1fr)); }
-    .flow-grid.two-1-2 { grid-template-columns: minmax(0,1fr) minmax(0,1.3fr); }
-    .flow-grid.two-2-1 { grid-template-columns: minmax(0,1.3fr) minmax(0,1fr); }
-    .flow-grid.quad { grid-template-columns: 1.3fr 1fr 1fr 1fr; }
-
-    .flow-panel {
-      border: var(--panel-border); border-radius: var(--panel-radius);
-      padding: var(--block-pad); background: rgba(255,255,255,0.02);
-    }
-    .flow-panel h3 {
-      font-family: var(--font-display); font-size: 21px; margin: 0 0 8px;
-      font-weight: 700; color: var(--ink);
-    }
-    .flow-panel h4 {
-      font-family: var(--font-body); font-size: 15px; margin: 0 0 6px;
-      font-weight: 600; color: var(--accent); letter-spacing: 0.02em;
-    }
-    .flow-panel p, .flow-panel li {
-      font-size: 16px; line-height: 1.5; color: var(--muted); margin: 0;
-    }
-    .flow-panel ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-    .flow-panel ul li { padding-left: 14px; position: relative; }
-    .flow-panel ul li::before {
-      content: ""; position: absolute; left: 0; top: 10px;
-      width: 5px; height: 5px; background: var(--accent); border-radius: 50%;
-    }
-
-    .accent-card {
-      border: 1px solid rgba(138,63,252,0.4); background: rgba(138,63,252,0.08);
-      border-radius: var(--panel-radius); padding: var(--block-pad);
-    }
-    .accent-card h3 { font-family: var(--font-display); font-size: 21px; margin: 0 0 8px; color: var(--accent-2); }
-    .accent-card p { font-size: 16px; line-height: 1.5; color: var(--ink); margin: 0; }
-
-    .metric-card {
-      border: 1px solid rgba(51,177,255,0.35); background: rgba(51,177,255,0.06);
-      border-radius: var(--panel-radius); padding: 28px 26px;
-      display: grid; gap: 10px; align-content: start;
-    }
-    .metric-card .num {
-      font-family: var(--font-display); font-size: 56px; font-weight: 700;
-      color: var(--accent); line-height: 1; letter-spacing: -0.02em;
-    }
-    .metric-card .num.gold { color: var(--gold); }
-    .metric-card .num.pink { color: var(--warn); }
-    .metric-card .num.green { color: var(--ok); }
-    .metric-card .label {
-      font-family: var(--font-body); font-size: 15px; color: var(--muted); line-height: 1.35;
-    }
-    .metric-card .unit { font-size: 22px; color: var(--muted); font-weight: 400; margin-left: 4px; }
-
-    .tag-row { display: flex; flex-wrap: wrap; gap: 8px; }
-    .tag {
-      display: inline-flex; align-items: center; padding: 5px 12px;
-      border: 1px solid rgba(51,177,255,0.45); border-radius: 999px;
-      font-family: var(--font-mono); font-size: 13px;
-      color: var(--accent); background: var(--accent-soft);
-    }
-    .tag.tag-2 { border-color: rgba(138,63,252,0.45); color: var(--accent-2); background: var(--accent-2-soft); }
-    .tag.tag-gold { border-color: rgba(241,194,27,0.4); color: var(--gold); background: rgba(241,194,27,0.08); }
-    .tag.tag-ok { border-color: rgba(66,190,101,0.4); color: var(--ok); background: rgba(66,190,101,0.08); }
-
-    .layout-cover { align-content: center; justify-items: start; gap: var(--content-gap); }
-    .layout-argument-grid { align-content: center; display: grid; gap: var(--content-gap); }
-    .layout-timeline { align-content: center; --lead-width: 64ch; }
-
-    .logo-row { display: flex; align-items: center; gap: 16px; }
-    .logo-row .mark { width: 18px; height: 18px; background: var(--accent); border-radius: 4px; }
-    .logo-row .dot-ring { width: 18px; height: 18px; border: 2px solid var(--accent); border-radius: 50%; }
-    .logo-row .square { width: 18px; height: 18px; background: var(--accent-2); transform: rotate(45deg); }
-
-    /* Flow diagram for RDLoop (P1) */
-    .loop-diagram {
-      display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; align-items: center;
-    }
-    .loop-node {
-      border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.04);
-      border-radius: 10px; padding: 18px 14px; text-align: center;
-      display: grid; gap: 6px; position: relative;
-    }
-    .loop-node .role {
-      font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em;
-      color: var(--accent); text-transform: uppercase;
-    }
-    .loop-node .name { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--ink); }
-    .loop-node .sub { font-size: 13px; color: var(--muted); line-height: 1.3; }
-    .loop-node::after {
-      content: "→"; position: absolute; right: -14px; top: 50%; transform: translateY(-50%);
-      color: var(--accent); font-size: 22px; font-weight: 700; z-index: 2;
-    }
-    .loop-node:last-child::after { content: "↺"; right: -22px; color: var(--accent-2); }
-    .loop-node.feedback { border-color: rgba(138,63,252,0.5); background: rgba(138,63,252,0.1); }
-    .loop-node.feedback .role { color: var(--accent-2); }
-    .loop-node.feedback::after { color: var(--accent-2); }
-
-    /* CoSTEER 6-step pipeline (P4) */
-    .pipeline {
-      display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;
-    }
-    .pipe-step {
-      border: var(--panel-border); border-radius: var(--panel-radius);
-      padding: 16px 12px; background: rgba(255,255,255,0.03);
-      display: grid; gap: 6px; position: relative;
-    }
-    .pipe-step .step-no {
-      font-family: var(--font-mono); font-size: 22px; color: var(--accent); font-weight: 700;
-    }
-    .pipe-step .step-name { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--ink); }
-    .pipe-step .step-desc { font-size: 12px; color: var(--muted); line-height: 1.4; }
-    .pipe-step.hl { border-color: rgba(241,194,27,0.5); background: rgba(241,194,27,0.06); }
-    .pipe-step.hl .step-no { color: var(--gold); }
-
-    /* Token bar (P4) */
-    .token-bar { display: grid; gap: 8px; }
-    .token-row { display: grid; grid-template-columns: 130px 1fr 60px; gap: 10px; align-items: center; }
-    .token-row .tname { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
-    .token-row .tbar { height: 18px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; position: relative; }
-    .token-row .tfill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 4px; }
-    .token-row .tpct { font-family: var(--font-mono); font-size: 13px; color: var(--ink); text-align: right; }
-
-    /* KB quadrant (P7) */
-    .kb-quad {
-      display: grid; grid-template-columns: 1.6fr 1fr; grid-template-rows: 1fr 1fr;
-      gap: 14px; height: 100%;
-    }
-    .kb-cell {
-      border: var(--panel-border); border-radius: var(--panel-radius);
-      padding: 22px; background: rgba(255,255,255,0.03); display: grid; gap: 8px; align-content: start;
-    }
-    .kb-cell.primary {
-      grid-row: span 2;
-      border-color: rgba(51,177,255,0.5); background: rgba(51,177,255,0.06);
-    }
-    .kb-cell .kb-head { display: flex; align-items: baseline; gap: 10px; }
-    .kb-cell .kb-num {
-      font-family: var(--font-mono); font-size: 13px; color: var(--accent);
-      letter-spacing: 0.08em;
-    }
-    .kb-cell.primary .kb-num { font-size: 15px; }
-    .kb-cell .kb-title { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--ink); }
-    .kb-cell.primary .kb-title { font-size: 28px; }
-    .kb-cell .kb-sub { font-size: 14px; color: var(--accent); font-family: var(--font-mono); letter-spacing: 0.04em; }
-    .kb-cell .kb-desc { font-size: 14px; color: var(--muted); line-height: 1.55; margin-top: 4px; }
-    .kb-cell ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
-    .kb-cell ul li { font-size: 13px; color: var(--muted); padding-left: 14px; position: relative; line-height: 1.5; }
-    .kb-cell ul li::before { content: "›"; position: absolute; left: 0; color: var(--accent); }
-
-    /* Timeline trace (P5) */
-    .trace { display: grid; gap: 10px; }
-    .trace-row {
-      display: grid; grid-template-columns: 60px 1fr; gap: 14px;
-      padding: 12px 16px; border-left: 3px solid var(--accent); background: rgba(51,177,255,0.05); border-radius: 0 6px 6px 0;
-    }
-    .trace-row.fail { border-left-color: var(--warn); background: rgba(255,122,182,0.05); }
-    .trace-row.ok { border-left-color: var(--ok); background: rgba(66,190,101,0.05); }
-    .trace-row .t-step { font-family: var(--font-mono); font-size: 13px; color: var(--accent); letter-spacing: 0.06em; }
-    .trace-row.fail .t-step { color: var(--warn); }
-    .trace-row.ok .t-step { color: var(--ok); }
-    .trace-row .t-body { font-size: 14px; color: var(--muted); line-height: 1.5; font-family: var(--font-mono); }
-
+    *{box-sizing:border-box;} html{background:var(--page);color:var(--ink);}
+    body{margin:0;font-family:var(--font-body);line-height:1.45;background:var(--page);}
+    img,svg,video{max-width:100%;display:block;}
+    .deck-shell{width:min(1440px,calc(100% - 48px));margin:0 auto;padding:clamp(18px,3vw,40px) 0 clamp(56px,8vw,104px);}
+    .viewer-tools{position:fixed;top:10px;left:50%;z-index:30;display:flex;align-items:center;gap:4px;padding:3px;border:1px solid rgba(30,30,30,0.16);border-radius:6px;background:rgba(255,255,255,0.92);box-shadow:0 8px 22px rgba(0,0,0,0.13);opacity:0;pointer-events:none;transform:translateX(-50%) translateY(-8px);transition:opacity 160ms ease,transform 160ms ease;}
+    .viewer-tools.is-visible,.viewer-tools:focus-within,.viewer-tools:hover{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0);}
+    .viewer-tools button{width:24px;height:24px;padding:0;border:1px solid rgba(30,30,30,0.18);border-radius:5px;background:#fff;color:#202020;font-size:15px;cursor:pointer;}
+    .viewer-tools button:hover{background:rgba(0,0,0,0.055);}
+    .viewer-tools output{min-width:44px;color:#303030;font-size:11px;text-align:center;font-variant-numeric:tabular-nums;}
+    .waterfall{width:100%;column-count:1;column-gap:0;}
+    .deck-card{display:inline-block;width:100%;break-inside:avoid;outline:none;}
+    .slide-frame{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:var(--card-radius);background:var(--paper);color:var(--ink);--slide-scale:1;}
+    .slide-stage{position:absolute;inset:0 auto auto 0;width:calc(var(--slide-width)*1px);height:calc(var(--slide-height)*1px);display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--stage-gap);padding:var(--slide-pad);transform:scale(var(--slide-scale));transform-origin:top left;}
+    .slide-frame.theme-grid{background:linear-gradient(rgba(255,255,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.04) 1px,transparent 1px),var(--paper);background-size:64px 64px;}
+    .page-badge{position:absolute;top:14px;right:16px;z-index:5;padding:4px 10px;border-radius:6px;background:rgba(255,255,255,0.08);color:#fff;font-size:13px;font-weight:500;font-family:var(--font-mono);letter-spacing:0.06em;opacity:0;transform:translateY(-3px);transition:opacity 160ms ease,transform 160ms ease;pointer-events:none;}
+    .deck-card:hover .page-badge,.deck-card:focus-within .page-badge{opacity:1;transform:translateY(0);}
+    .slide-kicker{font-size:22px;line-height:1;font-weight:700;letter-spacing:0.06em;color:var(--accent);text-transform:uppercase;}
+    .slide-title{font-family:var(--font-display);font-weight:700;line-height:var(--title-leading);letter-spacing:-0.01em;margin:0;max-width:100%;}
+    .title-xl{font-size:90px;} .title-lg{font-size:var(--title-size);} .title-md{font-size:48px;} .title-sm{font-size:34px;}
+    .slide-lead{font-size:var(--lead-size);line-height:1.4;color:var(--muted);max-width:var(--lead-width);margin:0;}
+    .content-meta{font-family:var(--font-mono);font-size:14px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:0;}
+    .flow-stack{display:grid;gap:var(--section-gap);align-content:start;}
+    .flow-grid{display:grid;gap:var(--block-gap);align-content:stretch;}
+    .flow-grid.two{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .flow-grid.three{grid-template-columns:repeat(3,minmax(0,1fr));}
+    .flow-grid.four{grid-template-columns:repeat(4,minmax(0,1fr));}
+    .flow-grid.two-1-2{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);}
+    .flow-grid.two-2-1{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);}
+    .flow-grid.three-1-1-1{grid-template-columns:repeat(3,minmax(0,1fr));}
+    .flow-panel{border:var(--panel-border);border-radius:var(--panel-radius);padding:var(--block-pad);background:rgba(255,255,255,0.025);}
+    .flow-panel h3{font-family:var(--font-display);font-size:19px;margin:0 0 6px;font-weight:700;color:var(--ink);}
+    .flow-panel h4{font-size:14px;margin:0 0 4px;font-weight:600;color:var(--accent);letter-spacing:0.02em;}
+    .flow-panel p,.flow-panel li{font-size:14px;line-height:1.5;color:var(--muted);margin:0;}
+    .flow-panel ul{list-style:none;margin:0;padding:0;display:grid;gap:5px;}
+    .flow-panel ul li{padding-left:12px;position:relative;font-size:13px;line-height:1.5;}
+    .flow-panel ul li::before{content:"›";position:absolute;left:0;color:var(--accent);font-weight:700;}
+    .flow-panel .row{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-family:var(--font-mono);font-size:12px;color:var(--muted);padding:6px 0;border-bottom:1px dashed rgba(255,255,255,0.08);}
+    .flow-panel .row:last-child{border-bottom:none;}
+    .flow-panel .row .k{color:var(--ink);font-weight:600;}
+    .accent-card{border:1px solid rgba(138,63,252,0.4);background:rgba(138,63,252,0.08);border-radius:var(--panel-radius);padding:var(--block-pad);}
+    .accent-card h3{font-family:var(--font-display);font-size:18px;margin:0 0 6px;color:var(--accent-2);}
+    .accent-card p{font-size:13px;line-height:1.5;color:var(--ink);margin:0;}
+    .metric-card{border:1px solid rgba(51,177,255,0.35);background:rgba(51,177,255,0.06);border-radius:var(--panel-radius);padding:22px 20px;display:grid;gap:8px;align-content:start;}
+    .metric-card .num{font-family:var(--font-display);font-size:48px;font-weight:700;line-height:1;letter-spacing:-0.02em;}
+    .metric-card .num.gold{color:var(--gold);} .metric-card .num.pink{color:var(--warn);} .metric-card .num.green{color:var(--ok);} .metric-card .num.blue{color:var(--accent);}
+    .metric-card .label{font-size:13px;color:var(--muted);line-height:1.35;}
+    .metric-card .unit{font-size:18px;color:var(--muted);font-weight:400;margin-left:3px;}
+    .tag-row{display:flex;flex-wrap:wrap;gap:6px;}
+    .tag{display:inline-flex;align-items:center;padding:4px 10px;border:1px solid rgba(51,177,255,0.45);border-radius:999px;font-family:var(--font-mono);font-size:12px;color:var(--accent);background:var(--accent-soft);}
+    .tag.tag-2{border-color:rgba(138,63,252,0.45);color:var(--accent-2);background:var(--accent-2-soft);}
+    .tag.tag-gold{border-color:rgba(241,194,27,0.4);color:var(--gold);background:rgba(241,194,27,0.08);}
+    .tag.tag-ok{border-color:rgba(66,190,101,0.4);color:var(--ok);background:rgba(66,190,101,0.08);}
+    .tag.tag-warn{border-color:rgba(255,122,182,0.4);color:var(--warn);background:rgba(255,122,182,0.06);}
+    .layout-cover{align-content:center;justify-items:start;gap:var(--content-gap);}
+    .layout-argument-grid{align-content:center;display:grid;gap:var(--content-gap);}
+    .logo-row{display:flex;align-items:center;gap:14px;}
+    .logo-row .mark{width:16px;height:16px;background:var(--accent);border-radius:4px;}
+    .logo-row .dot-ring{width:16px;height:16px;border:2px solid var(--accent);border-radius:50%;}
+    .logo-row .square{width:16px;height:16px;background:var(--accent-2);transform:rotate(45deg);}
+    /* Agent role cards (P1) */
+    .role-row{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;align-items:stretch;}
+    .role-node{border:var(--panel-border);border-radius:var(--panel-radius);padding:14px 12px;text-align:center;display:grid;gap:4px;background:rgba(255,255,255,0.03);position:relative;}
+    .role-node .r-label{font-family:var(--font-mono);font-size:11px;letter-spacing:0.08em;color:var(--accent);text-transform:uppercase;}
+    .role-node .r-name{font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--ink);}
+    .role-node .r-sub{font-size:11px;color:var(--muted);line-height:1.3;}
+    .role-node.fb{border-color:rgba(138,63,252,0.5);background:rgba(138,63,252,0.08);}
+    .role-node.fb .r-label{color:var(--accent-2);}
+    .role-node::after{content:"→";position:absolute;right:-11px;top:50%;transform:translateY(-50%);color:var(--accent);font-size:18px;font-weight:700;z-index:2;}
+    .role-node:last-child::after{content:"↺";right:-18px;color:var(--accent-2);}
+    /* Scenario cards (P1 left) */
+    .scene-list{display:grid;gap:8px;}
+    .scene-item{display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start;padding:10px 12px;border:var(--panel-border);border-radius:6px;background:rgba(255,255,255,0.02);}
+    .scene-item .s-dot{width:14px;height:14px;border-radius:4px;margin-top:3px;}
+    .scene-item .s-dot.c1{background:var(--accent);} .scene-item .s-dot.c2{background:var(--accent-2);}
+    .scene-item .s-dot.c3{background:var(--gold);} .scene-item .s-dot.c4{background:var(--ok);}
+    .scene-item .s-name{font-family:var(--font-display);font-size:15px;font-weight:700;color:var(--ink);}
+    .scene-item .s-cmd{font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-left:6px;}
+    .scene-item .s-desc{font-size:12px;color:var(--muted);line-height:1.4;margin-top:2px;}
+    /* Pipeline (P4) */
+    .pipeline{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;}
+    .pipe-step{border:var(--panel-border);border-radius:var(--panel-radius);padding:14px 10px;background:rgba(255,255,255,0.03);display:grid;gap:4px;}
+    .pipe-step .step-no{font-family:var(--font-mono);font-size:20px;color:var(--accent);font-weight:700;}
+    .pipe-step .step-name{font-family:var(--font-display);font-size:15px;font-weight:700;color:var(--ink);}
+    .pipe-step .step-desc{font-size:11px;color:var(--muted);line-height:1.35;}
+    .pipe-step.hl{border-color:rgba(241,194,27,0.55);background:rgba(241,194,27,0.06);}
+    .pipe-step.hl .step-no{color:var(--gold);}
+    /* Token bar (P7) */
+    .token-bar{display:grid;gap:8px;}
+    .token-row{display:grid;grid-template-columns:110px 1fr 56px;gap:10px;align-items:center;}
+    .token-row .tname{font-family:var(--font-mono);font-size:12px;color:var(--muted);}
+    .token-row .tbar{height:18px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;}
+    .token-row .tfill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--accent-2));}
+    .token-row .tfill.big{background:linear-gradient(90deg,var(--gold),var(--warn));}
+    .token-row .tfill.mute{background:var(--muted);}
+    .token-row .tpct{font-family:var(--font-mono);font-size:12px;color:var(--ink);text-align:right;}
+    /* KB quadrant (P5) */
+    .kb-quad{display:grid;grid-template-columns:1.6fr 1fr;grid-template-rows:1fr 1fr;gap:12px;height:100%;}
+    .kb-cell{border:var(--panel-border);border-radius:var(--panel-radius);padding:18px;background:rgba(255,255,255,0.03);display:grid;gap:6px;align-content:start;}
+    .kb-cell.primary{grid-row:span 2;border-color:rgba(51,177,255,0.5);background:rgba(51,177,255,0.06);}
+    .kb-cell .kb-head{display:flex;align-items:baseline;gap:10px;}
+    .kb-cell .kb-num{font-family:var(--font-mono);font-size:12px;color:var(--accent);letter-spacing:0.08em;}
+    .kb-cell.primary .kb-num{font-size:14px;}
+    .kb-cell .kb-title{font-family:var(--font-display);font-size:19px;font-weight:700;color:var(--ink);}
+    .kb-cell.primary .kb-title{font-size:24px;}
+    .kb-cell .kb-sub{font-size:12px;color:var(--accent);font-family:var(--font-mono);letter-spacing:0.04em;}
+    .kb-cell .kb-desc{font-size:12px;color:var(--muted);line-height:1.5;margin-top:2px;}
+    .kb-cell ul{list-style:none;margin:4px 0 0;padding:0;display:grid;gap:3px;}
+    .kb-cell ul li{font-size:12px;color:var(--muted);padding-left:12px;position:relative;line-height:1.45;}
+    .kb-cell ul li::before{content:"›";position:absolute;left:0;color:var(--accent);}
+    /* Trace timeline (P6) */
+    .trace{display:grid;gap:8px;}
+    .trace-row{display:grid;grid-template-columns:50px 1fr;gap:12px;padding:10px 14px;border-left:3px solid var(--accent);background:rgba(51,177,255,0.05);border-radius:0 6px 6px 0;}
+    .trace-row.fail{border-left-color:var(--warn);background:rgba(255,122,182,0.05);}
+    .trace-row.ok{border-left-color:var(--ok);background:rgba(66,190,101,0.05);}
+    .trace-row .t-step{font-family:var(--font-mono);font-size:12px;color:var(--accent);letter-spacing:0.06em;}
+    .trace-row.fail .t-step{color:var(--warn);} .trace-row.ok .t-step{color:var(--ok);}
+    .trace-row .t-body{font-size:12px;color:var(--muted);line-height:1.5;font-family:var(--font-mono);}
+    /* Scenario hypothesis cards (P3) */
+    .scene-h{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
+    .sh-card{border:var(--panel-border);border-radius:var(--panel-radius);padding:16px;background:rgba(255,255,255,0.025);display:grid;gap:6px;border-left:4px solid var(--accent);}
+    .sh-card.c2{border-left-color:var(--accent-2);} .sh-card.c3{border-left-color:var(--gold);} .sh-card.c4{border-left-color:var(--ok);}
+    .sh-card .sh-title{font-family:var(--font-display);font-size:17px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px;}
+    .sh-card .sh-title .dot{width:10px;height:10px;border-radius:3px;}
+    .sh-card.c1 .dot{background:var(--accent);} .sh-card.c2 .dot{background:var(--accent-2);}
+    .sh-card.c3 .dot{background:var(--gold);} .sh-card.c4 .dot{background:var(--ok);}
+    .sh-card .sh-cmd{font-family:var(--font-mono);font-size:11px;color:var(--muted);}
+    .sh-card .sh-what{font-size:12px;color:var(--muted);line-height:1.45;}
+    .sh-card .sh-what b{color:var(--ink);}
+    .sh-card .sh-tag{display:inline-block;font-family:var(--font-mono);font-size:11px;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.06);color:var(--accent);margin-top:2px;}
+    .sh-card.c2 .sh-tag{color:var(--accent-2);} .sh-card.c3 .sh-tag{color:var(--gold);} .sh-card.c4 .sh-tag{color:var(--ok);}
     /* Strategy table (P3) */
-    .strat-table { display: grid; gap: 0; border: var(--panel-border); border-radius: var(--panel-radius); overflow: hidden; }
-    .strat-head, .strat-row { display: grid; grid-template-columns: 130px 1fr 1fr; }
-    .strat-head { background: rgba(138,63,252,0.15); }
-    .strat-head > div { padding: 12px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--accent-2); letter-spacing: 0.06em; text-transform: uppercase; border-right: var(--panel-border); }
-    .strat-head > div:last-child { border-right: none; }
-    .strat-row { border-top: var(--panel-border); }
-    .strat-row > div { padding: 14px 16px; font-size: 14px; color: var(--muted); line-height: 1.5; border-right: var(--panel-border); }
-    .strat-row > div:first-child { font-family: var(--font-mono); color: var(--ink); font-weight: 600; }
-    .strat-row > div:last-child { border-right: none; }
-    .strat-row.hl > div:first-child { color: var(--accent); }
-
-    /* Model matrix (P6) */
-    .model-matrix { display: grid; gap: 0; border: var(--panel-border); border-radius: var(--panel-radius); overflow: hidden; }
-    .mm-head, .mm-row { display: grid; grid-template-columns: 180px 1fr 1fr; }
-    .mm-head { background: rgba(51,177,255,0.12); }
-    .mm-head > div { padding: 12px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; border-right: var(--panel-border); }
-    .mm-head > div:last-child { border-right: none; }
-    .mm-row { border-top: var(--panel-border); }
-    .mm-row > div { padding: 14px 16px; font-size: 14px; color: var(--muted); line-height: 1.5; border-right: var(--panel-border); }
-    .mm-row > div:first-child { font-family: var(--font-mono); color: var(--ink); font-weight: 600; }
-    .mm-row > div:last-child { border-right: none; }
-
+    .strat-table{display:grid;border:var(--panel-border);border-radius:var(--panel-radius);overflow:hidden;}
+    .strat-head,.strat-row{display:grid;grid-template-columns:120px 1fr 1fr 140px;}
+    .strat-head{background:rgba(138,63,252,0.15);}
+    .strat-head>div{padding:10px 12px;font-family:var(--font-mono);font-size:11px;color:var(--accent-2);letter-spacing:0.06em;text-transform:uppercase;border-right:var(--panel-border);}
+    .strat-head>div:last-child{border-right:none;}
+    .strat-row{border-top:var(--panel-border);}
+    .strat-row>div{padding:10px 12px;font-size:12px;color:var(--muted);line-height:1.45;border-right:var(--panel-border);}
+    .strat-row>div:first-child{font-family:var(--font-mono);color:var(--ink);font-weight:600;}
+    .strat-row>div:last-child{border-right:none;}
+    .strat-row.hl>div:first-child{color:var(--gold);}
+    /* Model matrix (P7) */
+    .model-matrix{display:grid;border:var(--panel-border);border-radius:var(--panel-radius);overflow:hidden;}
+    .mm-head,.mm-row{display:grid;grid-template-columns:150px 1fr 1fr;}
+    .mm-head{background:rgba(51,177,255,0.12);}
+    .mm-head>div{padding:10px 12px;font-family:var(--font-mono);font-size:11px;color:var(--accent);letter-spacing:0.06em;text-transform:uppercase;border-right:var(--panel-border);}
+    .mm-head>div:last-child{border-right:none;}
+    .mm-row{border-top:var(--panel-border);}
+    .mm-row>div{padding:10px 12px;font-size:12px;color:var(--muted);line-height:1.4;border-right:var(--panel-border);}
+    .mm-row>div:first-child{font-family:var(--font-mono);color:var(--ink);font-weight:600;}
+    .mm-row>div:last-child{border-right:none;}
     /* Value props (P8) */
-    .value-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--block-gap); }
-    .value-card {
-      border: var(--panel-border); border-radius: var(--panel-radius);
-      padding: 22px; background: rgba(255,255,255,0.025); display: grid; gap: 10px;
-    }
-    .value-card .vc-head { display: flex; align-items: center; gap: 10px; }
-    .value-card .vc-icon {
-      width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center;
-      background: var(--accent-soft); color: var(--accent); font-family: var(--font-mono); font-weight: 700;
-    }
-    .value-card .vc-name { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--ink); }
-    .value-card .vc-pain { font-size: 13px; color: var(--warn); font-family: var(--font-mono); }
-    .value-card .vc-value { font-size: 14px; color: var(--muted); line-height: 1.55; }
-
-    .cost-table { display: grid; gap: 0; border: var(--panel-border); border-radius: var(--panel-radius); overflow: hidden; }
-    .cost-row { display: grid; grid-template-columns: 1fr 140px 140px; }
-    .cost-row.head { background: rgba(51,177,255,0.12); }
-    .cost-row > div { padding: 10px 14px; font-size: 14px; border-right: var(--panel-border); border-top: var(--panel-border); }
-    .cost-row.head > div { border-top: none; font-family: var(--font-mono); color: var(--accent); letter-spacing: 0.06em; font-size: 12px; text-transform: uppercase; }
-    .cost-row > div:first-child { color: var(--ink); font-weight: 600; }
-    .cost-row > div { color: var(--muted); text-align: right; font-family: var(--font-mono); font-size: 13px; }
-    .cost-row > div:first-child { text-align: left; font-family: var(--font-body); }
-    .cost-row > div:last-child { border-right: none; }
-    .cost-row.save > div { color: var(--ok); font-weight: 700; }
-
+    .value-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--block-gap);}
+    .value-card{border:var(--panel-border);border-radius:var(--panel-radius);padding:18px;background:rgba(255,255,255,0.025);display:grid;gap:8px;}
+    .value-card .vc-head{display:flex;align-items:center;gap:10px;}
+    .value-card .vc-icon{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font-family:var(--font-mono);font-weight:700;font-size:13px;}
+    .value-card .vc-icon.p{background:var(--accent-2-soft);color:var(--accent-2);}
+    .value-card .vc-icon.g{background:rgba(241,194,27,0.1);color:var(--gold);}
+    .value-card .vc-name{font-family:var(--font-display);font-size:17px;font-weight:700;color:var(--ink);}
+    .value-card .vc-pain{font-size:11px;color:var(--warn);font-family:var(--font-mono);}
+    .value-card .vc-value{font-size:12px;color:var(--muted);line-height:1.5;}
+    .cost-table{display:grid;border:var(--panel-border);border-radius:var(--panel-radius);overflow:hidden;}
+    .cost-row{display:grid;grid-template-columns:1fr 110px 110px;}
+    .cost-row.head{background:rgba(51,177,255,0.12);}
+    .cost-row>div{padding:9px 12px;font-size:12px;border-right:var(--panel-border);border-top:var(--panel-border);}
+    .cost-row.head>div{border-top:none;font-family:var(--font-mono);color:var(--accent);letter-spacing:0.06em;font-size:11px;text-transform:uppercase;}
+    .cost-row>div:first-child{color:var(--ink);font-weight:600;text-align:left;font-family:var(--font-body);}
+    .cost-row>div{color:var(--muted);text-align:right;font-family:var(--font-mono);font-size:12px;}
+    .cost-row.save>div{color:var(--ok);font-weight:700;}
     /* Roadmap (P9) */
-    .roadmap { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--block-gap); }
-    .road-col {
-      border: var(--panel-border); border-radius: var(--panel-radius);
-      padding: 22px; background: rgba(255,255,255,0.025); display: grid; gap: 12px; align-content: start;
-    }
-    .road-col .rc-phase {
-      font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; color: var(--accent);
-      text-transform: uppercase;
-    }
-    .road-col.mid .rc-phase { color: var(--accent-2); }
-    .road-col.long .rc-phase { color: var(--gold); }
-    .road-col .rc-title { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--ink); }
-    .road-col ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-    .road-col ul li { font-size: 13px; color: var(--muted); line-height: 1.5; padding-left: 16px; position: relative; }
-    .road-col ul li::before { content: "□"; position: absolute; left: 0; color: var(--accent); font-size: 12px; top: 2px; }
-    .road-col.mid ul li::before { color: var(--accent-2); }
-    .road-col.long ul li::before { color: var(--gold); }
-
+    .roadmap{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--block-gap);}
+    .road-col{border:var(--panel-border);border-radius:var(--panel-radius);padding:18px;background:rgba(255,255,255,0.025);display:grid;gap:10px;align-content:start;}
+    .road-col .rc-phase{font-family:var(--font-mono);font-size:11px;letter-spacing:0.1em;color:var(--accent);text-transform:uppercase;}
+    .road-col.mid .rc-phase{color:var(--accent-2);} .road-col.long .rc-phase{color:var(--gold);}
+    .road-col .rc-title{font-family:var(--font-display);font-size:19px;font-weight:700;color:var(--ink);}
+    .road-col ul{list-style:none;margin:0;padding:0;display:grid;gap:5px;}
+    .road-col ul li{font-size:12px;color:var(--muted);line-height:1.45;padding-left:14px;position:relative;}
+    .road-col ul li::before{content:"□";position:absolute;left:0;color:var(--accent);font-size:11px;top:1px;}
+    .road-col.mid ul li::before{color:var(--accent-2);} .road-col.long ul li::before{color:var(--gold);}
     /* Innov list (P9) */
-    .innov-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-    .innov-item {
-      border-left: 3px solid var(--accent); padding: 10px 0 10px 16px; display: grid; gap: 4px;
-    }
-    .innov-item:nth-child(2) { border-left-color: var(--accent-2); }
-    .innov-item:nth-child(3) { border-left-color: var(--gold); }
-    .innov-item:nth-child(4) { border-left-color: var(--ok); }
-    .innov-item .innov-no { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; color: var(--accent); }
-    .innov-item:nth-child(2) .innov-no { color: var(--accent-2); }
-    .innov-item:nth-child(3) .innov-no { color: var(--gold); }
-    .innov-item:nth-child(4) .innov-no { color: var(--ok); }
-    .innov-item .innov-title { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--ink); }
-    .innov-item .innov-desc { font-size: 13px; color: var(--muted); line-height: 1.5; }
-
-    /* Footnote metric line */
-    .foot-metric {
-      display: flex; flex-wrap: wrap; gap: 18px; align-items: center;
-      padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.1);
-    }
-    .foot-metric .fm-item { display: flex; align-items: baseline; gap: 6px; }
-    .foot-metric .fm-v { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--accent); }
-    .foot-metric .fm-l { font-family: var(--font-mono); font-size: 12px; color: var(--muted); letter-spacing: 0.06em; }
-
-    .placeholder {
-      font-family: var(--font-mono); font-size: 12px; color: var(--warn);
-      letter-spacing: 0.04em; padding: 2px 6px; border: 1px dashed var(--warn);
-      border-radius: 4px; background: rgba(255,122,182,0.06);
-    }
-
-    .caption {
-      margin: 0 16px; padding: var(--caption-gap) 0;
-      border-top: 1px solid rgba(30,30,30,0.18); color: #6b6b66;
-      font-size: clamp(14px, 1.05vw, 16px);
-      width: min(var(--caption-width), calc(100% - 32px)); margin: var(--caption-gap) auto 0;
-    }
-    .caption summary { font-family: var(--font-body); font-size: 14px; color: #555; letter-spacing: 0.04em; text-transform: uppercase; list-style: none; cursor: pointer; }
-    .caption summary::-webkit-details-marker { display: none; }
-    .caption p { font-family: var(--font-body); font-size: 15px; line-height: 1.65; color: #3a3a3a; margin: 10px 0 0; max-width: var(--caption-width); }
-    .deck-shell.compact-pages .caption { margin: 0; padding: 6px 0 0; border-top: none; }
-    .deck-shell.compact-pages .caption p, .deck-shell.compact-pages .caption summary { display: none; }
-    .deck-shell.compact-pages .deck-card { margin-bottom: 6px; }
-
-    .slide-frame .page-badge { background: rgba(28,28,28,0.34); color: #fff; }
-
-    .deck-shell:fullscreen { width: 100vw; height: 100vh; max-width: none; padding: 0; background: var(--page); overflow: auto; display: flex; flex-direction: column; }
-    .deck-shell:fullscreen .deck-card { margin: 0 auto; width: 100%; max-width: 100vw; }
-    .deck-shell:fullscreen .deck-card.is-presenting { max-width: none; height: 100vh; width: 100vw; display: flex; align-items: center; justify-content: center; padding: 0; }
-    .deck-shell:fullscreen .deck-card.is-presenting .slide-frame { width: auto; height: auto; aspect-ratio: 16/9; max-width: 100vw; max-height: 100vh; flex: 0 0 auto; }
-    .deck-shell:fullscreen .caption { display: none; }
-
-    @media (max-width: 720px) {
-      .deck-card, .caption { margin-left: 4px; margin-right: 4px; width: calc(100% - 8px); }
-    }
+    .innov-list{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+    .innov-item{border-left:3px solid var(--accent);padding:8px 0 8px 12px;display:grid;gap:3px;}
+    .innov-item:nth-child(2){border-left-color:var(--accent-2);} .innov-item:nth-child(3){border-left-color:var(--gold);} .innov-item:nth-child(4){border-left-color:var(--ok);}
+    .innov-item .innov-no{font-family:var(--font-mono);font-size:11px;letter-spacing:0.1em;color:var(--accent);}
+    .innov-item:nth-child(2) .innov-no{color:var(--accent-2);} .innov-item:nth-child(3) .innov-no{color:var(--gold);} .innov-item:nth-child(4) .innov-no{color:var(--ok);}
+    .innov-item .innov-title{font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--ink);}
+    .innov-item .innov-desc{font-size:12px;color:var(--muted);line-height:1.45;}
+    /* Foot metric */
+    .foot-metric{display:flex;flex-wrap:wrap;gap:18px;align-items:center;padding-top:12px;border-top:1px solid rgba(255,255,255,0.1);}
+    .foot-metric .fm-item{display:flex;align-items:baseline;gap:5px;}
+    .foot-metric .fm-v{font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--accent);}
+    .foot-metric .fm-l{font-family:var(--font-mono);font-size:11px;color:var(--muted);letter-spacing:0.06em;}
+    .placeholder{font-family:var(--font-mono);font-size:11px;color:var(--warn);letter-spacing:0.04em;padding:1px 5px;border:1px dashed var(--warn);border-radius:3px;background:rgba(255,122,182,0.06);}
+    .screenshot-placeholder{border:2px dashed rgba(255,255,255,0.2);border-radius:var(--panel-radius);padding:24px;display:grid;place-items:center;min-height:130px;background:repeating-linear-gradient(45deg,rgba(255,255,255,0.02) 0 10px,transparent 10px 20px);color:var(--muted);font-family:var(--font-mono);font-size:12px;text-align:center;gap:6px;}
+    .screenshot-placeholder .sp-label{color:var(--warn);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;}
+    /* B1~B5 bar chart (P4) */
+    .bench-bars{display:grid;gap:6px;}
+    .bar-row{display:grid;grid-template-columns:70px 1fr 46px;gap:8px;align-items:center;}
+    .bar-row .bname{font-family:var(--font-mono);font-size:12px;color:var(--ink);font-weight:600;}
+    .bar-row .bbar{height:14px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;position:relative;}
+    .bar-row .bfill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:3px;}
+    .bar-row.hard .bfill{background:linear-gradient(90deg,var(--warn),var(--gold));}
+    .bar-row .bpct{font-family:var(--font-mono);font-size:11px;color:var(--muted);text-align:right;}
+    .caption{margin:0 16px;padding:var(--caption-gap) 0;border-top:1px solid rgba(30,30,30,0.18);color:#6b6b66;font-size:clamp(14px,1.05vw,16px);width:min(var(--caption-width),calc(100% - 32px));margin:var(--caption-gap) auto 0;}
+    .caption summary{font-size:14px;color:#555;letter-spacing:0.04em;text-transform:uppercase;list-style:none;cursor:pointer;}
+    .caption summary::-webkit-details-marker{display:none;}
+    .caption p{font-size:14px;line-height:1.65;color:#3a3a3a;margin:10px 0 0;max-width:var(--caption-width);}
+    .deck-shell:fullscreen{width:100vw;height:100vh;max-width:none;padding:0;background:var(--page);overflow:auto;display:flex;flex-direction:column;}
+    .deck-shell:fullscreen .deck-card{margin:0 auto;width:100%;max-width:100vw;}
+    .deck-shell:fullscreen .deck-card.is-presenting{max-width:none;height:100vh;width:100vw;display:flex;align-items:center;justify-content:center;padding:0;}
+    .deck-shell:fullscreen .deck-card.is-presenting .slide-frame{width:auto;height:auto;aspect-ratio:16/9;max-width:100vw;max-height:100vh;flex:0 0 auto;}
+    .deck-shell:fullscreen .caption{display:none;}
+    @media (max-width:720px){.deck-card,.caption{margin-left:4px;margin-right:4px;width:calc(100% - 8px);}}
   </style>
 </head>
 <body>
-  <nav class="viewer-tools" aria-label="幻灯片缩放控制">
-    <button type="button" data-zoom="out" title="缩小" aria-label="缩小">−</button>
-    <output>100%</output>
-    <button type="button" data-zoom="in" title="放大" aria-label="放大">+</button>
-    <button type="button" data-zoom="reset" title="重置缩放" aria-label="重置缩放">↺</button>
-  </nav>
-
+  <nav class="viewer-tools"><button data-zoom="out">−</button><output>100%</output><button data-zoom="in">+</button><button data-zoom="reset">↺</button></nav>
   <main class="deck-shell" id="deck">
-    <div class="waterfall" aria-label="幻灯片画廊">
+    <div class="waterfall">
 
-      <!-- ============ P1 项目概述 ============ -->
+      <!-- P1 · 概述（三栏：4 场景 + 5智能体 + 多LLM映射） -->
       <article class="deck-card">
-        <section class="slide-frame theme-grid" aria-label="项目概述">
+        <section class="slide-frame theme-grid">
           <div class="page-badge">01 / 09</div>
           <div class="slide-stage">
             <div class="slide-kicker">RD-Agent · 项目总览</div>
-            <div class="slide-content" style="display:grid; gap:36px; align-content:center;">
-              <div class="flow-stack">
-                <div class="logo-row" aria-hidden="true">
-                  <div class="mark"></div>
-                  <div class="dot-ring"></div>
-                  <div class="square"></div>
+            <div class="slide-content" style="display:grid;grid-template-rows:auto auto 1fr auto;gap:22px;align-content:center;">
+              <div class="flow-stack" style="gap:14px;">
+                <div class="logo-row"><div class="mark"></div><div class="dot-ring"></div><div class="square"></div></div>
+                <h2 class="slide-title title-md">多智能体自动化量化研究平台</h2>
+                <p class="slide-lead">让大模型代替研究员完成"提假设→写代码→回测→反馈"完整 R&amp;D 循环；4 类研究入口 · 5 个智能体协作 · 每环节独立配 LLM。</p>
+              </div>
+
+              <div class="content-meta">5 智能体 R&amp;D-Loop 闭环</div>
+              <div class="role-row">
+                <div class="role-node"><div class="r-label">Agent ①</div><div class="r-name">HypothesisGen</div><div class="r-sub">研究方向<br>LLM/Random/Bandit</div></div>
+                <div class="role-node"><div class="r-label">Agent ②</div><div class="r-name">Developer</div><div class="r-sub">CoSTEER 编码<br>6 步演化 + V2 KB</div></div>
+                <div class="role-node"><div class="r-label">Agent ③</div><div class="r-name">Runner</div><div class="r-sub">Docker 回测<br>SOTA 因子继承</div></div>
+                <div class="role-node fb"><div class="r-label">Agent ④</div><div class="r-name">Summarizer</div><div class="r-sub">4 维反馈<br>Trace 持久化</div></div>
+                <div class="role-node fb"><div class="r-label">Agent ⑤</div><div class="r-name">H2E</div><div class="r-sub">实验→假设<br>go / no-go 映射</div></div>
+              </div>
+
+              <div class="flow-grid three">
+                <div class="flow-panel">
+                  <h3>📥 4 大研究入口</h3>
+                  <div class="scene-list" style="margin-top:8px;">
+                    <div class="scene-item"><div class="s-dot c1"></div><div><div class="s-name">因子研究 <span class="s-cmd">qlib_factor</span></div><div class="s-desc">挖价量/基本面因子</div></div></div>
+                    <div class="scene-item"><div class="s-dot c2"></div><div><div class="s-name">模型研究 <span class="s-cmd">qlib_model</span></div><div class="s-desc">迭代 GNN/MLP/Transformer</div></div></div>
+                    <div class="scene-item"><div class="s-dot c3"></div><div><div class="s-name">组合策略 <span class="s-cmd">qlib_quant</span></div><div class="s-desc">因子+模型+权重+风控</div></div></div>
+                    <div class="scene-item"><div class="s-dot c4"></div><div><div class="s-name">研报抽取 <span class="s-cmd">factor_from_report</span></div><div class="s-desc">PDF 研报→可回测因子</div></div></div>
+                  </div>
                 </div>
-                <h2 class="slide-title title-lg">多智能体自动化<br>量化研究平台</h2>
-                <p class="slide-lead">让大模型代替研究员完成"提假设 → 写代码 → 回测 → 反馈"的完整 R&amp;D 循环，自动挖因子、迭代模型、沉淀经验。</p>
-                <div class="tag-row">
-                  <span class="tag">5-Role RDLoop</span>
-                  <span class="tag tag-2">CoSTEER V2 知识图谱</span>
-                  <span class="tag tag-gold">多 LLM 分步路由</span>
-                  <span class="tag tag-ok">4 大量化场景</span>
+                <div class="flow-panel">
+                  <h3>🧠 5 智能体职责</h3>
+                  <ul style="margin-top:6px;">
+                    <li><b style="color:var(--ink);">HypothesisGen</b> 研究总监——决定研究什么</li>
+                    <li><b style="color:var(--ink);">Developer</b> 工程师——把假设写成代码</li>
+                    <li><b style="color:var(--ink);">Runner</b> 回测平台——真跑出硬指标</li>
+                    <li><b style="color:var(--ink);">Summarizer</b> 评审——4 维反馈判断好坏</li>
+                    <li><b style="color:var(--accent-2);">H2E</b> 映射官——实验结果→假设层信号</li>
+                  </ul>
+                </div>
+                <div class="flow-panel" style="border-color:rgba(241,194,27,0.4);background:rgba(241,194,27,0.05);">
+                  <h3 style="color:var(--gold);">🔌 多 LLM 分步路由（不绑定）</h3>
+                  <ul style="margin-top:6px;">
+                    <li>HypothesisGen · 通用推理模型</li>
+                    <li><b style="color:var(--gold);">Developer · Coding 专精模型</b></li>
+                    <li>Summarizer · 轻量总结（便宜）</li>
+                    <li>H2E · 轻量映射（便宜）</li>
+                  </ul>
+                  <div class="tag-row" style="margin-top:10px;">
+                    <span class="tag tag-gold">任意 OpenAI 端点</span>
+                    <span class="tag tag-gold">一键测试</span>
+                    <span class="tag tag-gold">Prefect 缓存 ¥0</span>
+                  </div>
                 </div>
               </div>
 
-              <div class="flow-stack" style="gap:18px;">
-                <div class="content-meta">5 智能体 R&amp;D-Loop 全流程</div>
-                <div class="loop-diagram">
-                  <div class="loop-node">
-                    <div class="role">Agent ①</div>
-                    <div class="name">HypothesisGen</div>
-                    <div class="sub">自然语言<br>→ 研究假设</div>
-                  </div>
-                  <div class="loop-node">
-                    <div class="role">Agent ②</div>
-                    <div class="name">Developer</div>
-                    <div class="sub">CoSTEER 编码<br>6 步演化循环</div>
-                  </div>
-                  <div class="loop-node">
-                    <div class="role">Agent ③</div>
-                    <div class="name">Runner</div>
-                    <div class="sub">回测执行<br>SOTA 因子继承</div>
-                  </div>
-                  <div class="loop-node feedback">
-                    <div class="role">Agent ④</div>
-                    <div class="name">Summarizer</div>
-                    <div class="sub">4 维反馈<br>Trace 沉淀</div>
-                  </div>
-                  <div class="loop-node feedback">
-                    <div class="role">Agent ⑤</div>
-                    <div class="name">H2E</div>
-                    <div class="sub">假设→实验<br>反馈映射</div>
-                  </div>
-                </div>
-                <p style="margin:0; font-size:14px; color:var(--muted); font-family:var(--font-mono);">
-                  4 大场景入口：<span style="color:var(--accent);">qlib_factor</span> · 因子研究 &nbsp;|&nbsp;
-                  <span style="color:var(--accent);">qlib_model</span> · 模型研究 &nbsp;|&nbsp;
-                  <span style="color:var(--accent);">qlib_quant</span> · 组合策略 &nbsp;|&nbsp;
-                  <span style="color:var(--accent);">factor_from_report</span> · 研报抽取
-                </p>
+              <div class="tag-row">
+                <span class="tag">5-Role RDLoop</span>
+                <span class="tag tag-2">CoSTEER V2</span>
+                <span class="tag tag-gold">多 LLM 路由</span>
+                <span class="tag tag-ok">4 层知识库</span>
+                <span class="tag tag-warn">NeurIPS'25</span>
+                <span class="tag">Paper-to-Code Benchmark</span>
               </div>
             </div>
           </div>
         </section>
-        <details class="caption" open>
-          <summary>幻灯片备注</summary>
-          <p>P1 定位：封面 + 一张图说清「我们是谁、核心循环是什么」。演讲时只讲两件事：(1) 我们做的是"量化研究的 AI Agent 自动化"；(2) 5 个 Agent 组成闭环，不是单个 LLM。下方列出 4 个场景入口，让评委知道不是"玩具 demo"，是覆盖完整研究流程的平台。</p>
-        </details>
+        <details class="caption" open><summary>P1 · 备注</summary><p>P1 三栏布局：左 4 入口、中 5 智能体流程图（5 个横排节点带箭头循环回 HypothesisGen）、右多 LLM 映射（金色高亮是产品差异化）。演讲 60 秒。</p></details>
       </article>
 
-      <!-- ============ P2 成果与对标 ============ -->
+      <!-- P2 · 成果（4 大数字 + 截图占位 + 论文 + 效率指标） -->
       <article class="deck-card">
-        <section class="slide-frame theme-grid" aria-label="成果与对标">
+        <section class="slide-frame theme-grid">
           <div class="page-badge">02 / 09</div>
           <div class="slide-stage">
             <div class="slide-kicker">成果 · 与 SOTA 对标</div>
-            <div class="slide-content layout-argument-grid">
-              <div class="flow-stack">
+            <div class="slide-content layout-argument-grid" style="gap:22px;">
+              <div class="flow-stack" style="gap:10px;">
                 <h2 class="slide-title title-sm">不是 PPT 项目——我们跑出来了</h2>
-                <p class="slide-lead">端到端量化研究流水线已落地，论文被 NeurIPS 2025 录用，B1~B5 模型 Benchmark 可复现。</p>
+                <p class="slide-lead">端到端量化流水线已落地，主论文被 NeurIPS 2025 录用，B1~B5 模型 Benchmark 可复现。</p>
               </div>
               <div class="flow-grid four">
-                <div class="metric-card">
-                  <div class="num"><span class="placeholder">__</span><span class="unit">个</span></div>
-                  <div class="label">累计完成<br>因子 / 模型任务</div>
-                </div>
-                <div class="metric-card">
-                  <div class="num gold"><span class="placeholder">__%</span></div>
-                  <div class="label">CoSTEER V2<br>编码成功率（V1 = <span class="placeholder">__%</span>）</div>
-                </div>
-                <div class="metric-card">
-                  <div class="num pink">NeurIPS<span class="unit">'25</span></div>
-                  <div class="label">R&amp;D-Agent-Quant<br>主论文录用</div>
-                </div>
-                <div class="metric-card">
-                  <div class="num green">+<span class="placeholder">__%</span><span class="unit">IC</span></div>
-                  <div class="label">vs Alpha158+Linear<br>基线信号质量</div>
-                </div>
+                <div class="metric-card"><div class="num blue"><span class="placeholder">__</span><span class="unit">个</span></div><div class="label">累计完成<br>因子/模型任务</div></div>
+                <div class="metric-card"><div class="num gold"><span class="placeholder">__%</span></div><div class="label">V2 编码成功率<br>(V1 = <span class="placeholder">__%</span>)</div></div>
+                <div class="metric-card"><div class="num pink">NeurIPS<span class="unit">'25</span></div><div class="label">R&amp;D-Agent-Quant<br>主论文录用 🏆</div></div>
+                <div class="metric-card"><div class="num green">+<span class="placeholder">__%</span><span class="unit">IC</span></div><div class="label">vs Alpha158+Linear<br>信号质量提升</div></div>
               </div>
-              <div class="flow-grid two">
-                <div class="flow-panel">
-                  <h3>6 篇核心论文</h3>
-                  <div class="tag-row" style="margin-top:8px;">
-                    <span class="tag">R&amp;D-Agent (2505.14738)</span>
-                    <span class="tag tag-2">R&amp;D-Agent-Quant NeurIPS'25</span>
-                    <span class="tag">Data-Centric R&amp;D (2404.11276)</span>
-                    <span class="tag tag-2">CoSTEER (2407.18690)</span>
-                    <span class="tag">Multi-Agent Quant (2505.13172)</span>
-                    <span class="tag tag-gold">LinTS (ICML 2013)</span>
+              <div class="flow-grid two-1-2">
+                <div class="flow-stack" style="gap:10px;">
+                  <div class="content-meta">🖼 产品与数据截图（P0 待补）</div>
+                  <div class="flow-grid three" style="gap:10px;">
+                    <div class="screenshot-placeholder"><div class="sp-label">🔴 P0-1</div><div>产品 UI 主界面<br>(任务列表+侧边栏)</div></div>
+                    <div class="screenshot-placeholder"><div class="sp-label">🔴 P0-2</div><div>真实任务 Trace 详情<br>(Hyp→Code→Run→FB)</div></div>
+                    <div class="screenshot-placeholder"><div class="sp-label">🟡 P1</div><div>回测指标面板<br>IC/IR/年化/夏普</div></div>
                   </div>
-                  <p style="margin-top:10px; font-size:13px;">另有 5 篇 GNN 模型作为 Paper-to-Code Benchmark GT：GPS · ViSNet · DiGNet · PMLP · LinkX（<span style="color:var(--warn);">详见 docs/papers/benchmarks/</span>）。</p>
                 </div>
-                <div class="accent-card">
-                  <h3>关键效率指标</h3>
-                  <ul style="margin-top:6px;">
-                    <li>单任务平均 loop 轮数：<span class="placeholder">__ 轮</span></li>
-                    <li>平均收敛时间：<span class="placeholder">__ 分钟</span></li>
-                    <li>SOTA 因子库已沉淀：<span class="placeholder">__ 条</span></li>
-                    <li>V2 知识图谱节点：<span class="placeholder">__ 个</span></li>
-                  </ul>
+                <div class="flow-stack" style="gap:12px;">
+                  <div class="content-meta">6 篇核心论文 + Benchmark GT</div>
+                  <div class="tag-row">
+                    <span class="tag">R&amp;D-Agent 2505.14738</span>
+                    <span class="tag tag-2">R&amp;D-Agent-Quant NeurIPS'25</span>
+                    <span class="tag">Data-Centric R&amp;D 2404.11276</span>
+                    <span class="tag tag-2">CoSTEER 2407.18690</span>
+                    <span class="tag">Multi-Agent Quant 2505.13172</span>
+                    <span class="tag tag-gold">LinTS ICML'13</span>
+                  </div>
+                  <p style="margin:0;font-size:12px;color:var(--muted);">B1~B5 GNN Benchmark GT：GPS · ViSNet · DiGNet · PMLP · LinkX</p>
+                  <div class="accent-card" style="padding:14px 16px;">
+                    <h3 style="font-size:15px;">关键效率指标</h3>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">
+                      <div style="font-family:var(--font-mono);font-size:12px;color:var(--muted);">单任务平均 loop</div><div style="font-family:var(--font-mono);font-size:13px;color:var(--ink);text-align:right;"><span class="placeholder">__ 轮</span></div>
+                      <div style="font-family:var(--font-mono);font-size:12px;color:var(--muted);">平均收敛时间</div><div style="font-family:var(--font-mono);font-size:13px;color:var(--ink);text-align:right;"><span class="placeholder">__ 分钟</span></div>
+                      <div style="font-family:var(--font-mono);font-size:12px;color:var(--muted);">SOTA 因子库</div><div style="font-family:var(--font-mono);font-size:13px;color:var(--ink);text-align:right;"><span class="placeholder">__ 条</span></div>
+                      <div style="font-family:var(--font-mono);font-size:12px;color:var(--muted);">V2 KB 节点</div><div style="font-family:var(--font-mono);font-size:13px;color:var(--ink);text-align:right;"><span class="placeholder">__ 个</span></div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </section>
-        <details class="caption" open>
-          <summary>幻灯片备注</summary>
-          <p>P2 是"钩子页"——评委 30 秒扫到这里应该知道"这项目做完了，有数字，有论文"。4 个大数字分别代表：规模（任务数）、方法（编码成功率）、学术认可（NeurIPS）、效果（vs 基线）。所有 <span class="placeholder">__</span> 占位处请补真实数字；这页补全是路演成败的关键。</p>
-        </details>
+        <details class="caption" open><summary>P2 · 备注</summary><p>P2 是钩子页。上半 4 大数字（任务数/成功率/NeurIPS/IC 提升）；下半左是 3 张 P0/P1 截图拼图占位（请补真实截图）；下半右是论文标签云+4 个效率指标。截图清单见 outline.md「🟡 所有待补充项汇总-截图类」。</p></details>
       </article>
 
-      <!-- ============ P3 假设生成 ============ -->
+      <!-- P3 · 假设生成（3 策略表 + 4 入口场景卡） -->
       <article class="deck-card">
-        <section class="slide-frame theme-grid" aria-label="假设生成智能体">
+        <section class="slide-frame theme-grid">
           <div class="page-badge">03 / 09</div>
           <div class="slide-stage">
             <div class="slide-kicker">智能体 ① · HypothesisGen</div>
-            <div class="slide-content layout-argument-grid">
-              <div class="flow-stack">
-                <h2 class="slide-title title-sm">假设生成：Bandit 自动分配"研究精力"</h2>
-                <p class="slide-lead">不是纯靠 LLM 拍脑袋——三种动作选择策略，Bandit 自动在"研究因子"和"研究模型"间做探索-利用平衡。</p>
+            <div class="slide-content layout-argument-grid" style="gap:20px;">
+              <div class="flow-stack" style="gap:8px;">
+                <h2 class="slide-title title-sm">假设生成：不同入口，不同生成逻辑</h2>
+                <p class="slide-lead">3 种通用策略 + 4 个入口场景定制的假设模板；LinTS Bandit 自动分配"研究因子 vs 研究模型"精力。</p>
               </div>
-              <div class="flow-grid two">
-                <div class="flow-stack" style="gap:16px;">
-                  <div class="content-meta">三种动作选择策略</div>
-                  <div class="strat-table">
-                    <div class="strat-head"><div>策略</div><div>逻辑</div><div>适用场景</div></div>
-                    <div class="strat-row hl">
-                      <div>LLM（默认）</div>
-                      <div>基于历史 Trace，LLM 直接生成新假设</div>
-                      <div>默认路径，质量最高</div>
-                    </div>
-                    <div class="strat-row">
-                      <div>Random</div>
-                      <div>在假设空间均匀采样</div>
-                      <div>冷启动 / 知识库为空</div>
-                    </div>
-                    <div class="strat-row hl">
-                      <div>Bandit (LinTS)</div>
-                      <div>上下文汤普森采样，按历史收益分配动作概率</div>
-                      <div>均衡探索-利用，自动选因子/模型</div>
-                    </div>
+              <div class="strat-table">
+                <div class="strat-head"><div>策略</div><div>触发条件</div><div>核心逻辑</div><div>适用场景</div></div>
+                <div class="strat-row"><div>LLM（默认）</div><div>默认配置</div><div>基于历史 Trace + SOTA，LLM 直接生成假设</div><div>默认路径，质量最高</div></div>
+                <div class="strat-row"><div>Random</div><div>知识库为空 / 冷启动</div><div>假设空间均匀采样</div><div>冷启动 / 探索新方向</div></div>
+                <div class="strat-row hl"><div>Bandit (LinTS) ⭐</div><div>action_selection=bandit</div><div>线性汤普森采样（ICML 2013），"因子/模型"双臂按历史 IC 更新后验</div><div>长期均衡探索-利用</div></div>
+              </div>
+              <div class="flow-stack" style="gap:10px;">
+                <div class="content-meta">4 个入口场景的假设差异</div>
+                <div class="scene-h">
+                  <div class="sh-card c1">
+                    <div class="sh-title"><span class="dot"></span>因子研究<span class="sh-cmd">qlib_factor</span></div>
+                    <div class="sh-what"><b>假设形状：</b>价量/基本面因子公式表达式<br><b>字段：</b>factor_formula · window · universe<br><b>评估：</b>IC / IR / Rank IC<br><b>特有机制：</b>SOTA 因子自动继承合并</div>
+                    <span class="sh-tag">Bandit 自动选</span>
                   </div>
-                  <div class="accent-card" style="padding:16px 20px;">
-                    <h3 style="font-size:17px; margin-bottom:4px;">LinTS 实现要点</h3>
-                    <p style="font-size:13px;">线性汤普森双臂：每次为"研究因子 / 研究模型"分别从后验采样奖励，选期望收益高的一侧；实验结束后用真实 reward 更新后验。</p>
+                  <div class="sh-card c2">
+                    <div class="sh-title"><span class="dot"></span>模型研究<span class="sh-cmd">qlib_model</span></div>
+                    <div class="sh-what"><b>假设形状：</b>模型架构/超参/训练策略<br><b>字段：</b>model_cls · hyperparams · train_config<br><b>评估：</b>IC · MSE · 端到端收益<br><b>特有机制：</b>CoSTEER 编码压力最大，V2 KB 命中收益最高</div>
+                    <span class="sh-tag">Bandit 自动选</span>
                   </div>
-                </div>
-                <div class="flow-stack" style="gap:16px;">
-                  <div class="content-meta">自然语言 → 结构化假设</div>
-                  <div class="flow-panel" style="background: rgba(0,0,0,0.3);">
-                    <div style="font-family:var(--font-mono); font-size:13px; color:var(--muted); line-height:1.7;">
-                      <div><span style="color:var(--warn);"># 输入：研究员一句话</span></div>
-                      <div style="color:var(--ink);">"最近大盘 IC 持续下降，试试价量背离因子，<br>用过去 20 日换手率加权。"</div>
-                      <div style="margin-top:10px;"><span style="color:var(--warn);"># 输出：结构化 Hypothesis</span></div>
-                      <div>{</div>
-                      <div>&nbsp;&nbsp;<span style="color:var(--accent);">"hypothesis_type"</span>: "factor",</div>
-                      <div>&nbsp;&nbsp;<span style="color:var(--accent);">"target"</span>: "price_volume_divergence",</div>
-                      <div>&nbsp;&nbsp;<span style="color:var(--accent);">"factors"</span>: ["turnover_20d_weighted"],</div>
-                      <div>&nbsp;&nbsp;<span style="color:var(--accent);">"dataset"</span>: "csi300",</div>
-                      <div>&nbsp;&nbsp;<span style="color:var(--accent);">"experiment"</span>: { ...backtest_config }</div>
-                      <div>}</div>
-                    </div>
+                  <div class="sh-card c3">
+                    <div class="sh-title"><span class="dot"></span>组合策略<span class="sh-cmd">qlib_quant</span></div>
+                    <div class="sh-what"><b>假设形状：</b>因子+模型+权重+风控完整组合<br><b>字段：</b>alpha_list · risk_constraints · portfolio<br><b>评估：</b>年化 · 夏普 · 回撤 · 换手率<br><b>特有机制：</b>LLM 主导（约束复杂），需 RAG 查风控</div>
+                    <span class="sh-tag">LLM 主导</span>
                   </div>
-                  <div class="flow-panel">
-                    <h3 style="font-size:17px; margin-bottom:6px;">Bandit vs LLM 对比</h3>
-                    <p style="font-size:13px;">小实验：Bandit 自动分配 vs 固定全做因子——<span class="placeholder">__% 有效研究步占比</span>（待补数字）。</p>
+                  <div class="sh-card c4">
+                    <div class="sh-title"><span class="dot"></span>研报抽取<span class="sh-cmd">factor_from_report</span></div>
+                    <div class="sh-what"><b>假设形状：</b>从 PDF 抽取的可回测因子公式<br><b>字段：</b>factor_formula（直接从 PDF 解析）<br><b>评估：</b>复现 IC 是否接近研报声称<br><b>特有机制：</b>不经过 Bandit，假设空间由研报限定</div>
+                    <span class="sh-tag">PDF → 直接抽取</span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </section>
-        <details class="caption" open>
-          <summary>幻灯片备注</summary>
-          <p>P3 讲假设生成——这是 R&amp;D loop 的起点。核心卖点：不是"LLM 随便想一个"，而是有 Bandit 算法在后台做精力分配（LinTS 出自 Agrawal &amp; Goyal ICML 2013）。右侧给出"自然语言→结构化假设"的伪代码样例，让评委直接看懂输入输出。Bandit vs LLM 的对比数字请你补上。</p>
-        </details>
+        <details class="caption" open><summary>P3 · 备注</summary><p>P3 上半 3 种通用策略对比表（LinTS 金色高亮）；下半 2×2 卡片分别讲 4 入口的"假设形状/字段/评估/特有机制"，这是用户要求重点区分的部分。演讲 60 秒。</p></details>
       </article>
 
-      <!-- ============ P4 CoSTEER ============ -->
+      <!-- P4 · CoSTEER（6 步 + 三连查 + V1vsV2 + B1~B5 柱图） -->
       <article class="deck-card">
-        <section class="slide-frame theme-grid" aria-label="CoSTEER 编码智能体">
+        <section class="slide-frame theme-grid">
           <div class="page-badge">04 / 09</div>
           <div class="slide-stage">
             <div class="slide-kicker">智能体 ② · CoSTEER Developer</div>
-            <div class="slide-content layout-argument-grid">
-              <div class="flow-stack">
-                <h2 class="slide-title title-sm">编码智能体：6 步演化 + V2 三连查</h2>
-                <p class="slide-lead">让 LLM 像人类工程师一样迭代——写、跑、看报错、查资料、改，最多 10 轮直到跑通；每轮先查知识库避坑。</p>
+            <div class="slide-content layout-argument-grid" style="gap:20px;">
+              <div class="flow-stack" style="gap:8px;">
+                <h2 class="slide-title title-sm">编码智能体：像工程师一样多轮迭代</h2>
+                <p class="slide-lead">LLM 一次写不对没关系——写、跑、看报错、查资料、改，最多 10 轮；V2 三连查把成功率从 ~20% 收敛到 <span class="placeholder">__%</span>。</p>
               </div>
               <div class="pipeline">
-                <div class="pipe-step">
-                  <div class="step-no">01</div>
-                  <div class="step-name">Role</div>
-                  <div class="step-desc">代入工程师角色</div>
-                </div>
-                <div class="pipe-step hl">
-                  <div class="step-no">02</div>
-                  <div class="step-name">Retrieve</div>
-                  <div class="step-desc">三连查知识图谱</div>
-                </div>
-                <div class="pipe-step">
-                  <div class="step-no">03</div>
-                  <div class="step-name">Think</div>
-                  <div class="step-desc">推理改动方案</div>
-                </div>
-                <div class="pipe-step">
-                  <div class="step-no">04</div>
-                  <div class="step-name">Code</div>
-                  <div class="step-desc">生成 / 修改代码</div>
-                </div>
-                <div class="pipe-step">
-                  <div class="step-no">05</div>
-                  <div class="step-name">Debug</div>
-                  <div class="step-desc">Evaluator 跑 + Feedback</div>
-                </div>
-                <div class="pipe-step">
-                  <div class="step-no">06</div>
-                  <div class="step-name">Evolve</div>
-                  <div class="step-desc">失败则下一轮，最多 10 轮</div>
-                </div>
+                <div class="pipe-step"><div class="step-no">01</div><div class="step-name">Role</div><div class="step-desc">代入资深工程师角色</div></div>
+                <div class="pipe-step hl"><div class="step-no">02</div><div class="step-name">Retrieve ⭐</div><div class="step-desc">V2 三连查捞经验（V2 新增）</div></div>
+                <div class="pipe-step"><div class="step-no">03</div><div class="step-name">Think</div><div class="step-desc">CoT 推理改动方案</div></div>
+                <div class="pipe-step"><div class="step-no">04</div><div class="step-name">Code</div><div class="step-desc">生成/修改 Python</div></div>
+                <div class="pipe-step"><div class="step-no">05</div><div class="step-name">Debug</div><div class="step-desc">Docker Evaluator 跑+反馈</div></div>
+                <div class="pipe-step"><div class="step-no">06</div><div class="step-name">Evolve ↻</div><div class="step-desc">失败进下一轮；最多 10 轮兜底</div></div>
               </div>
               <div class="flow-grid two-2-1">
-                <div class="flow-stack" style="gap:14px;">
-                  <div class="content-meta">V2 三连查（每轮写码前）</div>
+                <div class="flow-stack" style="gap:12px;">
+                  <div class="content-meta">V2 三连查 · 每轮写码前必查</div>
                   <div class="flow-grid three">
-                    <div class="flow-panel">
-                      <h4>① former_trace</h4>
-                      <p style="font-size:13px;">捞最近 3 次失败痕迹——<strong style="color:var(--ink);">别再犯</strong></p>
-                    </div>
-                    <div class="flow-panel">
-                      <h4>② component</h4>
-                      <p style="font-size:13px;">捞组件相似的成功实现——<strong style="color:var(--ink);">照着写</strong></p>
-                    </div>
-                    <div class="flow-panel">
-                      <h4>③ error</h4>
-                      <p style="font-size:13px;">捞同款报错的修复案例——<strong style="color:var(--ink);">照着修</strong></p>
-                    </div>
-                  </div>
-                  <div class="accent-card" style="padding:16px 20px;">
-                    <h3 style="font-size:16px; margin-bottom:4px;">关键指标：编码成功率</h3>
-                    <p style="font-size:14px;">V1 一次性 ~20%，多轮后收敛到 <span class="placeholder">__%</span>；V2 引入三连查后收敛到 <strong style="color:var(--ok);"><span class="placeholder">__%</span></strong>，平均轮数从 <span class="placeholder">__</span> 降到 <span class="placeholder">__</span>。</p>
-                  </div>
-                </div>
-                <div class="flow-stack" style="gap:14px;">
-                  <div class="content-meta">每 Phase Token 占比（单任务）</div>
-                  <div class="flow-panel" style="padding:18px;">
-                    <div class="token-bar">
-                      <div class="token-row">
-                        <div class="tname">Developer</div>
-                        <div class="tbar"><div class="tfill" style="width:52%; background:linear-gradient(90deg, var(--gold), var(--warn));"></div></div>
-                        <div class="tpct"><span class="placeholder">__%</span></div>
-                      </div>
-                      <div class="token-row">
-                        <div class="tname">HypothesisGen</div>
-                        <div class="tbar"><div class="tfill" style="width:18%;"></div></div>
-                        <div class="tpct"><span class="placeholder">__%</span></div>
-                      </div>
-                      <div class="token-row">
-                        <div class="tname">Summarizer</div>
-                        <div class="tbar"><div class="tfill" style="width:12%;"></div></div>
-                        <div class="tpct"><span class="placeholder">__%</span></div>
-                      </div>
-                      <div class="token-row">
-                        <div class="tname">H2E</div>
-                        <div class="tbar"><div class="tfill" style="width:10%;"></div></div>
-                        <div class="tpct"><span class="placeholder">__%</span></div>
-                      </div>
-                      <div class="token-row">
-                        <div class="tname">Runner</div>
-                        <div class="tbar"><div class="tfill" style="width:8%; background:var(--muted);"></div></div>
-                        <div class="tpct" style="color:var(--muted);">0% *</div>
-                      </div>
-                    </div>
-                    <p style="margin:10px 0 0; font-size:12px; color:var(--muted); font-family:var(--font-mono);">* Runner 不调 LLM，仅执行回测 &nbsp;|&nbsp; 单任务完整成本 ≈ ¥<span class="placeholder">__</span>（Prefect 缓存命中 ¥0）</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-        <details class="caption" open>
-          <summary>幻灯片备注</summary>
-          <p>P4 是技术重头戏——CoSTEER 是我们最核心的方法创新（论文 arXiv:2407.18690）。演讲重点：(1) 6 步循环展示"像工程师一样工作"，其中 Retrieve（金色高亮）是 V2 新加的关键步；(2) 三连查用人话讲：别再犯 / 照着写 / 照着修；(3) 右侧 token 饼图（条形版）告诉评委：Developer 是 token 大户，所以优化 KB 命中率 = 直接降本，呼应后面的商业价值。百分比占位请用真实统计填。</p>
-        </details>
-      </article>
-
-      <!-- ============ P5 Runner + Summarizer ============ -->
-      <article class="deck-card">
-        <section class="slide-frame theme-grid" aria-label="回测与反馈">
-          <div class="page-badge">05 / 09</div>
-          <div class="slide-stage">
-            <div class="slide-kicker">智能体 ③④ · Runner 回测 + Summarizer 反馈</div>
-            <div class="slide-content layout-argument-grid">
-              <div class="flow-stack">
-                <h2 class="slide-title title-sm">闭环：跑过才知道对不对，反馈沉淀成经验</h2>
-                <p class="slide-lead">Runner 负责真跑，Summarizer 负责总结——所有结果写入 Trace，下一轮直接用，让系统越跑越聪明。</p>
-              </div>
-              <div class="flow-grid two">
-                <div class="flow-stack" style="gap:16px;">
-                  <div class="flow-panel">
-                    <h3>Runner · 回测执行</h3>
-                    <ul>
-                      <li><strong style="color:var(--ink);">SOTA 因子继承</strong>：跑新因子前自动加载同 model 下历史最优因子集（"抄作业"不重造轮子）</li>
-                      <li><strong style="color:var(--ink);">因子去重/合并</strong>：相似度 &gt;80% 的因子自动合并，避免重复劳动</li>
-                      <li><strong style="color:var(--ink);">真实回测</strong>：调用 qlib 跑出 IC / IR / 年化 / 夏普 4 项硬指标</li>
-                    </ul>
-                  </div>
-                  <div class="flow-panel">
-                    <h3>Summarizer · 4 维反馈</h3>
-                    <ul>
-                      <li>① 代码可执行性（能不能跑）</li>
-                      <li>② 信号质量（IC、IR 是否达标）</li>
-                      <li>③ 与当前 SOTA 对比（是否超越）</li>
-                      <li>④ 下一步自然语言建议（往哪改）</li>
-                    </ul>
-                    <p style="margin-top:10px; font-size:13px; color:var(--accent); font-family:var(--font-mono);">每轮 Trace 写入 log/，HypothesisGen 与 CoSTEER 都能检索 → 经验不丢失。</p>
-                  </div>
-                </div>
-                <div class="flow-stack" style="gap:16px;">
-                  <div class="content-meta">Trace 时序示例（真实跑一轮）</div>
-                  <div class="trace">
-                    <div class="trace-row fail">
-                      <div class="t-step">T0</div>
-                      <div class="t-body"><span style="color:var(--ink);">[Hyp]</span> 价量背离 20d &nbsp;→&nbsp; <span style="color:var(--ink);">[Dev]</span> factor.py &nbsp;→&nbsp; <span style="color:var(--ink);">[Run]</span> IC=0.05 &nbsp;→&nbsp; <span style="color:var(--ink);">[Sum]</span> 未达 SOTA，换角度</div>
-                    </div>
-                    <div class="trace-row fail">
-                      <div class="t-step">T1</div>
-                      <div class="t-body"><span style="color:var(--ink);">[Hyp]</span> 动量反转 &nbsp;→&nbsp; <span style="color:var(--ink);">[Dev]</span> 复用 SOTA 因子集 + 新增 &nbsp;→&nbsp; <span style="color:var(--ink);">[Run]</span> 报错 shape mismatch</div>
-                    </div>
-                    <div class="trace-row">
-                      <div class="t-step">T2</div>
-                      <div class="t-body"><span style="color:var(--ink);">[Dev]</span> error_query 命中同款修复 &nbsp;→&nbsp; <span style="color:var(--ink);">[Run]</span> IC=0.07</div>
-                    </div>
-                    <div class="trace-row ok">
-                      <div class="t-step">T3</div>
-                      <div class="t-body"><span style="color:var(--ink);">[Run]</span> IC=0.08 &amp; 年化+<span class="placeholder">__%</span> &nbsp;→&nbsp; <span style="color:var(--ink);">[Sum]</span> 超越 SOTA，写入知识库 🎉</div>
-                    </div>
-                  </div>
-                  <div class="accent-card" style="padding:16px 20px;">
-                    <h3 style="font-size:16px; margin-bottom:4px;">沉淀规模</h3>
-                    <p style="font-size:13px;">SOTA 因子库：<span class="placeholder">__ 条</span> &nbsp;|&nbsp; Trace 总数：<span class="placeholder">__ 条</span> &nbsp;|&nbsp; 平均收敛轮数：<span class="placeholder">__</span></p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-        <details class="caption" open>
-          <summary>幻灯片备注</summary>
-          <p>P5 讲 Runner 和 Summarizer——这两个角色让系统真正"闭环"。左侧分两块讲各自职责：Runner 是实干派（继承 SOTA / 去重 / 真跑），Summarizer 是教练（4 维反馈）。右侧给出一个 4 步 Trace 时序图，红=失败、蓝=迭代、绿=成功，让评委直观看到"失败→查错→再跑→入库"的真实过程。所有数字占位请补实跑日志。</p>
-        </details>
-      </article>
-
-      <!-- ============ P6 多LLM路由 ============ -->
-      <article class="deck-card">
-        <section class="slide-frame theme-grid" aria-label="多LLM路由">
-          <div class="page-badge">06 / 09</div>
-          <div class="slide-stage">
-            <div class="slide-kicker">多 LLM 差异化路由</div>
-            <div class="slide-content layout-argument-grid">
-              <div class="flow-stack">
-                <h2 class="slide-title title-sm">不绑定单一模型——每个 Phase 独立配 LLM</h2>
-                <p class="slide-lead">编码任务用 coding 专精模型，总结任务用便宜模型——前端可视化配置，一键测试连通性，不消耗正式 token。</p>
-              </div>
-              <div class="flow-grid two-2-1">
-                <div class="flow-stack" style="gap:16px;">
-                  <div class="content-meta">4 Phase × 多模型矩阵</div>
-                  <div class="model-matrix">
-                    <div class="mm-head"><div>Phase</div><div>默认模型</div><div>可选（火山方舟 Coding Plan）</div></div>
-                    <div class="mm-row"><div>HypothesisGen</div><div><span class="placeholder">待配置</span></div><div style="font-size:12px;">glm-5.2 · minimax-m3 · kimi-k2.7-code · deepseek-v4-flash</div></div>
-                    <div class="mm-row"><div>Developer</div><div><span class="placeholder">待配置</span></div><div style="font-size:12px;">推荐 coding 专精模型（kimi-k2.7-code / deepseek-v4-flash）</div></div>
-                    <div class="mm-row"><div>Summarizer</div><div><span class="placeholder">待配置</span></div><div style="font-size:12px;">可选用便宜模型压缩成本</div></div>
-                    <div class="mm-row"><div>H2E</div><div><span class="placeholder">待配置</span></div><div style="font-size:12px;">轻量任务，小模型即可</div></div>
-                  </div>
-                  <div class="tag-row">
-                    <span class="tag">OpenAI 兼容端点</span>
-                    <span class="tag tag-2">Prefect 缓存命中 ¥0</span>
-                    <span class="tag tag-gold">MCP 工具协议</span>
-                    <span class="tag tag-ok">pydantic-ai</span>
-                  </div>
-                </div>
-                <div class="flow-stack" style="gap:14px;">
-                  <div class="content-meta">前端两个关键能力</div>
-                  <div class="flow-panel">
-                    <h3>① 分步路由可视化编辑器</h3>
-                    <p style="font-size:13px;">UI 上为每个 Phase 独立下拉选择模型，配置持久化，不写一行代码。<span class="placeholder">[截图占位：请替换为 web UI 真实截图]</span></p>
-                  </div>
-                  <div class="flow-panel">
-                    <h3>② 模型测试按钮</h3>
-                    <p style="font-size:13px;">不消耗正式 run token，独立发一个 ping 请求验证模型连通性和密钥有效性，避免配错浪费长任务。<span class="placeholder">[截图占位]</span></p>
+                    <div class="flow-panel"><h4>① former_trace</h4><p style="font-size:12px;"><b style="color:var(--ink);">别再犯</b>——捞该任务最近 3 次失败痕迹，避免重蹈覆辙</p></div>
+                    <div class="flow-panel"><h4>② component</h4><p style="font-size:12px;"><b style="color:var(--ink);">照着写</b>——捞组件相似的成功实现作参考</p></div>
+                    <div class="flow-panel"><h4>③ error</h4><p style="font-size:12px;"><b style="color:var(--ink);">照着修</b>——捞同款报错的修复案例</p></div>
                   </div>
                   <div class="accent-card" style="padding:14px 18px;">
-                    <h3 style="font-size:15px; margin-bottom:4px;">差异化价值</h3>
-                    <p style="font-size:13px;">开源多智能体项目绝大多数把 LLM 当黑盒全局配置。我们做到<strong style="color:var(--accent-2);">按任务挑模型</strong>，既提效果又压成本。</p>
+                    <h3 style="font-size:15px;">V1 vs V2 成功率对比</h3>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:8px;">
+                      <div><div style="font-family:var(--font-mono);font-size:11px;color:var(--muted);">V1 单轮</div><div style="font-family:var(--font-display);font-size:28px;color:var(--muted);"><span class="placeholder">__%</span></div></div>
+                      <div><div style="font-family:var(--font-mono);font-size:11px;color:var(--gold);">V2 多轮+三连查</div><div style="font-family:var(--font-display);font-size:28px;color:var(--gold);"><span class="placeholder">__%</span></div></div>
+                      <div><div style="font-family:var(--font-mono);font-size:11px;color:var(--ok);">提升</div><div style="font-family:var(--font-display);font-size:28px;color:var(--ok);">+<span class="placeholder">__pp</span></div></div>
+                    </div>
+                    <p style="margin-top:6px;font-size:11px;color:var(--muted);">平均轮数 <span class="placeholder">__</span> → <span class="placeholder">__</span>（-<span class="placeholder">__%</span>）</p>
+                  </div>
+                </div>
+                <div class="flow-stack" style="gap:12px;">
+                  <div class="content-meta">B1~B5 GNN 还原率（从零还原）</div>
+                  <div class="flow-panel" style="padding:16px;">
+                    <div class="bench-bars">
+                      <div class="bar-row"><div class="bname">B4 PMLP</div><div class="bbar"><div class="bfill" style="width:90%;"></div></div><div class="bpct"><span class="placeholder">__%</span></div></div>
+                      <div class="bar-row"><div class="bname">B1 GPS</div><div class="bbar"><div class="bfill" style="width:75%;"></div></div><div class="bpct"><span class="placeholder">__%</span></div></div>
+                      <div class="bar-row"><div class="bname">B3 DiGNet</div><div class="bbar"><div class="bfill" style="width:65%;"></div></div><div class="bpct"><span class="placeholder">__%</span></div></div>
+                      <div class="bar-row"><div class="bname">B5 LinkX</div><div class="bbar"><div class="bfill" style="width:55%;"></div></div><div class="bpct"><span class="placeholder">__%</span></div></div>
+                      <div class="bar-row hard"><div class="bname">B2 ViSNet ★</div><div class="bbar"><div class="bfill" style="width:60%;background:linear-gradient(90deg,var(--warn),var(--gold));"></div></div><div class="bpct"><span class="placeholder">__%</span></div></div>
+                    </div>
+                    <p style="margin:10px 0 0;font-size:11px;color:var(--muted);font-family:var(--font-mono);">★ ViSNet：分子力场方向键角+高阶消息传递，最困难；参考线=V1 基线</p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </section>
-        <details class="caption" open>
-          <summary>幻灯片备注</summary>
-          <p>P6 是产品差异化的关键页——大多数开源多 Agent 项目都绑定单一模型（默认 GPT-4），我们显式把"多模型路由"做成产品能力。左侧 4×3 矩阵直接给评委看"可配什么"；右侧两个前端功能（可视化编辑器 + 模型测试按钮）是强产品感的体现，请务必补两张真实 UI 截图替换占位。默认模型请你填写当前默认配置。</p>
-        </details>
+        <details class="caption" open><summary>P4 · 备注</summary><p>P4 技术重头戏。上半 6 步流水线（Retrieve 金色高亮是 V2 核心）；下半左三连查+V1vsV2 数字对比（最关键的成功率提升数字必补）；下半右 B1~B5 还原率条形图（按难度从易到难排，ViSNet 粉金色标★最困难）。Token 图不放这里——逻辑上移到 P7。演讲 75 秒。</p></details>
       </article>
 
-      <!-- ============ P7 知识库全景 ============ -->
+      <!-- P5 · 知识库全景（4 象限） -->
       <article class="deck-card">
-        <section class="slide-frame theme-grid" aria-label="知识库全景">
-          <div class="page-badge">07 / 09</div>
+        <section class="slide-frame theme-grid">
+          <div class="page-badge">05 / 09</div>
           <div class="slide-stage">
             <div class="slide-kicker">四层知识库 · 让经验不丢失</div>
-            <div class="slide-content layout-argument-grid">
-              <div class="flow-stack">
-                <h2 class="slide-title title-sm">4 层知识库协同：V2 图谱为主，3 个配套补充</h2>
-                <p class="slide-lead">项目内经验 + 跨项目文档 + 自定义源 + 量化 SOTA——系统真的"越跑越聪明"。</p>
+            <div class="slide-content layout-argument-grid" style="gap:18px;">
+              <div class="flow-stack" style="gap:8px;">
+                <h2 class="slide-title title-sm">V2 知识图谱为主 · 3 个配套补充</h2>
+                <p class="slide-lead">项目内编码经验 + 跨项目三方库文档 + 自定义源外挂 + 量化 SOTA——4 层协同让系统越跑越聪明。</p>
               </div>
               <div class="kb-quad">
                 <div class="kb-cell primary">
-                  <div class="kb-head">
-                    <span class="kb-num">① 主力 · CORE</span>
-                  </div>
+                  <div class="kb-head"><span class="kb-num">① 主力 · CORE</span></div>
                   <div class="kb-title">CoSTEER V2 知识图谱</div>
                   <div class="kb-sub">项目内 · 编码阶段 · 每轮必查</div>
-                  <div class="kb-desc">无向图（graph.pkl）存"任务-组件-错误-实现"之间关联，每轮写码前三连查：失败痕迹 / 相似成功 / 错误修复。实验成功后自动把 (component, implementation, error) 三元组写回图谱，跨会话积累。</div>
+                  <div class="kb-desc">无向图 graph.pkl 存储"任务-组件-错误-实现"关联。每轮写码前自动三连查（失败痕迹/相似成功/错误修复），实验成功后三元组自动写回图谱，跨会话积累。</div>
                   <ul>
                     <li>5 类节点：component / task / trace / success_impl / error</li>
-                    <li>v2_query_former_trace_limit=3 · component_limit=1 · error_limit=1</li>
+                    <li>former_trace_limit=3 · component_limit=1 · error_limit=1</li>
                     <li>对应 CoSTEER 论文 arXiv:2407.18690</li>
                   </ul>
                 </div>
@@ -885,164 +498,249 @@
                   <div class="kb-head"><span class="kb-num">②</span></div>
                   <div class="kb-title">Context7 外部文档</div>
                   <div class="kb-sub">跨项目 · 报错修复 · MCP 外挂</div>
-                  <div class="kb-desc">Evaluator 抛错时，自动查 timm / qlib / torch 等三方库官方文档和源码，反查正确 API 用法。</div>
+                  <div class="kb-desc">Evaluator 抛错时自动查 timm/qlib/torch 官方文档与源码，反查正确 API 用法。</div>
                 </div>
                 <div class="kb-cell">
                   <div class="kb-head"><span class="kb-num">③</span></div>
                   <div class="kb-title">RAG 通用外挂</div>
                   <div class="kb-sub">任意 Phase · 自定义文档源</div>
-                  <div class="kb-desc">轻量通用 RAG Agent，可挂券商研报、历史会议纪要、自定义文档——想查什么自己接。</div>
+                  <div class="kb-desc">轻量 RAG Agent，可挂券商研报、会议纪要、内部文档——想查什么自己接。</div>
                 </div>
                 <div class="kb-cell">
                   <div class="kb-head"><span class="kb-num">④</span></div>
                   <div class="kb-title">SOTA 知识库</div>
-                  <div class="kb-sub">项目内 · 量化经验 · pickle 持久化</div>
-                  <div class="kb-desc">每跑一个新因子自动继承同 model 下历史 SOTA 因子集；支持 sota_query 按指标 + 实验名反查。</div>
+                  <div class="kb-sub">项目内 · 量化经验 · pickle</div>
+                  <div class="kb-desc">新因子自动继承同 model 下历史最优因子集；sota_query 按指标+实验名反查。</div>
                 </div>
               </div>
               <div class="foot-metric">
                 <div class="fm-item"><span class="fm-v"><span class="placeholder">__</span></span><span class="fm-l">V2 图谱节点</span></div>
-                <div class="fm-item"><span class="fm-v"><span class="placeholder">__</span></span><span class="fm-l">SOTA 因子数</span></div>
+                <div class="fm-item"><span class="fm-v"><span class="placeholder">__</span></span><span class="fm-l">SOTA 因子</span></div>
                 <div class="fm-item"><span class="fm-v"><span class="placeholder">__</span></span><span class="fm-l">Trace 总数</span></div>
                 <div class="fm-item"><span class="fm-v" style="color:var(--accent-2);">4</span><span class="fm-l">层协同</span></div>
               </div>
             </div>
           </div>
         </section>
-        <details class="caption" open>
-          <summary>幻灯片备注</summary>
-          <p>P7 知识库全景——V2 放左上最大块（你要求突出 V2），其他 3 个用 1/4 大小简略带过。演讲要点：(1) V2 是主力，每轮编码都要查；(2) Context7 解决"别人家库怎么用"的问题；(3) RAG 通用外挂给用户自定义空间；(4) SOTA KB 是量化场景特有的"抄作业"机制。4 层加起来才是真正的"经验沉淀"。底部 4 个数字请补图谱节点数 / SOTA 因子数 / Trace 总数。</p>
-        </details>
+        <details class="caption" open><summary>P5 · 备注</summary><p>P5 紧跟 P4（V2 图谱是 CoSTEER 的记忆）。4 象限田字布局：V2 占左侧 2×1 大块（蓝色），右上 Context7（紫）、右中 RAG（金）、右下 SOTA（绿）三个小卡。底部 4 个规模数字。演讲 45 秒。</p></details>
       </article>
 
-      <!-- ============ P8 商业价值 ============ -->
+      <!-- P6 · Runner + Summarizer -->
       <article class="deck-card">
-        <section class="slide-frame theme-grid" aria-label="应用与商业价值">
-          <div class="page-badge">08 / 09</div>
+        <section class="slide-frame theme-grid">
+          <div class="page-badge">06 / 09</div>
           <div class="slide-stage">
-            <div class="slide-kicker">应用场景 · 商业价值</div>
-            <div class="slide-content layout-argument-grid">
-              <div class="flow-stack">
-                <h2 class="slide-title title-sm">三类客群 · 一条朴素商业逻辑</h2>
-                <p class="slide-lead">一个资深量化研究员年薪 50-100w——我们的系统一套远低于此，还能 24h 不停跑。</p>
+            <div class="slide-kicker">智能体 ③④ · Runner + Summarizer</div>
+            <div class="slide-content layout-argument-grid" style="gap:20px;">
+              <div class="flow-stack" style="gap:8px;">
+                <h2 class="slide-title title-sm">闭环：真跑才知道好坏，反馈沉淀成经验</h2>
+                <p class="slide-lead">Runner 实干（抄 SOTA 作业 → 去重 → qlib 真实回测），Summarizer 做教练（4 维反馈），所有结果入 Trace 反哺下一轮。</p>
               </div>
-              <div class="value-grid">
-                <div class="value-card">
-                  <div class="vc-head">
-                    <div class="vc-icon">01</div>
-                    <div class="vc-name">券商自营 / 公募量化</div>
-                  </div>
-                  <div class="vc-pain">痛点：研究员稀缺、人效瓶颈</div>
-                  <div class="vc-value">自动挖因子 + 自动回测 + SOTA 继承，1 套系统顶 N 个研究员；内网部署合规可控。</div>
+              <div class="flow-grid two">
+                <div class="flow-panel">
+                  <h3>🏃 Runner · 回测执行</h3>
+                  <ul style="margin-top:8px;">
+                    <li><b style="color:var(--ink);">SOTA 因子继承</b>：跑新因子前自动加载同 model 下历史最优因子集，不从零开始</li>
+                    <li><b style="color:var(--ink);">因子去重/合并</b>：余弦相似度 &gt;80% 的因子自动合并，避免重复劳动</li>
+                    <li><b style="color:var(--ink);">Docker + qlib 真实回测</b>：隔离环境产出 IC / IR / 年化 / 夏普 4 项硬指标</li>
+                  </ul>
                 </div>
-                <div class="value-card">
-                  <div class="vc-head">
-                    <div class="vc-icon" style="background:var(--accent-2-soft); color:var(--accent-2);">02</div>
-                    <div class="vc-name">量化私募</div>
-                  </div>
-                  <div class="vc-pain">痛点：模型更新慢、跨市场适配贵</div>
-                  <div class="vc-value">双管线（因子+模型）+ Bandit 自动分配精力，多市场（A 股/港美/加密）可扩展。</div>
+                <div class="flow-panel">
+                  <h3>📋 Summarizer · 4 维反馈</h3>
+                  <ul style="margin-top:8px;">
+                    <li><b style="color:var(--accent);">① 可执行性</b>——能不能跑（报错定位到行）</li>
+                    <li><b style="color:var(--accent);">② 信号质量</b>——IC / IR 是否达标</li>
+                    <li><b style="color:var(--accent);">③ vs SOTA</b>——是否超越当前最优</li>
+                    <li><b style="color:var(--accent);">④ 下一步建议</b>——自然语言改方向</li>
+                  </ul>
+                  <p style="margin:10px 0 0;font-size:11px;color:var(--muted);font-family:var(--font-mono);">每轮 Trace 写入 log/ 持久化 → HypothesisGen/CoSTEER 可检索</p>
                 </div>
-                <div class="value-card">
-                  <div class="vc-head">
-                    <div class="vc-icon" style="background:rgba(241,194,27,0.1); color:var(--gold);">03</div>
-                    <div class="vc-name">量化教育 / 研究机构</div>
-                  </div>
-                  <div class="vc-pain">痛点：论文复现难、教学成本高</div>
-                  <div class="vc-value">Paper-to-Code Benchmark（B1~B5）端到端可复现，教学/科研一键起。</div>
+              </div>
+              <div class="flow-stack" style="gap:10px;">
+                <div class="content-meta">真实 Trace 时序示意（T0→T3 收敛）<span class="placeholder" style="margin-left:10px;">🔴 可替换为真实前端截图</span></div>
+                <div class="trace">
+                  <div class="trace-row fail"><div class="t-step">T0</div><div class="t-body"><span style="color:var(--ink);">[Hyp]</span> 价量背离 20d → <span style="color:var(--ink);">[Dev]</span> factor.py → <span style="color:var(--ink);">[Run]</span> IC=0.05 → <span style="color:var(--ink);">[Sum]</span> 未达 SOTA，换角度</div></div>
+                  <div class="trace-row fail"><div class="t-step">T1</div><div class="t-body"><span style="color:var(--ink);">[Hyp]</span> 动量反转 → <span style="color:var(--ink);">[Dev]</span> 复用 SOTA + 新增 → <span style="color:var(--ink);">[Run]</span> ❌ shape mismatch</div></div>
+                  <div class="trace-row"><div class="t-step">T2</div><div class="t-body"><span style="color:var(--ink);">[Dev]</span> error_query 命中同款修复 → <span style="color:var(--ink);">[Run]</span> IC=0.07</div></div>
+                  <div class="trace-row ok"><div class="t-step">T3</div><div class="t-body"><span style="color:var(--ink);">[Run]</span> IC=0.08 &amp; 年化 +<span class="placeholder">__%</span> → <span style="color:var(--ink);">[Sum]</span> 超越 SOTA，写入知识库 🎉</div></div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <details class="caption" open><summary>P6 · 备注</summary><p>P6 闭环收尾。上半双栏讲 Runner（3 条职责）和 Summarizer（4 维反馈）；下半 4 行 Trace 时序（红/红/蓝/绿），可替换为真实前端截图。演讲 45 秒。</p></details>
+      </article>
+
+      <!-- P7 · 多 LLM 路由（token 饼图放在这里） -->
+      <article class="deck-card">
+        <section class="slide-frame theme-grid">
+          <div class="page-badge">07 / 09</div>
+          <div class="slide-stage">
+            <div class="slide-kicker">多 LLM 差异化路由 · 产品亮点</div>
+            <div class="slide-content layout-argument-grid" style="gap:20px;">
+              <div class="flow-stack" style="gap:8px;">
+                <h2 class="slide-title title-sm">按任务挑模型——编码用专精模型，总结用便宜模型</h2>
+                <p class="slide-lead">先看 token 花在哪，再看怎么挑模型降本；4 Phase 独立配 + 一键测试 + Prefect 缓存命中 ¥0。</p>
               </div>
               <div class="flow-grid two">
                 <div class="flow-stack" style="gap:12px;">
-                  <div class="content-meta">成本对比 · 单因子产出</div>
-                  <div class="cost-table">
-                    <div class="cost-row head"><div>方式</div><div>耗时</div><div>成本</div></div>
-                    <div class="cost-row"><div>人工研究员</div><div><span class="placeholder">__ 天</span></div><div>¥<span class="placeholder">__</span></div></div>
-                    <div class="cost-row"><div>RD-Agent 自动</div><div><span class="placeholder">__ 小时</span></div><div>¥<span class="placeholder">__</span></div></div>
-                    <div class="cost-row save"><div>降幅</div><div><span class="placeholder">__×</span></div><div><span class="placeholder">__%</span>↓</div></div>
+                  <div class="content-meta">Token 消耗占比（单任务）<span class="placeholder" style="margin-left:8px;">请填真实 %</span></div>
+                  <div class="flow-panel" style="padding:18px;">
+                    <div class="token-bar">
+                      <div class="token-row"><div class="tname">Developer</div><div class="tbar"><div class="tfill big" style="width:52%;"></div></div><div class="tpct"><span class="placeholder">__%</span></div></div>
+                      <div class="token-row"><div class="tname">HypothesisGen</div><div class="tbar"><div class="tfill" style="width:18%;"></div></div><div class="tpct"><span class="placeholder">__%</span></div></div>
+                      <div class="token-row"><div class="tname">Summarizer</div><div class="tbar"><div class="tfill" style="width:12%;"></div></div><div class="tpct"><span class="placeholder">__%</span></div></div>
+                      <div class="token-row"><div class="tname">H2E</div><div class="tbar"><div class="tfill" style="width:10%;"></div></div><div class="tpct"><span class="placeholder">__%</span></div></div>
+                      <div class="token-row"><div class="tname">Runner</div><div class="tbar"><div class="tfill mute" style="width:0%;"></div></div><div class="tpct" style="color:var(--muted);">0%*</div></div>
+                    </div>
+                    <p style="margin:10px 0 0;font-size:11px;color:var(--muted);font-family:var(--font-mono);">* Runner 不调 LLM，仅执行回测 &nbsp;|&nbsp; 单任务总成本 ≈ ¥<span class="placeholder">__</span></p>
                   </div>
                 </div>
                 <div class="flow-stack" style="gap:12px;">
-                  <div class="content-meta">三条商业化路径</div>
-                  <div class="flow-panel" style="padding:18px;">
-                    <ul style="gap:10px;">
-                      <li><strong style="color:var(--accent);">① SDK 授权</strong> — 给机构内网部署，按席位 / 年订阅</li>
-                      <li><strong style="color:var(--accent-2);">② SaaS 平台</strong> — 按 token / 按任务计费，降低使用门槛</li>
-                      <li><strong style="color:var(--gold);">③ QRaaS</strong> — 量化研究即服务，按产出因子/策略分成</li>
+                  <div class="content-meta">为什么要多模型</div>
+                  <div class="accent-card" style="padding:14px 18px;">
+                    <ul style="gap:8px;">
+                      <li><b style="color:var(--gold);">🔑 Developer 是 token 大户</b>（占 <span class="placeholder">__%</span>）→ 必须用 coding 专精模型（kimi-k2.7-code / deepseek-v4-flash），提升成功率 = 直接降本</li>
+                      <li><b style="color:var(--accent-2);">💡 Summarizer / H2E 轻量</b> → 用便宜模型即可，不必用最贵的</li>
+                      <li><b style="color:var(--ok);">⚡ Runner 不调 LLM</b> → 零 token 成本，算力是唯一开销</li>
                     </ul>
-                    <p style="margin:12px 0 0; font-size:12px; color:var(--muted); font-family:var(--font-mono);">POC 进展：<span class="placeholder">如有合作机构请填，没有可删除此行</span></p>
+                  </div>
+                </div>
+              </div>
+              <div class="flow-grid two-2-1">
+                <div class="flow-stack" style="gap:10px;">
+                  <div class="content-meta">4 Phase × 模型矩阵</div>
+                  <div class="model-matrix">
+                    <div class="mm-head"><div>Phase</div><div>默认模型</div><div>可选（火山方舟 Coding Plan）</div></div>
+                    <div class="mm-row"><div>HypothesisGen</div><div><span class="placeholder">待配置</span></div><div style="font-size:11px;">glm-5.2 · minimax-m3 · kimi-k2.7-code · deepseek-v4-flash</div></div>
+                    <div class="mm-row"><div>Developer</div><div><span class="placeholder">待配置</span></div><div style="font-size:11px;">推荐 coding 专精（kimi-k2.7 / deepseek-v4-flash）</div></div>
+                    <div class="mm-row"><div>Summarizer</div><div><span class="placeholder">待配置</span></div><div style="font-size:11px;">可选用便宜模型压缩成本</div></div>
+                    <div class="mm-row"><div>H2E</div><div><span class="placeholder">待配置</span></div><div style="font-size:11px;">轻量任务，小模型即可</div></div>
+                  </div>
+                </div>
+                <div class="flow-stack" style="gap:10px;">
+                  <div class="content-meta">前端产品能力</div>
+                  <div class="flow-panel">
+                    <h3>① 分步路由可视化编辑器</h3>
+                    <p style="font-size:12px;">UI 上为每个 Phase 独立下拉选模型，配置持久化，零代码切换。<span class="placeholder" style="display:block;margin-top:6px;">🔴 [截图占位：模型选择 UI]</span></p>
+                  </div>
+                  <div class="flow-panel">
+                    <h3>② 模型一键测试按钮</h3>
+                    <p style="font-size:12px;">不消耗正式 run token，独立 ping 请求验证密钥/连通性，避免长任务配错浪费。<span class="placeholder" style="display:block;margin-top:6px;">🟡 [截图占位：测试按钮]</span></p>
+                  </div>
+                  <div class="tag-row">
+                    <span class="tag">OpenAI 兼容端点</span>
+                    <span class="tag tag-2">MCP 工具</span>
+                    <span class="tag tag-gold">Prefect 缓存 ¥0</span>
+                    <span class="tag tag-ok">热切换</span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </section>
-        <details class="caption" open>
-          <summary>幻灯片备注</summary>
-          <p>P8 商业价值——这一页给评委看"为什么能赚钱"。三类客群分别对应不同痛点，避免空喊"赋能"。成本对比表是最朴素的说服力：请按你团队实际工时估"人工单因子几天/几千元"，按真实跑的任务算"系统几小时/几块钱"。三条商业化路径按落地难度从易到难排列；POC 那行如果没有合作客户就删掉，不要瞎编。</p>
-        </details>
+        <details class="caption" open><summary>P7 · 备注</summary><p>P7 产品亮点页——token 饼图移到这里逻辑最顺：先看"钱花在哪"，再看"怎么按任务挑模型省钱"。左半 token 条形图（Developer 金色最大条）+ 右半 3 条解读；下半左 4 Phase × 模型矩阵；下半右前端两个功能（需要截图）。演讲 60 秒。</p></details>
       </article>
 
-      <!-- ============ P9 创新点 + 论文 + 规划 ============ -->
+      <!-- P8 · 商业价值 -->
       <article class="deck-card">
-        <section class="slide-frame theme-grid" aria-label="创新点、论文与规划">
-          <div class="page-badge">09 / 09</div>
+        <section class="slide-frame theme-grid">
+          <div class="page-badge">08 / 09</div>
           <div class="slide-stage">
-            <div class="slide-kicker">创新 · 学术 · 路线图</div>
-            <div class="slide-content layout-argument-grid" style="gap:22px;">
-              <div class="flow-grid two">
-                <div class="flow-stack" style="gap:14px;">
-                  <div class="content-meta">4 大创新点</div>
-                  <div class="innov-list">
-                    <div class="innov-item">
-                      <div class="innov-no">INNOV · 01</div>
-                      <div class="innov-title">架构创新</div>
-                      <div class="innov-desc">5 角色多智能体 R&amp;D-Loop，把"研究→代码→回测"全自动串成闭环</div>
-                    </div>
-                    <div class="innov-item">
-                      <div class="innov-no">INNOV · 02</div>
-                      <div class="innov-title">方法创新</div>
-                      <div class="innov-desc">CoSTEER V2 三连查知识图谱，编码成功率从 ~20% → <span class="placeholder">__%</span></div>
-                    </div>
-                    <div class="innov-item">
-                      <div class="innov-no">INNOV · 03</div>
-                      <div class="innov-title">产品创新</div>
-                      <div class="innov-desc">多 LLM 分步路由 + 模型测试按钮，不绑定单一厂商，按任务挑模型</div>
-                    </div>
-                    <div class="innov-item">
-                      <div class="innov-no">INNOV · 04</div>
-                      <div class="innov-title">评估创新</div>
-                      <div class="innov-desc">端到端 Paper-to-Code Benchmark（B1~B5），可量化可复现</div>
-                    </div>
-                  </div>
+            <div class="slide-kicker">应用场景 · 商业价值</div>
+            <div class="slide-content layout-argument-grid" style="gap:20px;">
+              <div class="flow-stack" style="gap:8px;">
+                <h2 class="slide-title title-sm">三类客群 · 一条朴素商业逻辑</h2>
+                <p class="slide-lead">一个资深量化研究员年薪 50-100w，系统一年远低于此，还能 24h 不停跑。</p>
+              </div>
+              <div class="value-grid">
+                <div class="value-card">
+                  <div class="vc-head"><div class="vc-icon">01</div><div class="vc-name">券商自营 / 公募量化</div></div>
+                  <div class="vc-pain">痛点：研究员稀缺 · 50-100w/人/年 · 合规内网</div>
+                  <div class="vc-value">自动挖因子+回测+SOTA 继承，1 套系统顶 N 人，内网部署合规可控。</div>
                 </div>
-                <div class="flow-stack" style="gap:14px;">
-                  <div class="content-meta">学术成果</div>
-                  <div class="flow-panel">
-                    <h3 style="color:var(--gold);">🏆 NeurIPS 2025</h3>
-                    <p style="font-size:14px; margin-top:4px;">R&amp;D-Agent-Quant: Automating Quantitative Finance Research with LLM-based Multi-Agent System (2505.15155)</p>
-                    <div class="tag-row" style="margin-top:12px;">
-                      <span class="tag">arXiv 5 篇</span>
-                      <span class="tag tag-2">Benchmark GT 5 篇</span>
-                      <span class="tag tag-gold">LinTS ICML'13</span>
-                    </div>
-                    <p style="margin-top:10px; font-size:12px; color:var(--muted);">在投/准备中：<span class="placeholder">如有请填</span></p>
+                <div class="value-card">
+                  <div class="vc-head"><div class="vc-icon p">02</div><div class="vc-name">量化私募</div></div>
+                  <div class="vc-pain">痛点：模型更新慢 · 跨市场适配贵</div>
+                  <div class="vc-value">双管线（因子+模型）+ Bandit 自动分配精力，多市场（A 股/港美/加密）可扩展。</div>
+                </div>
+                <div class="value-card">
+                  <div class="vc-head"><div class="vc-icon g">03</div><div class="vc-name">教育 / 研究机构</div></div>
+                  <div class="vc-pain">痛点：论文复现难 · 教学成本高</div>
+                  <div class="vc-value">Paper-to-Code Benchmark（B1~B5）端到端可复现，教学/科研一键起。</div>
+                </div>
+              </div>
+              <div class="flow-grid two">
+                <div class="flow-stack" style="gap:10px;">
+                  <div class="content-meta">单因子成本对比</div>
+                  <div class="cost-table">
+                    <div class="cost-row head"><div>方式</div><div>耗时</div><div>成本</div></div>
+                    <div class="cost-row"><div>人工研究员</div><div><span class="placeholder">__ 天</span></div><div>¥<span class="placeholder">__</span></div></div>
+                    <div class="cost-row"><div>RD-Agent 自动</div><div><span class="placeholder">__ 小时</span></div><div>¥<span class="placeholder">__</span></div></div>
+                    <div class="cost-row save"><div>降幅</div><div><span class="placeholder">__×</span></div><div><span class="placeholder">__%</span>↓</div></div>
                   </div>
-                  <div class="accent-card" style="padding:16px 20px;">
-                    <h3 style="font-size:16px; margin-bottom:6px;">项目现状</h3>
-                    <p style="font-size:13px;">当前版本可完整跑通因子 / 模型两条主链路；以下是短期→中期→长期规划。</p>
+                  <p style="margin:0;font-size:11px;color:var(--muted);font-family:var(--font-mono);">* 人工成本估算：年薪 60w ÷ 250 工作日 ≈ ¥2400/天</p>
+                </div>
+                <div class="flow-stack" style="gap:10px;">
+                  <div class="content-meta">三条商业化路径（易→难）</div>
+                  <div class="flow-panel">
+                    <ul style="gap:8px;">
+                      <li><b style="color:var(--accent);">① SDK 授权</b>——机构内网部署，按席位年订阅（最易落地）</li>
+                      <li><b style="color:var(--accent-2);">② SaaS 平台</b>——按 token / 按任务计费，降低小团队门槛</li>
+                      <li><b style="color:var(--gold);">③ QRaaS</b>——量化研究即服务，按产出因子/策略实盘分成（天花板最高）</li>
+                    </ul>
+                    <p style="margin:10px 0 0;font-size:11px;color:var(--muted);font-family:var(--font-mono);">POC 进展：<span class="placeholder">如有填，无可删</span></p>
                   </div>
                 </div>
               </div>
-              <div class="flow-stack" style="gap:12px;">
-                <div class="content-meta">后续建设路线图</div>
+            </div>
+          </div>
+        </section>
+        <details class="caption" open><summary>P8 · 备注</summary><p>P8 商业价值：上半 3 客群卡片（蓝/紫/金）；下半左单因子成本对比表（人工 vs 自动，绿色降幅）；下半右 3 条商业化路径。成本数字请按团队实际估算。演讲 45 秒。</p></details>
+      </article>
+
+      <!-- P9 · 创新 + 论文 + 路线图 -->
+      <article class="deck-card">
+        <section class="slide-frame theme-grid">
+          <div class="page-badge">09 / 09</div>
+          <div class="slide-stage">
+            <div class="slide-kicker">创新 · 学术 · 路线图</div>
+            <div class="slide-content layout-argument-grid" style="gap:20px;">
+              <div class="flow-grid two">
+                <div class="flow-stack" style="gap:12px;">
+                  <div class="content-meta">4 大创新点</div>
+                  <div class="innov-list">
+                    <div class="innov-item"><div class="innov-no">INNOV · 01</div><div class="innov-title">架构创新</div><div class="innov-desc">5 角色多智能体 R&amp;D-Loop，端到端串起研究→代码→回测</div></div>
+                    <div class="innov-item"><div class="innov-no">INNOV · 02</div><div class="innov-title">方法创新</div><div class="innov-desc">CoSTEER V2 三连查知识图谱，成功率 ~20% → <span class="placeholder">__%</span></div></div>
+                    <div class="innov-item"><div class="innov-no">INNOV · 03</div><div class="innov-title">产品创新</div><div class="innov-desc">多 LLM 分步路由 + 模型测试按钮，不绑厂商按任务挑模型</div></div>
+                    <div class="innov-item"><div class="innov-no">INNOV · 04</div><div class="innov-title">评估创新</div><div class="innov-desc">端到端 Paper-to-Code Benchmark（B1~B5），可量化可复现</div></div>
+                  </div>
+                </div>
+                <div class="flow-stack" style="gap:12px;">
+                  <div class="content-meta">学术成果</div>
+                  <div class="flow-panel" style="border-color:rgba(241,194,27,0.4);background:rgba(241,194,27,0.06);">
+                    <h3 style="color:var(--gold);font-size:22px;">🏆 NeurIPS 2025</h3>
+                    <p style="font-size:13px;margin-top:4px;color:var(--ink);">R&amp;D-Agent-Quant: Automating Quantitative Finance Research with LLM-based Multi-Agent System<br><span style="font-family:var(--font-mono);font-size:11px;color:var(--muted);">arXiv:2505.15155</span></p>
+                    <div class="tag-row" style="margin-top:10px;">
+                      <span class="tag">R&amp;D-Agent 2505.14738</span>
+                      <span class="tag tag-2">CoSTEER 2407.18690</span>
+                      <span class="tag">Data-Centric R&amp;D</span>
+                      <span class="tag">Multi-Agent Quant</span>
+                      <span class="tag tag-gold">LinTS ICML'13</span>
+                    </div>
+                    <p style="margin:10px 0 0;font-size:11px;color:var(--muted);">B1~B5 GT：GPS · ViSNet · DiGNet · PMLP · LinkX &nbsp;|&nbsp; 在投：<span class="placeholder">有则填</span></p>
+                  </div>
+                </div>
+              </div>
+              <div class="flow-stack" style="gap:10px;">
+                <div class="content-meta">后续路线图</div>
                 <div class="roadmap">
                   <div class="road-col">
                     <div class="rc-phase">短期 · 3 个月</div>
                     <div class="rc-title">打磨核心能力</div>
                     <ul>
-                      <li>B2 ViSNet 还原率从 60% → 75%+</li>
-                      <li>Bandit 权重调优 / UCB 对比实验</li>
+                      <li>B2 ViSNet 还原率 60% → 75%+</li>
+                      <li>Bandit 权重调优 / UCB 对比</li>
                       <li>股池预测低延迟优化</li>
                       <li>Mem0 跨 KB 长期记忆上线</li>
                     </ul>
@@ -1051,10 +749,10 @@
                     <div class="rc-phase">中期 · 6 个月</div>
                     <div class="rc-title">扩场景 · 上平台</div>
                     <ul>
-                      <li>多市场扩展（加密 / 港美股）</li>
-                      <li>跨用户共享 SOTA 知识库</li>
-                      <li>在线学习（每日新研报→自动挖因子）</li>
-                      <li>SaaS 化产品打磨</li>
+                      <li>多市场扩展（加密/港美股）</li>
+                      <li>跨用户共享 SOTA KB</li>
+                      <li>在线学习（每日新研报→挖因子）</li>
+                      <li>SaaS 产品打磨</li>
                     </ul>
                   </div>
                   <div class="road-col long">
@@ -1064,124 +762,57 @@
                       <li>完全无人化量化研究 SaaS</li>
                       <li>论文→因子开放 Benchmark 平台</li>
                       <li>跨团队联邦 RAG 共建 KB</li>
-                      <li>从量化扩展到更多 AI4Science 场景</li>
+                      <li>扩展到 AI4Science 其他领域</li>
                     </ul>
                   </div>
                 </div>
               </div>
-              <div class="foot-metric" style="justify-content:space-between; align-items:center;">
-                <div style="display:flex; gap:24px;">
+              <div class="foot-metric" style="justify-content:space-between;align-items:center;">
+                <div style="display:flex;gap:22px;">
                   <div class="fm-item"><span class="fm-v">9</span><span class="fm-l">页 PPT</span></div>
-                  <div class="fm-item"><span class="fm-v">5</span><span class="fm-l">核心智能体</span></div>
+                  <div class="fm-item"><span class="fm-v">5</span><span class="fm-l">智能体</span></div>
                   <div class="fm-item"><span class="fm-v">4</span><span class="fm-l">层知识库</span></div>
                   <div class="fm-item"><span class="fm-v" style="color:var(--gold);">1</span><span class="fm-l">篇 NeurIPS</span></div>
                 </div>
-                <div style="font-family:var(--font-mono); font-size:13px; color:var(--muted);">
-                  <span class="placeholder">[GitHub / 文档 / 联系方式]</span>
+                <div style="font-family:var(--font-mono);font-size:12px;color:var(--muted);">
+                  <span class="tag tag-gold" style="margin-right:8px;">Thank You · Q&amp;A</span>
+                  <span class="placeholder">[GitHub / 文档 / 邮箱]</span>
                 </div>
               </div>
             </div>
           </div>
         </section>
-        <details class="caption" open>
-          <summary>幻灯片备注</summary>
-          <p>P9 收尾页——评委离场前应该记住 3 件事：(1) 4 个创新点是什么（人话版）；(2) 论文在哪（NeurIPS 是硬通货）；(3) 我们没想一步到位，路线图很清楚。创新点用左侧 4 个带色条的小卡片，右上学术成果用金色高亮 NeurIPS。底部右侧的联系方式请替换成真实 GitHub / 文档 / 邮箱。这页讲完 5 秒内直接说"谢谢"，不恋战。</p>
-        </details>
+        <details class="caption" open><summary>P9 · 备注</summary><p>P9 收尾：左上 4 创新点（蓝/紫/金/绿左边条），右上 NeurIPS 金色高亮+论文标签；下半 3 列路线图（蓝短/紫中/金长）；底部指标条+联系方式。讲完 5 秒内说"谢谢"。</p></details>
       </article>
 
     </div>
   </main>
 
   <script>
-    (function () {
-      const deck = document.getElementById("deck");
-      const deckCards = Array.from(document.querySelectorAll(".deck-card"));
-      const captions = Array.from(document.querySelectorAll(".caption"));
-      const tools = document.querySelector(".viewer-tools");
-      const zoomOut = document.querySelector('[data-zoom="out"]');
-      const zoomIn = document.querySelector('[data-zoom="in"]');
-      const zoomReset = document.querySelector('[data-zoom="reset"]');
-      const zoomOutput = document.querySelector(".viewer-tools output");
-      let zoom = 1;
-      let presentIndex = 0;
-
-      function applyZoom() {
-        deck.style.setProperty("--deck-zoom", zoom);
-        deck.classList.toggle("is-zoomed", zoom !== 1);
-        zoomOutput.textContent = Math.round(zoom * 100) + "%";
-      }
-      function setZoom(v) {
-        zoom = Math.min(3, Math.max(0.4, parseFloat(v.toFixed(2))));
-        applyZoom();
-      }
-      window.addEventListener("wheel", (e) => {
-        if (!(e.ctrlKey || e.metaKey)) return;
-        e.preventDefault();
-        setZoom(zoom + (e.deltaY < 0 ? 0.1 : -0.1));
-      }, { passive: false });
-      window.addEventListener("keydown", (e) => {
-        if (e.key === "+" || e.key === "=") { setZoom(zoom + 0.1); }
-        else if (e.key === "-" || e.key === "_") { setZoom(zoom - 0.1); }
-        else if (e.key === "0" && (e.ctrlKey || e.metaKey)) { setZoom(1); }
-      });
-      zoomIn.addEventListener("click", () => setZoom(zoom + 0.1));
-      zoomOut.addEventListener("click", () => setZoom(zoom - 0.1));
-      zoomReset.addEventListener("click", () => setZoom(1));
-
-      window.addEventListener("mousemove", (e) => {
-        if (e.clientY < 60) tools.classList.add("is-visible");
-        else tools.classList.remove("is-visible");
-      });
-
-      function scaleCards() {
-        deckCards.forEach((card) => {
-          const frame = card.querySelector(".slide-frame");
-          const stage = frame.querySelector(".slide-stage");
-          if (!frame || !stage) return;
-          const rect = frame.getBoundingClientRect();
-          const scale = Math.min(rect.width / 1600, rect.height / 900);
-          stage.style.setProperty("--slide-scale", scale);
-        });
-      }
-      window.addEventListener("resize", scaleCards);
-      scaleCards();
-      if (document.fonts && document.fonts.ready) {
-        document.fonts.ready.then(scaleCards);
-      }
-
-      captions.forEach((caption) => {
-        caption.addEventListener("click", (ev) => {
-          if (ev.target.closest("summary")) return;
-          deck.classList.toggle("compact-pages");
-          const collapsed = deck.classList.contains("compact-pages");
-          captions.forEach((c) => { if (collapsed) c.removeAttribute("open"); else c.setAttribute("open", ""); });
-        });
-        caption.setAttribute("title", "点击切换所有备注与卡片间距");
-      });
-
-      function present(index) {
-        deckCards.forEach((c, i) => c.classList.toggle("is-presenting", i === index));
-        presentIndex = Math.max(0, Math.min(deckCards.length - 1, index));
-        deckCards[presentIndex].scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-      window.addEventListener("keydown", (e) => {
-        if (!document.fullscreenElement) return;
-        if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") {
-          e.preventDefault(); present(presentIndex + 1);
-        } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
-          e.preventDefault(); present(presentIndex - 1);
-        } else if (e.key === "Escape") {
-          if (document.fullscreenElement) document.exitFullscreen();
-        }
-      });
-      window.addEventListener("keydown", (e) => {
-        const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-        if ((isMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === "f") {
-          e.preventDefault();
-          if (document.fullscreenElement) document.exitFullscreen();
-          else if (deck.requestFullscreen) { deck.requestFullscreen(); setTimeout(() => present(presentIndex), 200); }
-        }
-      });
+    (function(){
+      const deck=document.getElementById("deck");
+      const cards=Array.from(document.querySelectorAll(".deck-card"));
+      const tools=document.querySelector(".viewer-tools");
+      const zoomOut=document.querySelector('[data-zoom="out"]');
+      const zoomIn=document.querySelector('[data-zoom="in"]');
+      const zoomReset=document.querySelector('[data-zoom="reset"]');
+      const zoomOut_=document.querySelector(".viewer-tools output");
+      let zoom=1,pidx=0;
+      function applyZoom(){deck.style.setProperty("--deck-zoom",zoom);deck.classList.toggle("is-zoomed",zoom!==1);zoomOut_.textContent=Math.round(zoom*100)+"%";}
+      function setZoom(v){zoom=Math.min(3,Math.max(0.4,parseFloat(v.toFixed(2))));applyZoom();}
+      window.addEventListener("wheel",e=>{if(!(e.ctrlKey||e.metaKey))return;e.preventDefault();setZoom(zoom+(e.deltaY<0?0.1:-0.1));},{passive:false});
+      window.addEventListener("keydown",e=>{if(e.key==="+"||e.key==="=")setZoom(zoom+0.1);else if(e.key==="-"||e.key==="_")setZoom(zoom-0.1);else if(e.key==="0"&&(e.ctrlKey||e.metaKey))setZoom(1);});
+      zoomIn.addEventListener("click",()=>setZoom(zoom+0.1));
+      zoomOut.addEventListener("click",()=>setZoom(zoom-0.1));
+      zoomReset.addEventListener("click",()=>setZoom(1));
+      window.addEventListener("mousemove",e=>{if(e.clientY<60)tools.classList.add("is-visible");else tools.classList.remove("is-visible");});
+      function scaleCards(){cards.forEach(c=>{const f=c.querySelector(".slide-frame"),s=f&&f.querySelector(".slide-stage");if(!f||!s)return;const r=f.getBoundingClientRect();s.style.setProperty("--slide-scale",Math.min(r.width/1600,r.height/900));});}
+      window.addEventListener("resize",scaleCards);scaleCards();
+      if(document.fonts&&document.fonts.ready)document.fonts.ready.then(scaleCards);
+      document.querySelectorAll(".caption").forEach(c=>{c.addEventListener("click",ev=>{if(ev.target.closest("summary"))return;deck.classList.toggle("compact-pages");const col=deck.classList.contains("compact-pages");document.querySelectorAll(".caption").forEach(x=>{if(col)x.removeAttribute("open");else x.setAttribute("open","");});});c.setAttribute("title","点击切换所有备注");});
+      function present(i){cards.forEach((c,k)=>c.classList.toggle("is-presenting",k===i));pidx=Math.max(0,Math.min(cards.length-1,i));cards[pidx].scrollIntoView({behavior:"smooth",block:"center"});}
+      window.addEventListener("keydown",e=>{if(!document.fullscreenElement)return;if(e.key==="ArrowRight"||e.key===" "||e.key==="PageDown"){e.preventDefault();present(pidx+1);}else if(e.key==="ArrowLeft"||e.key==="PageUp"){e.preventDefault();present(pidx-1);}else if(e.key==="Escape"){if(document.fullscreenElement)document.exitFullscreen();}});
+      window.addEventListener("keydown",e=>{const isMac=navigator.platform.toUpperCase().indexOf("MAC")>=0;if((isMac?e.metaKey:e.ctrlKey)&&e.key.toLowerCase()==="f"){e.preventDefault();if(document.fullscreenElement)document.exitFullscreen();else if(deck.requestFullscreen){deck.requestFullscreen();setTimeout(()=>present(pidx),200);}}});
     })();
   </script>
 </body>
