@@ -1071,8 +1071,9 @@ def poll_upload_ready():
     """轮询任务文件是否就绪。
 
     子进程启动后写的第一个 pkl 在 scenario/ 目录下（RDLoop.__init__ 里
-    logger.log_object(scen, tag="scenario")），该目录出现 ≈ 子进程已开始运行。
-    前端在 /upload 返回 id 后每 3s 轮询此端点，就绪后才跳转详情页。
+    logger.log_object(scen, tag="scenario")）。检查 pkl 文件（而非仅检查目录），
+    确保就绪标准与 /traces 的可见性标准一致（/traces 要求 rglob("*.pkl") 非空），
+    避免 scenario/ 已 mkdir 但 pkl 尚未落盘时 ready=true 导致跳转后 404。
     """
     trace_id = request.args.get("id", "")
     if not trace_id:
@@ -1084,7 +1085,7 @@ def poll_upload_ready():
             return jsonify({"error": "Invalid id"}), 422
     except (ValueError, OSError):
         return jsonify({"error": "Invalid id"}), 422
-    ready = (trace_dir / "scenario").is_dir()
+    ready = any((trace_dir / "scenario").rglob("*.pkl"))
     return jsonify({"ready": ready}), 200
 
 
@@ -1249,6 +1250,50 @@ def get_settings_schema():
     """返回配置 schema + 当前值（密钥脱敏），供设置页动态渲染表单。"""
     from rdagent.log.server.settings_schema import build_schema_response
     return jsonify(build_schema_response()), 200
+
+
+@app.route("/settings/models", methods=["GET"])
+def list_available_models():
+    """获取当前订阅套餐支持的模型列表（火山引擎 ListArkCodingPlanModel）。
+
+    用户每次进入设置页时前端调一次。AK/SK 缺失时返回静态 fallback。
+    """
+    # 用户指定的额外备选模型（不在 ListArkCodingPlanModel 返回中，手动合并）
+    extra_chat = ["doubao-seed-evolving", "doubao-seed-2.1-turbo", "kimi-k3"]
+
+    ak = os.environ.get("VOLC_ACCESS_KEY", "")
+    sk = os.environ.get("VOLC_SECRET_KEY", "")
+    if not ak or not sk:
+        # 无 AK/SK → 静态 fallback（含 extra）
+        from rdagent.log.server.settings_schema import CHAT_MODEL_OPTIONS, EMBEDDING_MODEL_OPTIONS
+        return jsonify({"chat_models": CHAT_MODEL_OPTIONS, "embedding_models": EMBEDDING_MODEL_OPTIONS}), 200
+
+    try:
+        from volcenginesdkcore import UniversalApi, UniversalInfo, ApiClient, Configuration
+        config = Configuration()
+        config.ak = ak
+        config.sk = sk
+        config.region = "cn-beijing"
+        config.host = "open.volcengineapi.com"
+        config.scheme = "https"
+        config.auto_retry = False
+        client = ApiClient(config)
+        api = UniversalApi(client)
+        info = UniversalInfo(
+            method="POST", service="ark", version="2024-01-01",
+            action="ListArkCodingPlanModel", content_type="application/json",
+        )
+        resp = api.do_call(info, {})
+        api_models = [item["ModelID"] for item in resp.get("Datas", [])]
+        # 合并 extra 备选 + API 返回，去重，加 openai/ 前缀
+        all_chat = sorted(set(api_models + extra_chat))
+        chat_models = [f"openai/{m}" for m in all_chat]
+        embedding_models = ["openai/doubao-embedding-vision"]
+        return jsonify({"chat_models": chat_models, "embedding_models": embedding_models}), 200
+    except Exception as e:
+        app.logger.warning(f"ListArkCodingPlanModel failed: {e}, using fallback")
+        from rdagent.log.server.settings_schema import CHAT_MODEL_OPTIONS, EMBEDDING_MODEL_OPTIONS
+        return jsonify({"chat_models": CHAT_MODEL_OPTIONS, "embedding_models": EMBEDDING_MODEL_OPTIONS}), 200
 
 
 @app.route("/settings", methods=["POST"])
