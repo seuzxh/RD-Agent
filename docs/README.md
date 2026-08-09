@@ -44,6 +44,8 @@ layout: default
 - [任务状态判断修复](design/TRACE_STATUS_FIX.md) — stop/异常终止后仍显示 running 的根因（3 个 bug）与修复方案
 - [任务并发限制](design/TASK_CONCURRENCY_LIMIT.md) — 运行中任务达上限（默认 10）禁止新建，前后端配合
 - [设置页面设计](design/SETTINGS_PAGE_DESIGN.md) — 4分组37字段 + 密钥脱敏 + 模型测试 + 分步路由可视化
+- [Model DataLoader 死锁修复](design/MODEL_DATALOADER_DEADLOCK_FIX.md) — LSTM 训练 evaluating 阶段死锁根因与 4 种修复方案对比
+- [多 GPU 轮转分配](design/GPU_POOL_ROUND_ROBIN.md) — 每个任务自动分配不同物理 GPU，Docker 物理隔离
 
 ## 🏛 架构说明
 
