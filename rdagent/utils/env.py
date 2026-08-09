@@ -789,6 +789,7 @@ class DockerConf(EnvConf):
     # So we just want to download it once.
     network: str | None = "bridge"  # the network mode for the docker
     shm_size: str | None = None
+    ipc_mode: str | None = "host"  # use host IPC namespace to prevent DataLoader worker deadlock
     enable_gpu: bool = True  # because we will automatically disable GPU if not available. So we enable it by default.
     mem_limit: str | None = "48g"  # Add memory limit attribute
     cpu_count: int | None = None  # Add CPU limit attribute
@@ -1180,6 +1181,7 @@ class DockerEnv(Env[DockerConf]):
                 shm_size=self.conf.shm_size,
                 mem_limit=self.conf.mem_limit,  # Set memory limit
                 cpu_count=self.conf.cpu_count,  # Set CPU limit
+                ipc_mode=self.conf.ipc_mode,
                 **self._gpu_kwargs(client),
             )
             assert container is not None  # Ensure container was created successfully
