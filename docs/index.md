@@ -69,6 +69,23 @@ layout: default
 - [06. Trace 实验轨迹](agents/06-trace.md) — 实验历史记录、SOTA追踪、DAG演化关系、目录结构与持久化机制
 - [07. Prompt 模板系统](agents/07-prompts.md) — 12个prompts.yaml、40+模板的作用/变量/渲染示例/调用链路
 
+## 📄 引用论文
+
+> multialpha 基于 7 篇学术论文构建，涵盖核心框架、协同进化、量化金融与基础设施。
+
+- [论文目录索引](papers/README.md) — 全部论文分类清单与 arXiv 链接
+- [01. R&D-Agent 整体框架](papers/01-rd-agent.md) — arXiv:2505.14738，五阶段自主研发闭环
+- [02. 以数据为中心的自动研发](papers/02-data-centric.md) — arXiv:2404.11276，真实反馈驱动范式
+- [03. CoSTEER 协同进化策略](papers/03-costeer.md) — arXiv:2407.18690，RAG增强的代码迭代纠错
+- [04. R&D-Agent-Quant 量化框架](papers/04-rd-agent-quant.md) — arXiv:2505.15155，NeurIPS 2025，因子+模型联合优化
+- [05. FT-Dojo 自主微调](papers/05-ft-dojo.md) — arXiv:2603.01712，ICML 2026，LLM微调智能体
+- [06. Reasoning as Gradient](papers/06-reasoning-gradient.md) — arXiv:2603.01692，ACL 2026 Findings，推理即梯度
+- [07. Qlib 量化投资平台](papers/07-qlib.md) — arXiv:2009.11189，AI量化基础设施
+
+## 📈 优化策略
+
+- [Bandit / LinTS 动作选择策略](strategy/bandit-lints.md) — Linear Thompson Sampling 多臂老虎机：因子 vs 模型方向自动决策，原理/奖励设计/配置/示例
+
 ## 🔄 应用场景
 
 > multiα1pha 支持四类量化研究场景，从因子挖掘到研报复现、模型调优到全流程协同进化。
