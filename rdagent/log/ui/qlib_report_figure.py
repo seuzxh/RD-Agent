@@ -514,9 +514,10 @@ def report_figure(df: pd.DataFrame, group_df: pd.DataFrame = None) -> list | tup
     return figure
 
 
-# plotly.js CDN URL（bootcdn 国内镜像），与 app.py 的 chart 生成共用同一注入。
-_PLOTLY_VERSION = "2.35.3"
-_PLOTLY_CDN_URL = f"https://cdn.bootcdn.net/ajax/libs/plotly.js/{_PLOTLY_VERSION}/plotly.min.js"
+# plotly.js CDN URL（jsdelivr，实测可达 200；bootcdn 实测不可达）。
+# 注：jsdelivr 无 2.35.3，用 2.35.2；cdnjs 路径 404、unpkg 不可达，均排除。
+_PLOTLY_VERSION = "2.35.2"
+_PLOTLY_CDN_URL = f"https://cdn.jsdelivr.net/npm/plotly.js-dist-min@{_PLOTLY_VERSION}/plotly.min.js"
 
 
 def generate_chart_html(ret_pkl: Path | str, group_pkl: Path | str | None = None) -> str:
