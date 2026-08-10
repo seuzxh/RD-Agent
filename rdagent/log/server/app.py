@@ -729,12 +729,11 @@ def _load_existing_traces(trace_root: Path) -> None:
 # C4: /receive 收到 feedback.return_chart 时，把 5MB chart_html 替换为轻量 descriptor。
 # C5: GET /api/v2/trace/artifact 按 trace_id + loop_id 按需生成 chart HTML。
 
-# plotly.js CDN URL（bootcdn 国内镜像）。
-# 注意：bootcdn 同步自 cdnjs，plotly.js 在 cdnjs 上最高只到 3.1.1（6.x 未同步，会 404）。
-# 2.35.3 是 cdnjs/bootcdn 上稳定可用的最高 2.x 版本，覆盖 report_figure 用到的全部
-# trace/layout 特性；Python 后端仍可用任意版本生成 figure JSON（仅作为数据源）。
+# plotly.js 本地化（原 bootcdn CDN 国内加载耗时 ~10s，改为本地静态文件）。
+# 文件位于 git_ignore_folder/static/assets/plotly-2.35.3.min.js
+# 由 Flask send_from_directory 服务，与 multialpha JS/CSS 同源同速。
 _PLOTLY_VERSION = "2.35.3"
-_PLOTLY_CDN_URL = f"https://cdn.bootcdn.net/ajax/libs/plotly.js/{_PLOTLY_VERSION}/plotly.min.js"
+_PLOTLY_LOCAL_PATH = f"/assets/plotly-{_PLOTLY_VERSION}.min.js"
 
 
 def _find_chart_pkl(trace_dir: Path, loop_id: int | None) -> Path | None:
@@ -769,10 +768,10 @@ def _generate_chart_html(df_pkl_path: Path) -> str:
     else:
         fig = report_figure(obj)
     html = plotly.io.to_html(fig, include_plotlyjs=False, full_html=True)
-    # 注入 bootcdn script（include_plotlyjs=False 只留占位，需手动加 script 标签）
+    # 注入本地 plotly.js（include_plotlyjs=False 只留占位，需手动加 script 标签）
     html = html.replace(
         '</head>',
-        f'<script src="{_PLOTLY_CDN_URL}"></script></head>',
+        f'<script src="{_PLOTLY_LOCAL_PATH}"></script></head>',
     ) if '</head>' in html else html
     return html
 
