@@ -58,6 +58,7 @@ export default defineConfig({
       '/stdout': 'http://localhost:19899',
       '/health': 'http://localhost:19899',
       '/settings': 'http://localhost:19899',
+      '/pdf_images': 'http://localhost:19899',
     },
   },
   resolve: {

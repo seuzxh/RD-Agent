@@ -22,5 +22,6 @@ export interface TraceViewModel {
   chartRef:ChartRef|null; chartHtml:string; metrics:MetricItem[]; metricValues:Record<string,number|string>; feedback:FeedbackSummary
   promptTokens:number; completionTokens:number; totalTokens:number; callCount:number; tokenByAgent:TokenByAgent[]; loopMetrics:Record<number,string>
   userInput:UserInput|null
+  pdfImage:string|null
   currentStep:AgentStep
 }

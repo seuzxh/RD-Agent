@@ -32,7 +32,7 @@ export function useMultiAlpha() {
     const [scenario, ...name] = id.split('/')
     return { id, scenario, name: name.join('/'), status: statuses.value[id] || 'idle' }
   }))
-  const view = computed(() => buildTraceView(messages.value, selectedLoop.value))
+  const view = computed(() => buildTraceView(messages.value, selectedLoop.value, statuses.value[currentTraceId.value]))
 
   function remember(id: string, value: TraceMessage[]) {
     cache.delete(id); cache.set(id, value)

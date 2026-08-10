@@ -180,7 +180,7 @@ const sotaDecision = computed(() => sotaData.value?.sota_feedback?.decision === 
 const sotaFeedbackReason = computed(() => sotaData.value?.sota_feedback?.reason || '')
 const sotaMetricList = computed(() => {
   const m = sotaData.value?.sota_metrics || {}
-  const labels: Record<string, string> = { IC: 'IC', '1day.excess_return_with_cost.annualized_return': '年化收益', '1day.excess_return_with_cost.max_drawdown': '最大回撤', '1day.excess_return_with_cost.information_ratio': '信息比率' }
+  const labels: Record<string, string> = { IC: 'IC', '1day.excess_return_without_cost.annualized_return': '年化收益', '1day.excess_return_without_cost.max_drawdown': '最大回撤', '1day.excess_return_without_cost.information_ratio': '信息比率', '1day.excess_return_with_cost.annualized_return': '年化收益(扣费)', '1day.excess_return_with_cost.max_drawdown': '最大回撤(扣费)', '1day.excess_return_with_cost.information_ratio': '信息比率(扣费)' }
   const out: Record<string, string> = {}
   for (const [key, label] of Object.entries(labels)) {
     if (m[key] != null) {

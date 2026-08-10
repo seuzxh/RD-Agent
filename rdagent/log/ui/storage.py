@@ -16,14 +16,17 @@ AGENT_LABELS: dict[str, str] = {
     "coding": "代码实现",
     "running": "回测执行",
     "feedback": "反馈评审",
+    "report": "报告解析",
     "other": "其他",
 }
 
 
 def agent_from_tag(tag: str) -> str:
     tag_lower = tag.lower()
-    if ".hypothesis." in tag_lower and "direct_exp_gen" in tag_lower:
+    if ".hypothesis." in tag_lower:
         return "propose"
+    if "file_to_factor_result" in tag_lower or "filtered_factor_dict" in tag_lower:
+        return "report"
     if "direct_exp_gen" in tag_lower:
         return "exp_gen"
     if "coding" in tag_lower or "evo_loop" in tag_lower:
@@ -98,7 +101,26 @@ class WebStorage(Storage):
         li, fn = extract_loopid_func_name(tag)
         ei = extract_evoid(tag)
         data = {}
-        if "hypothesis generation" in tag:
+        if "token_cost" in tag:
+            import math
+
+            raw = obj if isinstance(obj, dict) else {}
+            token_obj = {
+                k: (0.0 if isinstance(v, float) and math.isnan(v) else
+                    0.0 if isinstance(v, float) and math.isinf(v) else v)
+                for k, v in raw.items()
+            }
+            token_obj["agent"] = agent_from_tag(tag)
+            data = {
+                "id": id,
+                "msg": {
+                    "tag": "token_cost",
+                    "timestamp": timestamp,
+                    "loop_id": li,
+                    "content": token_obj,
+                },
+            }
+        elif "hypothesis generation" in tag:
             from rdagent.core.proposal import Hypothesis
 
             h: Hypothesis = obj
@@ -306,24 +328,5 @@ class WebStorage(Storage):
                         "content": content,
                     },
                 }
-        elif "token_cost" in tag:
-            import math
-
-            raw = obj if isinstance(obj, dict) else {}
-            token_obj = {
-                k: (0.0 if isinstance(v, float) and math.isnan(v) else
-                    0.0 if isinstance(v, float) and math.isinf(v) else v)
-                for k, v in raw.items()
-            }
-            token_obj["agent"] = agent_from_tag(tag)
-            data = {
-                "id": id,
-                "msg": {
-                    "tag": "token_cost",
-                    "timestamp": timestamp,
-                    "loop_id": li,
-                    "content": token_obj,
-                },
-            }
 
         return data

@@ -407,14 +407,15 @@ curl "http://localhost:19899/api/v2/trace/token?id=Finance%20Data%20Building/pla
 | 字段 | 说明 |
 |---|---|
 | `total` | 全 trace 汇总：prompt/completion/total tokens、美元成本（litellm `completion_cost` 估算）、LLM 调用次数 |
-| `by_agent` | 按智能体分组（中文标签：假设生成/实验设计/代码实现/回测执行/反馈评审/其他），按 token 总量降序 |
+| `by_agent` | 按智能体分组（中文标签：假设生成/实验设计/代码实现/回测执行/反馈评审/报告解析/其他），按 token 总量降序 |
 | `by_loop` | 按 loop_id 分组（0, 1, 2...），按 loop 升序 |
 
 **智能体归因规则**（`agent_from_tag`，`rdagent/log/ui/storage.py`）：
 
 | tag 特征 | agent | 中文标签 |
 |---|---|---|
-| `.hypothesis.` + `direct_exp_gen` | `propose` | 假设生成 |
+| `.hypothesis.` | `propose` | 假设生成 |
+| `file_to_factor_result` 或 `filtered_factor_dict` | `report` | 报告解析 |
 | `direct_exp_gen`（实验生成部分） | `exp_gen` | 实验设计 |
 | `coding` 或 `evo_loop` | `coding` | 代码实现 |
 | `running` | `running` | 回测执行 |
@@ -493,7 +494,7 @@ class RDAgentTask:
 | **回测曲线** | `feedback.return_chart` | `chart_html`（plotly 内嵌 HTML）| ResultWorkspace 曲线 tab（iframe srcdoc 渲染）| POST /trace |
 | **反馈决策交互** | `user_interaction.request` | `{decision, reason, ...}`（HypothesisFeedback 对象字段）| UserInteractionDialog（decision select[true/false] + reason textarea）| POST /user_interaction/submit |
 | **最终结论** | `feedback.hypothesis_feedback` | `observations`, `hypothesis_evaluation`, `new_hypothesis`, `decision`, `reason`, `exception` | ResultWorkspace 结论 tab（decision chip + feedbackItems）+ AgentFlow 反馈节点（stat=已采纳/已拒绝）+ MetricsPanel（反馈摘要）| POST /trace |
-| **token 用量** | `token_cost` | `model`, `prompt_tokens`, `completion_tokens`, `cost`, `accumulated_cost`, `agent`（后端从 tag 直接标注：propose/exp_gen/coding/running/feedback/other） | TokenDashboard（总/输入/输出/调用次数；按智能体分组；`cost` 的 NaN 已 sanitize 为 0.0）| POST /trace（实时消息流）+ GET /api/v2/trace/token（聚合查询）|
+| **token 用量** | `token_cost` | `model`, `prompt_tokens`, `completion_tokens`, `cost`, `accumulated_cost`, `agent`（后端从 tag 直接标注：propose/exp_gen/coding/running/feedback/report/other） | TokenDashboard（总/输入/输出/调用次数；按智能体分组；`cost` 的 NaN 已 sanitize 为 0.0）| POST /trace（实时消息流）+ GET /api/v2/trace/token（聚合查询）|
 | **任务完成** | `END` | `error_msg`, `end_code` | DetailHeader（状态→done）+ 前端停止轮询 | POST /trace（检测到 END 后不再请求）|
 
 #### 贯穿全流程的接口

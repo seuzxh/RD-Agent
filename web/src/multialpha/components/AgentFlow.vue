@@ -46,9 +46,9 @@
         </div>
       </div>
       <div v-else-if="active==='backtest'" class="agent-product-content metric-product">
-        <article v-for="(value,key) in metricValues" :key="key">
-          <small>{{ key }}</small>
-          <b>{{ value }}</b>
+        <article v-for="item in displayMetrics" :key="item.key">
+          <small>{{ item.label }}</small>
+          <b :class="item.tone">{{ item.display }}</b>
         </article>
       </div>
       <div v-else class="agent-product-content">
@@ -118,6 +118,45 @@ const feedbackItems = computed(() => [
   { label: '异常信息', value: props.feedback.exception },
 ].filter(item => item.value))
 
+const metricLabels: Record<string, string> = {
+  IC: 'IC', ICIR: 'ICIR', 'Rank IC': 'Rank IC', 'Rank ICIR': 'Rank ICIR',
+  '1day.excess_return_without_cost.annualized_return': '年化收益',
+  '1day.excess_return_without_cost.max_drawdown': '最大回撤',
+  '1day.excess_return_without_cost.information_ratio': '信息比率',
+  '1day.excess_return_with_cost.annualized_return': '年化收益(扣费)',
+  '1day.excess_return_with_cost.max_drawdown': '最大回撤(扣费)',
+  '1day.excess_return_with_cost.information_ratio': '信息比率(扣费)',
+  annualized_return: '年化收益', max_drawdown: '最大回撤', information_ratio: '信息比率',
+}
+const metricPriority = [
+  'IC', 'ICIR',
+  '1day.excess_return_without_cost.annualized_return',
+  '1day.excess_return_without_cost.max_drawdown',
+  '1day.excess_return_without_cost.information_ratio',
+  '1day.excess_return_with_cost.annualized_return',
+  '1day.excess_return_with_cost.max_drawdown',
+  '1day.excess_return_with_cost.information_ratio',
+  'Rank IC', 'Rank ICIR',
+]
+const displayMetrics = computed(() => {
+  const vals = props.metricValues
+  const keys = [...metricPriority.filter(k => k in vals), ...Object.keys(vals).filter(k => !metricPriority.includes(k))]
+  return keys.map(key => {
+    const raw = vals[key]
+    const num = Number(raw)
+    const isPercent = /annualized_return|max_drawdown/.test(key)
+    const isFinite = Number.isFinite(num)
+    let display: string
+    if (isFinite) {
+      display = isPercent ? `${(num * 100).toFixed(2)}%` : num.toFixed(4)
+    } else {
+      display = String(raw)
+    }
+    const tone = isFinite ? (num > 0 ? 'up' : num < 0 ? 'down' : 'neutral') : 'neutral'
+    return { key, label: metricLabels[key] || key, display, tone }
+  })
+})
+
 function agentFooter(agent: { done: boolean; running: boolean; stat: string }) {
   if (agent.done) return `✓ 完成${agent.stat ? ' · ' + agent.stat : ''}`
   if (agent.running) return '⏳ 正在执行…'
@@ -169,4 +208,6 @@ watch(() => props.currentStep, (step, oldStep) => {
 .running-hint{color:var(--ma-gold-dark)!important;font-style:italic;font-size:9px;animation:text-blink 1.4s ease-in-out infinite}
 @keyframes text-blink{0%,100%{opacity:1}50%{opacity:.4}}
 .agent-arrow.active{color:var(--ma-gold-dark);font-weight:700}
+.metric-product b.up{color:var(--ma-success)}
+.metric-product b.down{color:var(--ma-danger)}
 </style>

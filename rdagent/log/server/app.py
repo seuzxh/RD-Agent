@@ -192,6 +192,7 @@ class RDAgentTask:
         with open(self.stdout_path, "w") as log_file:
             with redirect_stdout(log_file), redirect_stderr(log_file):
                 rdagent_logger.rebind_console_to_current_streams()
+                import sys as _sys
                 try:
                     # Only interactive targets should receive IPC queues.
                     if self.target_name not in _TARGETS_WITHOUT_USER_INTERACTION:
@@ -226,6 +227,7 @@ class RDAgentTask:
                         raise ValueError(f"Unknown target: {self.target_name}")
                 except Exception:
                     traceback.print_exc()
+                    _sys.exit(1)
 
 
 rdagent_processes: dict[str, RDAgentTask] = {}
@@ -308,10 +310,46 @@ def _resolve_trace_status(external_id: str, catalog_status: str) -> str:
             if catalog_status != "done":
                 _ensure_end_message(task, external_id)
             return "done"
+        # exitcode != 0：异常终止，补写错误 END 消息（若尚未生成）
+        if catalog_status != "error":
+            _ensure_error_message(task, external_id)
         return "error"
 
     # 无进程对象（历史任务），信任 catalog
     return catalog_status
+
+
+def _ensure_error_message(task: "RDAgentTask", external_id: str) -> None:
+    """进程异常退出时，补写带错误信息的 END 消息并更新 catalog。"""
+    if task.messages and task.messages[-1].get("tag") == "END":
+        return
+    error_detail = ""
+    log_path = Path(task.stdout_path)
+    if log_path.exists():
+        try:
+            text = log_path.read_text(errors="replace")
+            lines = text.splitlines()
+            tb_start = -1
+            for i, line in enumerate(lines):
+                if "Traceback (most recent call last)" in line:
+                    tb_start = i
+            if tb_start >= 0:
+                error_detail = "\n".join(lines[tb_start:])
+            else:
+                error_detail = "\n".join(lines[-30:])
+        except Exception:
+            error_detail = "(failed to read log file)"
+    end_msg = {
+        "tag": "END",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "content": {
+            "error_msg": f"RD-Agent process exited abnormally (exit code {task.get_end_code()}).",
+            "end_code": task.get_end_code(),
+            "traceback": error_detail[-3000:] if error_detail else "",
+        },
+    }
+    task.messages.append(end_msg)
+    _update_trace_state(external_id, end_msg)
 
 
 def _ensure_end_message(task: "RDAgentTask", external_id: str) -> None:
@@ -1028,18 +1066,45 @@ def update_trace():
 
     if task.process is not None and not task.is_alive():
         if not task.messages or task.messages[-1].get("tag") != "END":
-            task.messages.append(
-                {
+            end_code = task.get_end_code()
+            if end_code == 0:
+                end_msg = {
                     "tag": "END",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "content": {
                         "error_msg": "RD-Agent process has completed.",
-                        "end_code": task.get_end_code(),
+                        "end_code": end_code,
                     },
                 }
-            )
-            _update_trace_state(_trace_id_to_external(trace_id), task.messages[-1])
-            app.logger.warning(f"Process for {trace_id} has ended.")
+            else:
+                error_detail = ""
+                log_path = Path(task.stdout_path)
+                if log_path.exists():
+                    try:
+                        text = log_path.read_text(errors="replace")
+                        lines = text.splitlines()
+                        tb_start = -1
+                        for i, line in enumerate(lines):
+                            if "Traceback (most recent call last)" in line:
+                                tb_start = i
+                        if tb_start >= 0:
+                            error_detail = "\n".join(lines[tb_start:])
+                        else:
+                            error_detail = "\n".join(lines[-30:])
+                    except Exception:
+                        error_detail = "(failed to read log file)"
+                end_msg = {
+                    "tag": "END",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "content": {
+                        "error_msg": f"RD-Agent process exited abnormally (exit code {end_code}).",
+                        "end_code": end_code,
+                        "traceback": error_detail[-3000:] if error_detail else "",
+                    },
+                }
+            task.messages.append(end_msg)
+            _update_trace_state(_trace_id_to_external(trace_id), end_msg)
+            app.logger.warning(f"Process for {trace_id} has ended (exit_code={end_code}).")
 
     total = len(task.messages)
 
@@ -1793,11 +1858,11 @@ def _build_exp_entry(tid: str, result: dict, wp: str) -> dict:
         "factor_count": len(result.get("sota_factors", [])),
         "metrics": {
             "IC": round(metrics.get("IC", 0), 4) if isinstance(metrics.get("IC"), (int, float)) else None,
-            "annualized_return": round(metrics.get("1day.excess_return_with_cost.annualized_return", 0), 4)
-            if isinstance(metrics.get("1day.excess_return_with_cost.annualized_return"), (int, float))
+            "annualized_return": round(metrics.get("1day.excess_return_without_cost.annualized_return", 0), 4)
+            if isinstance(metrics.get("1day.excess_return_without_cost.annualized_return"), (int, float))
             else None,
-            "max_drawdown": round(metrics.get("1day.excess_return_with_cost.max_drawdown", 0), 4)
-            if isinstance(metrics.get("1day.excess_return_with_cost.max_drawdown"), (int, float))
+            "max_drawdown": round(metrics.get("1day.excess_return_without_cost.max_drawdown", 0), 4)
+            if isinstance(metrics.get("1day.excess_return_without_cost.max_drawdown"), (int, float))
             else None,
         },
         "has_model": True,
