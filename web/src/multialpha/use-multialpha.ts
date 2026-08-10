@@ -49,7 +49,7 @@ export function useMultiAlpha() {
       // Use cached statuses immediately so the list renders without blocking.
       for (const id of traceIds.value) {
         const cached = cache.get(id)
-        if (cached) statuses.value[id] = deriveTraceStatus(cached)
+        if (cached && statuses.value[id] !== 'error') statuses.value[id] = deriveTraceStatus(cached)
       }
       // C2: 批量获取所有 trace 状态（单次请求，替代 N+1 全量拉取）
       loadStatusesBatch(generation)
@@ -141,7 +141,10 @@ export function useMultiAlpha() {
       messages.value = result
       const loops = [...new Set(result.map(message => Number(message.loop_id)).filter(Number.isFinite))].sort((a, b) => a - b)
       selectedLoop.value = loops.length ? loops[loops.length - 1] : null
-      statuses.value[id] = deriveTraceStatus(result)
+      // 不覆盖已有的 error 状态：deriveTraceStatus 仅凭 END tag 判 done，
+      // 但崩溃/停止的任务也有 END（后端补的），会误判为 done。
+      // /traces/status 的 error（进程已死）是更可靠的终态判断。
+      if (statuses.value[id] !== 'error') statuses.value[id] = deriveTraceStatus(result)
       if (statuses.value[id] !== 'done') void poll(id)
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
