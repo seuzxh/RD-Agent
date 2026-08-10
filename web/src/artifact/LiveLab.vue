@@ -45,7 +45,7 @@
         </div>
 
         <!-- 5-stage collaboration flow -->
-        <AgentFlow :experiments="filteredExperiments" :codes="codes" />
+        <AgentFlow :experiments="filteredExperiments" :codes="codes" :active-step="activeStep" />
 
         <div class="detail-layout">
           <div class="detail-main">
@@ -120,6 +120,13 @@ const pipelineStages = computed(() => {
     const state = done ? 'done' : !activeFound ? (activeFound = true, 'active') : 'idle'
     return { name, state }
   })
+})
+
+// The pipeline step currently in progress (first not-done step), fed to AgentFlow
+// so the corresponding agent shows "进行中" instead of "待启动" while it runs.
+const activeStep = computed(() => {
+  const active = pipelineStages.value.find(s => s.state === 'active')
+  return active ? active.name : ''
 })
 
 // Available loops from experiments

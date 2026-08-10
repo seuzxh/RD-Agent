@@ -2,7 +2,7 @@
   <section class="agent-flow">
     <h3>多智能体协作流程</h3>
     <div class="agent-flow-row">
-      <template v-for="(agent,index) in agents" :key="agent.key"><button :disabled="!agent.done" :class="{active:active===agent.key,done:agent.done}" @click="active=active===agent.key?'':agent.key"><span>{{ agent.icon }}</span><b>{{ agent.name }}</b><em>{{ agent.role }}</em><small>{{ agent.done?`✓ 完成${agent.stat?' · '+agent.stat:''}`:'○ 待启动' }}</small><i v-if="agent.done">▣ 点击查看产物</i></button><span v-if="index<agents.length-1" class="agent-arrow">→</span></template>
+      <template v-for="(agent,index) in agents" :key="agent.key"><button :disabled="!agent.done" :class="{active:active===agent.key,done:agent.done}" @click="active=active===agent.key?'':agent.key"><span>{{ agent.icon }}</span><b>{{ agent.name }}</b><em>{{ agent.role }}</em><small>{{ statusText(agent) }}</small><i v-if="agent.done">▣ 点击查看产物</i></button><span v-if="index<agents.length-1" class="agent-arrow">→</span></template>
     </div>
     <div v-if="active" class="agent-product">
       <header><b>{{ activeAgent?.name }}产物</b><button @click="active=''">关闭 ×</button></header>
@@ -23,7 +23,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { CodeFile, ExperimentItem } from '../types'
-const props = defineProps<{ experiments: ExperimentItem[]; codes: CodeFile[] }>()
+const props = defineProps<{ experiments: ExperimentItem[]; codes: CodeFile[]; activeStep?: string }>()
 const active = ref('')
 const selectedCode = ref('')
 const selectedCodeContent = computed(() => props.codes.find(c => c.name === selectedCode.value)?.content || props.codes[0]?.content || '')
@@ -47,12 +47,21 @@ const decision = computed<boolean | null>(() => {
   return !!e.decision
 })
 const agents = computed(() => [
-  { key: 'hypothesis', name: '假设生成', role: '研究员', icon: '🧠', done: props.experiments.length > 0, stat: '' },
-  { key: 'design', name: '实验设计', role: '设计师', icon: '✏️', done: props.experiments.length > 0, stat: props.experiments.length ? `${props.experiments.length} 实验` : '' },
-  { key: 'coding', name: '代码实现', role: '编码员', icon: '▰', done: props.experiments.some(e => e.workspace_path), stat: '' },
-  { key: 'backtest', name: '回测执行', role: '执行员', icon: '📊', done: !!latestWithIc.value, stat: latestWithIc.value ? `IC=${Number(latestWithIc.value.ic).toFixed(3)}` : '' },
-  { key: 'feedback', name: '反馈评审', role: '评审员', icon: '🔍', done: !!latestDecision.value, stat: latestDecision.value ? (latestDecision.value.decision ? '已采纳' : '已拒绝') : '' },
+  { key: 'hypothesis', step: 'direct_exp_gen', name: '假设生成', role: '研究员', icon: '🧠', done: props.experiments.length > 0, stat: '' },
+  { key: 'design', step: 'direct_exp_gen', name: '实验设计', role: '设计师', icon: '✏️', done: props.experiments.length > 0, stat: props.experiments.length ? `${props.experiments.length} 实验` : '' },
+  { key: 'coding', step: 'coding', name: '代码实现', role: '编码员', icon: '▰', done: props.codes.length > 0, stat: '' },
+  { key: 'backtest', step: 'running', name: '回测执行', role: '执行员', icon: '📊', done: !!latestWithIc.value, stat: latestWithIc.value ? `IC=${Number(latestWithIc.value.ic).toFixed(3)}` : '' },
+  { key: 'feedback', step: 'feedback', name: '反馈评审', role: '评审员', icon: '🔍', done: !!latestDecision.value, stat: latestDecision.value ? (latestDecision.value.decision ? '已采纳' : '已拒绝') : '' },
 ])
+
+// Agent status text: done → 完成; the pipeline step currently in progress → 进行中;
+// otherwise → 待启动. The done signals (codes.length / ic != null) lag the real
+// pipeline stage, so the activeStep drives the "进行中" label for the in-flight step.
+function statusText(agent: { done: boolean; stat: string; step: string }) {
+  if (agent.done) return `✓ 完成${agent.stat ? ' · ' + agent.stat : ''}`
+  if (agent.step === props.activeStep) return '进行中'
+  return '○ 待启动'
+}
 const activeAgent = computed(() => agents.value.find(agent => agent.key === active.value))
 const designText = computed(() => {
   const types = [...new Set(props.experiments.map(e => e.type).filter(Boolean))]

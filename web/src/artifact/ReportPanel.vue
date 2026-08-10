@@ -2,7 +2,7 @@
   <div class="report">
     <section>
       <h4>策略对比</h4>
-      <el-table :data="strategyRows" size="small">
+      <el-table :data="strategyRows" row-key="id" :expand-row-keys="expandedRows" @expand-change="onExpandChange" size="small">
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="report-chart">
@@ -45,12 +45,20 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { chartUrl } from './api'
 
 const props = defineProps<{ data: any }>()
 
 const strategyRows = computed(() => props.data?.strategies || [])
+
+// Controlled expand state: App.vue re-fetches reportData every 10s, which swaps
+// the :data array reference and would reset el-table's internal expand state.
+// Tracking expanded row ids keeps the chart row open across refreshes.
+const expandedRows = ref<Array<string>>([])
+function onExpandChange(_row: any, rows: Array<any>) {
+  expandedRows.value = (rows || []).map((r: any) => r.id)
+}
 
 function fmtPct(v: number | undefined | null) {
   if (v == null) return '—'

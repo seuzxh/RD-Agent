@@ -151,8 +151,10 @@ def get_strategy_chart(strategy_id: str):
     """
     loop = request.args.get("loop")
     exps = _db().query_experiments(strategy_id)
+    # exps are ordered by loop_id ASC; loop=None should serve the LATEST chart-bearing
+    # round (reversed), matching the report header "最新轮收益曲线" and latest_metrics.
     target = next(
-        (e for e in exps if (loop is None or str(e["loop_id"]) == loop) and e.get("chart_path")),
+        (e for e in reversed(exps) if (loop is None or str(e["loop_id"]) == loop) and e.get("chart_path")),
         None,
     )
     if not target:
@@ -239,7 +241,11 @@ def list_reports():
                 "max_drawdown": e.get("max_drawdown"),
                 "information_ratio": e.get("information_ratio"),
             })
-        latest = trend[-1] if trend else {}
+        # Latest round that has actually produced metrics (a completed round), not the
+        # last experiment row — for a mid-run strategy the highest loop is still running
+        # with null metrics, so trend[-1] would blank out the row. Matches the chart,
+        # which serves the latest completed round.
+        latest = next((t for t in reversed(trend) if t.get("ic") is not None), {})
         summaries.append({
             "id": sid,
             "description": s.get("description"),

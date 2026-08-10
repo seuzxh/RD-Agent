@@ -514,16 +514,10 @@ def report_figure(df: pd.DataFrame, group_df: pd.DataFrame = None) -> list | tup
     return figure
 
 
-# plotly.js CDN URL（jsdelivr，实测可达 200；bootcdn 实测不可达）。
-# 注：jsdelivr 无 2.35.3，用 2.35.2；cdnjs 路径 404、unpkg 不可达，均排除。
-_PLOTLY_VERSION = "2.35.2"
-_PLOTLY_CDN_URL = f"https://cdn.jsdelivr.net/npm/plotly.js-dist-min@{_PLOTLY_VERSION}/plotly.min.js"
-
-
 def generate_chart_html(ret_pkl: Path | str, group_pkl: Path | str | None = None) -> str:
     """从 ret.pkl + 可选 group.pkl 生成策略回测 chart HTML。
 
-    plotly.js 通过 bootcdn CDN 加载（不内联），作为研究 API / 策略看板的数据源。
+    plotly.js 内联进 HTML（自包含，无 CDN 依赖），作为研究 API / 策略看板的数据源。
 
     :param ret_pkl: 回测收益 pkl 路径。可为 DataFrame（含 return/cost/bench/turnover 列）
                     或 dict（app.py 遗留格式：``{'ret': DataFrame, 'group': DataFrame}``）。
@@ -554,9 +548,8 @@ def generate_chart_html(ret_pkl: Path | str, group_pkl: Path | str | None = None
                 group_df = loaded
 
     fig = report_figure(df, group_df=group_df)
-    html = plotly.io.to_html(fig, include_plotlyjs=False, full_html=True)
-    html = html.replace(
-        "</head>",
-        f'<script src="{_PLOTLY_CDN_URL}"></script></head>',
-    ) if "</head>" in html else html
+    # Self-contained HTML: inline plotly.js so the chart iframe needs no external CDN
+    # fetch (the CDN was slow from CN and re-downloaded on every iframe mount). Larger
+    # HTML, but served locally and cached by the backend artifact cache.
+    html = plotly.io.to_html(fig, include_plotlyjs=True, full_html=True)
     return html
