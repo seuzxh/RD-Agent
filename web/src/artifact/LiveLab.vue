@@ -45,7 +45,7 @@
         </div>
 
         <!-- 5-stage collaboration flow -->
-        <AgentFlow :experiments="filteredExperiments" />
+        <AgentFlow :experiments="filteredExperiments" :codes="codes" />
 
         <div class="detail-layout">
           <div class="detail-main">

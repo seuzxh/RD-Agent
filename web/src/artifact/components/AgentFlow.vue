@@ -8,7 +8,13 @@
       <header><b>{{ activeAgent?.name }}产物</b><button @click="active=''">关闭 ×</button></header>
       <div v-if="active==='hypothesis'" class="agent-product-content"><h4>研究假设</h4><p>{{ hypothesisText||'暂无研究假设' }}</p></div>
       <div v-else-if="active==='design'" class="agent-product-content"><h4>实验设计</h4><p v-if="designText">{{ designText }}</p><p v-else>暂无实验设计信息</p></div>
-      <div v-else-if="active==='coding'" class="agent-product-content code-product"><article v-if="codingPath"><b>代码工作区</b><code>{{ codingPath }}</code></article><p v-else>暂无代码实现信息</p></div>
+      <div v-else-if="active==='coding'" class="agent-product-content code-product">
+        <template v-if="codes.length">
+          <label v-if="codes.length>1" class="code-sel">选择因子<select v-model="selectedCode"><option v-for="c in codes" :key="c.name" :value="c.name">{{ c.name }}</option></select></label>
+          <pre class="code-block"><code>{{ selectedCodeContent }}</code></pre>
+        </template>
+        <p v-else>暂无代码实现信息</p>
+      </div>
       <div v-else-if="active==='backtest'" class="agent-product-content metric-product"><article v-for="(value,key) in metricValues" :key="key"><small>{{ key }}</small><b>{{ value }}</b></article></div>
       <div v-else class="agent-product-content"><span class="decision-chip" :class="decision?'accepted':'rejected'">{{ decision?'✓ 已采纳':'✕ 未采纳' }}</span><section v-for="item in feedbackItems" :key="item.label"><b>{{ item.label }}</b><p>{{ item.value || '—' }}</p></section></div>
     </div>
@@ -16,9 +22,11 @@
 </template>
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { ExperimentItem } from '../types'
-const props = defineProps<{ experiments: ExperimentItem[] }>()
+import type { CodeFile, ExperimentItem } from '../types'
+const props = defineProps<{ experiments: ExperimentItem[]; codes: CodeFile[] }>()
 const active = ref('')
+const selectedCode = ref('')
+const selectedCodeContent = computed(() => props.codes.find(c => c.name === selectedCode.value)?.content || props.codes[0]?.content || '')
 const hypothesisText = computed(() => props.experiments[0]?.hypothesis_text || '')
 const latestWithIc = computed(() => props.experiments.find(e => e.ic != null) || null)
 const latestDecision = computed(() => props.experiments.find(e => e.decision != null) || null)
@@ -50,7 +58,6 @@ const designText = computed(() => {
   const types = [...new Set(props.experiments.map(e => e.type).filter(Boolean))]
   return types.length ? `本轮共 ${props.experiments.length} 个实验：${types.join('、')}` : ''
 })
-const codingPath = computed(() => props.experiments.find(e => e.workspace_path)?.workspace_path || '')
 const feedbackItems = computed(() => [
   { label: '决定理由', value: feedbackReason.value },
   { label: '实验观察', value: feedbackObservations.value },
@@ -58,3 +65,9 @@ const feedbackItems = computed(() => [
 const feedbackReason = computed(() => latestDecision.value?.decision_reason || '')
 const feedbackObservations = computed(() => latestDecision.value?.observations || '')
 </script>
+<style scoped>
+.code-sel { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #606266; margin-bottom: 8px; }
+.code-sel select { padding: 4px 8px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px; }
+.code-block { max-height: 320px; overflow: auto; background: #1e1e1e; color: #d4d4d4; border-radius: 6px; padding: 12px; font-size: 12px; line-height: 1.5; white-space: pre; }
+.code-block code { font-family: Consolas, 'Courier New', monospace; }
+</style>
