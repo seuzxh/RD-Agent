@@ -82,8 +82,8 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { fetchLive, fetchStrategyDetail, fetchCode, chartUrl as buildChartUrl } from './api'
+import { computed, onUnmounted, ref, watch } from 'vue'
+import { fetchStrategyDetail, fetchCode, chartUrl as buildChartUrl } from './api'
 import AgentFlow from './components/AgentFlow.vue'
 import ResultWorkspace from './components/ResultWorkspace.vue'
 import MetricsPanel from './components/MetricsPanel.vue'
@@ -93,7 +93,6 @@ import './livelab-detail.css'
 
 const props = defineProps<{ strategies: any[] }>()
 const loading = ref(false)
-const tasks = ref<any[]>([])
 const selectedId = ref('')
 const detailLoading = ref(false)
 const detailError = ref('')
@@ -106,10 +105,10 @@ const codes = ref<CodeFile[]>([])
 let eventSource: EventSource | null = null
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
-const runningTasks = computed(() => {
-  const running = props.strategies.filter(s => s.status === 'running' || s.status === 'pending')
-  return running.length ? running : tasks.value
-})
+// Show all strategies (running + completed) so a strategy that just finished
+// stays listed with its updated status tag instead of vanishing from the tab.
+// Props are refreshed periodically by App.vue, so the status stays current.
+const runningTasks = computed(() => props.strategies)
 
 // Pipeline stages from ResearchDB pipeline_nodes
 const pipelineStages = computed(() => {
@@ -260,14 +259,6 @@ async function selectTask(row: any) {
   }
 }
 
-async function loadLive() {
-  try {
-    const data = await fetchLive()
-    tasks.value = data.tasks || []
-  } catch { /* ignore */ }
-}
-
-onMounted(() => { loadLive() })
 onUnmounted(() => { unsubscribeSse() })
 </script>
 <style scoped>

@@ -156,7 +156,12 @@ def main(report_folder=None, path=None, all_duration=None, checkout=True):
     else:
         model_loop = FactorReportLoop(report_folder=report_folder)
 
-    asyncio.run(model_loop.run(all_duration=all_duration))
+    try:
+        asyncio.run(model_loop.run(all_duration=all_duration))
+        model_loop.tracker.on_run_complete()
+    except BaseException as e:
+        model_loop.tracker.on_run_failed(e)
+        raise
 
 
 if __name__ == "__main__":

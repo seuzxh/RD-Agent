@@ -75,7 +75,14 @@ def main(
     elif not auto_mode and hasattr(factor_loop, "user_request_q"):
         factor_loop._interact_init_params()
 
-    asyncio.run(factor_loop.run(step_n=step_n, loop_n=loop_n, all_duration=all_duration))
+    try:
+        asyncio.run(factor_loop.run(step_n=step_n, loop_n=loop_n, all_duration=all_duration))
+        # Normal completion: all loops finished → strategy is "completed".
+        factor_loop.tracker.on_run_complete()
+    except BaseException as e:
+        # Abnormal termination → strategy is "failed".
+        factor_loop.tracker.on_run_failed(e)
+        raise
 
 
 if __name__ == "__main__":

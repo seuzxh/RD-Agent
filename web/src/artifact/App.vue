@@ -85,7 +85,7 @@
 </template>
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { fetchAlphaLab, fetchModelLab, fetchReport, fetchStrategies } from './api'
 import StrategyDashboard from './StrategyDashboard.vue'
 import AlphaLabPanel from './AlphaLabPanel.vue'
@@ -179,7 +179,12 @@ watch(detailVisible, async (visible) => {
   }
 })
 
-onMounted(() => loadAll())
+// Refresh the strategy list periodically so a strategy that completes mid-run
+// transitions from running → completed in the dashboard/report views (otherwise
+// the once-on-mount snapshot stays stale and shows a completed strategy as 运行中).
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => { loadAll(); refreshTimer = setInterval(loadAll, 10_000) })
+onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 </script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }

@@ -450,8 +450,42 @@ class WorkflowTracker:
                         else:
                             db.update_model_status(strategy_id, name, "sota")
 
-        db.finalize_experiment(strategy_id, loop_id, status="completed" if is_accepted else "failed")
-        db.update_strategy_status(strategy_id, "completed" if is_accepted else "failed")
+        # The record step only fires when a loop has run end-to-end. The
+        # `decision` reflects whether the factors beat SOTA — a rejected round
+        # is still a completed round, not a failure. So the experiment is always
+        # "completed" here. The strategy-level status is finalized once the whole
+        # run finishes (see on_run_complete), not flapped per-loop from the
+        # acceptance decision.
+        db.finalize_experiment(strategy_id, loop_id, status="completed")
+
+    def on_run_complete(self) -> None:
+        """Mark the strategy as completed once the whole run finishes.
+
+        Called from the scenario entry point after ``loop.run()`` returns
+        (all loops done). The strategy status is a run-lifecycle signal and
+        must not be derived from any single loop's factor-acceptance decision.
+        """
+        strategy_id = self._derive_strategy_id()
+        if strategy_id is None:
+            logger.warning("on_run_complete: cannot derive strategy_id, skipping")
+            return
+        try:
+            from rdagent.log.research_db import ResearchDB
+            ResearchDB().update_strategy_status(strategy_id, "completed")
+        except Exception as e:
+            logger.warning(f"on_run_complete: failed to finalize strategy status ({e})")
+
+    def on_run_failed(self, error: BaseException | None = None) -> None:
+        """Mark the strategy as failed when the run crashes abnormally."""
+        strategy_id = self._derive_strategy_id()
+        if strategy_id is None:
+            logger.warning("on_run_failed: cannot derive strategy_id, skipping")
+            return
+        try:
+            from rdagent.log.research_db import ResearchDB
+            ResearchDB().update_strategy_status(strategy_id, "failed")
+        except Exception as e:
+            logger.warning(f"on_run_failed: failed to update strategy status ({e})")
 
     # ── helpers ──
 

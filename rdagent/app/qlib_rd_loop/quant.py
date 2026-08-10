@@ -161,7 +161,12 @@ def main(
     elif not auto_mode and hasattr(quant_loop, "user_request_q"):
         quant_loop._interact_init_params()
 
-    asyncio.run(quant_loop.run(step_n=step_n, loop_n=loop_n, all_duration=all_duration))
+    try:
+        asyncio.run(quant_loop.run(step_n=step_n, loop_n=loop_n, all_duration=all_duration))
+        quant_loop.tracker.on_run_complete()
+    except BaseException as e:
+        quant_loop.tracker.on_run_failed(e)
+        raise
 
 
 if __name__ == "__main__":
