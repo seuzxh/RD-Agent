@@ -1,4 +1,4 @@
-import type { ChartRef,CodeFile,FactorItem,FeedbackSummary,MetricItem,TokenByAgent,TraceMessage,TraceStatus,TraceViewModel,UserInput } from './types'
+import type { AgentStep, ChartRef,CodeFile,FactorItem,FeedbackSummary,MetricItem,TokenByAgent,TraceMessage,TraceStatus,TraceViewModel,UserInput } from './types'
 
 function objectValue(value:unknown):Record<string,unknown>|null{if(value&&typeof value==='object'&&!Array.isArray(value))return value as Record<string,unknown>;if(typeof value!=='string')return null;try{return objectValue(JSON.parse(value))}catch{return null}}
 function arrayValue(value:unknown):unknown[]{if(Array.isArray(value))return value;if(typeof value!=='string')return[];try{const parsed=JSON.parse(value);return Array.isArray(parsed)?parsed:[]}catch{return[]}}
@@ -102,5 +102,14 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
     loops:userInputObj.loops==null?undefined:Number(userInputObj.loops),
     autoMode:typeof userInputObj.auto_mode==='boolean'?userInputObj.auto_mode:userInputObj.auto_mode===undefined?undefined:String(userInputObj.auto_mode)==='true',
   }:null
-  return{hasEnd,hasError,loops,sotaLoop,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:promptTokens+completionTokens,callCount:tokenByAgent.reduce((s,t)=>s+t.calls,0),tokenByAgent,loopMetrics,userInput}
+  let currentStep:AgentStep=null
+  if(!hasEnd&&!hasError){
+    if(!hypothesis)currentStep='hypothesis'
+    else if(!tasks.length)currentStep='design'
+    else if(!codes.length)currentStep='coding'
+    else if(metricData.values.IC==null)currentStep='backtest'
+    else if(feedback.decision===null)currentStep='feedback'
+  }
+  const latestLoop=loops.length?loops[loops.length-1]:null
+  return{hasEnd,hasError,loops,sotaLoop,latestLoop,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:promptTokens+completionTokens,callCount:tokenByAgent.reduce((s,t)=>s+t.calls,0),tokenByAgent,loopMetrics,userInput,currentStep}
 }

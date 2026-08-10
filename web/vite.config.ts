@@ -57,6 +57,7 @@ export default defineConfig({
       '/logs': 'http://localhost:19899',
       '/stdout': 'http://localhost:19899',
       '/health': 'http://localhost:19899',
+      '/settings': 'http://localhost:19899',
     },
   },
   resolve: {

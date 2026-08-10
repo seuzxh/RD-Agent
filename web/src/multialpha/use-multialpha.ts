@@ -26,6 +26,7 @@ export function useMultiAlpha() {
   let selection = 0
   const uploading = ref(false)
   const uploadName = ref('')
+  let userPinnedLoop = false
 
   const tasks = computed<TraceTask[]>(() => traceIds.value.map(id => {
     const [scenario, ...name] = id.split('/')
@@ -105,6 +106,12 @@ export function useMultiAlpha() {
               })
             : undefined
           if (loops.length) selectedLoop.value = sotaLoop ?? Math.max(...loops)
+        } else if (!userPinnedLoop) {
+          const loops = [...new Set(messages.value.map(message => Number(message.loop_id)).filter(Number.isFinite))]
+          if (loops.length) {
+            const latest = Math.max(...loops)
+            if (latest > selectedLoop.value) selectedLoop.value = latest
+          }
         }
         remember(id, messages.value)
         const status = deriveTraceStatus(messages.value)
@@ -139,6 +146,7 @@ export function useMultiAlpha() {
     if (activeController && activeRequestId !== id) activeController.abort()
     currentTraceId.value = id
     selectedLoop.value = null
+    userPinnedLoop = false
     loading.value = true
     loadingName.value = id.split('/').slice(1).join('/') || id
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
@@ -204,6 +212,11 @@ export function useMultiAlpha() {
     statuses.value[currentTraceId.value] = 'done'; stopPolling(); ElMessage.success('任务已停止')
   }
 
+  function selectLoop(loop: number | null) {
+    selectedLoop.value = loop
+    userPinnedLoop = true
+  }
+
   onBeforeUnmount(() => { ++selection; activeController?.abort(); stopPolling() })
-  return { traceIds, tasks, currentTraceId, messages, loading, loadingName, listLoading, listError, selectedLoop, statuses, view, loadTraceIds, selectTrace, goHome, createTask, stopCurrentTask, uploading, uploadName, waitForTaskReady }
+  return { traceIds, tasks, currentTraceId, messages, loading, loadingName, listLoading, listError, selectedLoop, statuses, view, loadTraceIds, selectTrace, selectLoop, goHome, createTask, stopCurrentTask, uploading, uploadName, waitForTaskReady }
 }

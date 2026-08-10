@@ -31,6 +31,20 @@ _QLIB_DATE_FIELDS = [
     ("TEST_START", "测试集开始"), ("TEST_END", "测试集结束"),
 ]
 
+CHAT_MODEL_OPTIONS = [
+    "openai/glm-5.2",
+    "openai/minimax-m3",
+    "openai/kimi-k2.7-code",
+    "openai/deepseek-v4-flash",
+    "openai/deepseek-v4-pro",
+    "openai/doubao-seed-evolving",
+    "openai/doubao-seed-2.1-turbo",
+    "openai/kimi-k3",
+]
+EMBEDDING_MODEL_OPTIONS = [
+    "openai/doubao-embedding-vision",
+]
+
 
 def _qlib_card(scen_suffix: str, title: str) -> dict:
     return {
@@ -50,8 +64,8 @@ _SETTINGS_SCHEMA: list[dict] = [
             {
                 "id": "connection", "title": "连接配置",
                 "fields": [
-                    {"key": "CHAT_MODEL", "label": "聊天模型", "type": "string", "default": "gpt-4o", "help": "主聊天模型"},
-                    {"key": "EMBEDDING_MODEL", "label": "Embedding 模型", "type": "string", "default": "text-embedding-3-small"},
+                    {"key": "CHAT_MODEL", "label": "聊天模型", "type": "select", "options": CHAT_MODEL_OPTIONS, "default": "openai/glm-5.2", "help": "主聊天模型"},
+                    {"key": "EMBEDDING_MODEL", "label": "Embedding 模型", "type": "select", "options": EMBEDDING_MODEL_OPTIONS, "help": "向量嵌入模型"},
                     {"key": "OPENAI_API_KEY", "label": "API Key", "type": "password", "sensitive": True, "help": "通用/聊天 Key"},
                     {"key": "OPENAI_API_BASE", "label": "API Base URL", "type": "string", "help": "接口地址"},
                     {"key": "CHAT_OPENAI_API_KEY", "label": "聊天专用 Key", "type": "password", "sensitive": True, "help": "可选，覆盖通用 Key"},

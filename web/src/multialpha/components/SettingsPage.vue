@@ -44,16 +44,11 @@
                     <el-select v-model="row.step" size="small" filterable allow-create default-first-option placeholder="选择智能体" class="col-step">
                       <el-option v-for="s in STEP_PRESETS" :key="s.value" :label="s.label" :value="s.value" />
                     </el-select>
-                    <div class="model-test-wrap">
-                      <el-input v-model="row.model" size="small" placeholder="openai/gpt-4o" class="col-model" />
-                      <el-button text size="small" class="test-btn" :loading="testResults[row.model]?.loading" @click="onTestModel(row.model)">🧪</el-button>
-                    </div>
+                    <el-select v-model="row.model" size="small" filterable allow-create default-first-option placeholder="选择或输入模型" class="col-model">
+                      <el-option v-for="m in modelOptions" :key="m" :label="m" :value="m" />
+                    </el-select>
                     <el-input-number v-model="row.temperature" size="small" :precision="1" :step="0.1" :min="0" :max="2" controls-position="right" class="col-temp" />
                     <el-button text size="small" class="col-action" @click="modelMapRows.splice(idx, 1)">✕</el-button>
-                  </div>
-                  <!-- 测试结果（按模型名聚合，显示在表格底部）-->
-                  <div v-for="tr in Object.entries(testResults).filter(([k,v]) => k && !v.loading)" :key="tr[0]" class="test-result" :class="tr[1].ok ? 'ok' : 'fail'">
-                    {{ tr[1].ok ? '✅' : '❌' }} {{ tr[0] }}：{{ tr[1].ok ? `连通 ${tr[1].latency_ms}ms` : tr[1].error }}
                   </div>
                   <el-button text size="small" class="map-add" @click="modelMapRows.push({ step: '', model: '', temperature: undefined })">+ 添加步骤</el-button>
                 </div>
@@ -88,7 +83,13 @@
               <!-- select -->
               <div v-else-if="field.type === 'select'" class="field-item">
                 <label class="field-label">{{ field.label }}</label>
-                <el-select v-model="form[field.key]" size="small">
+                <div v-if="field.key === 'CHAT_MODEL' || field.key === 'EMBEDDING_MODEL'" class="model-test-wrap">
+                  <el-select v-model="form[field.key]" size="small" filterable class="col-model">
+                    <el-option v-for="opt in field.options" :key="opt" :label="opt" :value="opt" />
+                  </el-select>
+                  <el-button text size="small" class="test-btn" :loading="testResults[String(form[field.key])]?.loading" @click="onTestModel(String(form[field.key]), field.key === 'EMBEDDING_MODEL' ? 'embedding' : 'chat')">🧪 测试</el-button>
+                </div>
+                <el-select v-else v-model="form[field.key]" size="small">
                   <el-option v-for="opt in field.options" :key="opt" :label="opt" :value="opt" />
                 </el-select>
                 <small v-if="field.help" class="field-help">{{ field.help }}</small>
@@ -97,11 +98,7 @@
               <!-- string（默认） -->
               <div v-else class="field-item">
                 <label class="field-label">{{ field.label }}</label>
-                <div v-if="field.key === 'CHAT_MODEL' || field.key === 'EMBEDDING_MODEL'" class="model-test-wrap">
-                  <el-input v-model="form[field.key]" size="small" :placeholder="field.default != null ? String(field.default) : ''" class="col-model" />
-                  <el-button text size="small" class="test-btn" :loading="testResults[String(form[field.key])]?.loading" @click="onTestModel(String(form[field.key]), field.key === 'EMBEDDING_MODEL' ? 'embedding' : 'chat')">🧪 测试</el-button>
-                </div>
-                <el-input v-else v-model="form[field.key]" size="small" :placeholder="field.default != null ? String(field.default) : ''" />
+                <el-input v-model="form[field.key]" size="small" :placeholder="field.default != null ? String(field.default) : ''" />
                 <small v-if="field.help" class="field-help">{{ field.help }}</small>
               </div>
             </template>
@@ -145,7 +142,6 @@ const initialValues = reactive<Record<string, unknown>>({})
 const showPassword = reactive<Record<string, boolean>>({})
 const modelMapRows = ref<MapRow[]>([])
 const initialModelMapJson = ref('')
-// 模型测试状态：key=模型名，value={loading, ok, latency_ms, error}
 const testResults = reactive<Record<string, { loading: boolean; ok: boolean; latency_ms: number; error: string }>>({})
 
 async function onTestModel(model: string, mode: 'chat' | 'embedding' = 'chat') {
@@ -163,6 +159,20 @@ async function onTestModel(model: string, mode: 'chat' | 'embedding' = 'chat') {
   }
 }
 const currentGroup = computed(() => schema.value?.groups.find(g => g.id === activeGroup.value))
+
+const modelOptions = computed<string[]>(() => {
+  const opts: string[] = []
+  for (const g of schema.value?.groups || []) {
+    for (const c of g.cards) {
+      for (const f of c.fields) {
+        if ((f.key === 'CHAT_MODEL' || f.key === 'EMBEDDING_MODEL') && f.options) {
+          for (const o of f.options) if (!opts.includes(o)) opts.push(o)
+        }
+      }
+    }
+  }
+  return opts
+})
 
 const currentModelMapJson = computed(() => {
   const obj: Record<string, Record<string, string>> = {}
@@ -243,6 +253,23 @@ async function loadSchema() {
     }
   } catch (e) { error.value = e instanceof Error ? e.message : '加载配置失败' }
   finally { loading.value = false }
+  void loadModelOptions()
+}
+
+async function loadModelOptions() {
+  try {
+    const resp = await fetch('/settings/models')
+    const data = await resp.json()
+    if (!schema.value) return
+    for (const group of schema.value.groups) {
+      for (const card of group.cards) {
+        for (const field of card.fields) {
+          if (field.key === 'CHAT_MODEL' && data.chat_models?.length) field.options = data.chat_models
+          if (field.key === 'EMBEDDING_MODEL' && data.embedding_models?.length) field.options = data.embedding_models
+        }
+      }
+    }
+  } catch { /* schema 静态 options 兜底 */ }
 }
 
 async function onSave() {
@@ -300,7 +327,7 @@ onMounted(loadSchema)
 .map-header { display: flex; gap: 8px; padding: 8px 10px; background: var(--ma-surface-2); font-size: 11px; font-weight: 600; color: var(--ma-muted); }
 .map-row { display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--ma-line); align-items: center; }
 .col-step { flex: 0 0 200px; }
-.col-model { flex: 1; }
+.col-model { flex: 1; min-width: 0; }
 .col-temp { flex: 0 0 100px; }
 .col-action { flex: 0 0 28px; text-align: center; }
 .map-add { margin-top: 8px; color: var(--ma-gold-dark); }

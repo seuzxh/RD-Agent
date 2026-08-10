@@ -288,25 +288,46 @@ def _derive_status_from_tags(tags_seen: set[str]) -> str:
 
 
 def _resolve_trace_status(external_id: str, catalog_status: str) -> str:
-    """结合 catalog 状态 + 进程存活状态，给出最终对外状态。
+    """结合 catalog 状态 + 进程存活/退出状态，给出最终对外状态。
 
-    进程存活检查优先级最高：只要子进程还在跑，就一定是 running，
-    因为每一轮 Loop 结束时的 feedback 标签会被 catalog 误判为 done。
-
-    - 进程存活 → running（覆盖 catalog 的 done 误判）
-    - 进程已死/不存在：
-        catalog 判 done → done（历史任务由 feedback+hypothesis 标记完成）
-        catalog 判 running → error（进程异常终止但未写 END）
+    - 进程存活 → running（每轮 feedback 会误判 catalog 为 done，需被覆盖）
+    - 进程已死 + exitcode==0 → done（正常完成，END 可能尚未被懒生成）
+    - 进程已死 + exitcode!=0 → error（异常终止）
+    - 无进程对象（历史任务/服务器重启后）→ 采用 catalog 状态
     """
     internal_id = str(log_folder_path / external_id)
     task = rdagent_processes.get(internal_id)
-    if task is not None and task.is_alive():
-        return "running"
 
-    if catalog_status != "running":
-        return catalog_status
+    if task is not None and task.process is not None:
+        if task.is_alive():
+            return "running"
+        # 进程已结束：以 exitcode 区分正常完成 / 异常终止
+        end_code = task.get_end_code()
+        if end_code == 0:
+            # 确保 catalog 状态同步为 done（END 消息可能尚未被懒生成）
+            if catalog_status != "done":
+                _ensure_end_message(task, external_id)
+            return "done"
+        return "error"
 
-    return "error"
+    # 无进程对象（历史任务），信任 catalog
+    return catalog_status
+
+
+def _ensure_end_message(task: "RDAgentTask", external_id: str) -> None:
+    """进程正常结束但 END 消息尚未生成时，补写 END 并更新 catalog。"""
+    if task.messages and task.messages[-1].get("tag") == "END":
+        return
+    end_msg = {
+        "tag": "END",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "content": {
+            "error_msg": "RD-Agent process has completed.",
+            "end_code": task.get_end_code(),
+        },
+    }
+    task.messages.append(end_msg)
+    _update_trace_state(external_id, end_msg)
 
 
 def _update_trace_state(trace_id: str, msg: dict) -> None:
@@ -693,7 +714,7 @@ def _index_trace_catalog_from_files(trace_dir: Path, trace_id: str) -> None:
     has_chart = bool(list(trace_dir.rglob("*Chart*")))
 
     ts_pattern = _re.compile(r'(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{6})\.pkl$')
-    loop_pattern = _re.compile(r'Loop_(\d+)\.')
+    loop_pattern = _re.compile(r'Loop_(\d+)(?:[/._]|$)')
 
     for pkl in pkls:
         name = pkl.name
@@ -720,7 +741,7 @@ def _index_trace_catalog_from_files(trace_dir: Path, trace_id: str) -> None:
     if 'END' in tags_seen or ('feedback' in tags_seen and 'hypothesis' in tags_seen):
         status = 'done'
     else:
-        status = 'running'
+        status = 'error'
 
     trace_states[trace_id] = {
         "status": status,
