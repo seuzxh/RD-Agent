@@ -438,17 +438,20 @@ class WorkflowTracker:
 
         is_accepted = bool(getattr(feedback, "decision", False)) if feedback else False
 
-        # If accepted, mark factors/models as SOTA
-        if is_accepted:
-            exp = loop_out.get("running") or loop_out.get("coding")
-            if exp is not None:
-                for task in getattr(exp, "sub_tasks", []):
-                    name = self._task_name(task)
-                    if name:
-                        if self._is_factor_task(task):
-                            db.update_factor_status(strategy_id, name, "sota")
-                        else:
-                            db.update_model_status(strategy_id, name, "sota")
+        exp = loop_out.get("running") or loop_out.get("coding")
+
+        # Accepted rounds: mark factors/models as SOTA. Rejected rounds: mark
+        # them deprecated (已淘汰) instead of leaving them as active candidates.
+        if exp is not None:
+            for task in getattr(exp, "sub_tasks", []):
+                name = self._task_name(task)
+                if not name:
+                    continue
+                status = "sota" if is_accepted else "deprecated"
+                if self._is_factor_task(task):
+                    db.update_factor_status(strategy_id, name, status)
+                else:
+                    db.update_model_status(strategy_id, name, status)
 
         # The record step only fires when a loop has run end-to-end. The
         # `decision` reflects whether the factors beat SOTA — a rejected round
