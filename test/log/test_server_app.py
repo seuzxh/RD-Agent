@@ -16,6 +16,72 @@ from unittest import mock
 from rdagent.log.server import app as server_app
 
 
+class SotaFromMessagesTestCase(unittest.TestCase):
+    """测试 _sota_from_messages 正确识别最后一个被采纳（decision=True）的 loop。"""
+
+    def _make_message(self, loop_id, tag, content):
+        return {"loop_id": loop_id, "tag": tag, "content": content}
+
+    def _loop_messages(self, loop_id, decision):
+        """生成一轮完整的消息流，feedback.hypothesis_feedback 的 decision 可控。"""
+        return [
+            self._make_message(loop_id, "research.hypothesis", {"hypothesis": f"h{loop_id}"}),
+            self._make_message(loop_id, "research.tasks", [{"name": f"factor_{loop_id}"}]),
+            self._make_message(loop_id, "evolving.codes", [{"target_task_name": f"factor_{loop_id}", "workspace": {"factor.py": f"code_{loop_id}"}}]),
+            self._make_message(loop_id, "feedback.metric", {"result": json.dumps({"IC": 0.01 * (loop_id + 1)})}),
+            self._make_message(loop_id, "feedback.hypothesis_feedback", {"decision": decision, "reason": f"r{loop_id}"}),
+        ]
+
+    def test_single_accepted_loop(self):
+        messages = self._loop_messages(0, True)
+        result = server_app._sota_from_messages(messages)
+        self.assertNotIn("error", result)
+        self.assertEqual(result["sota_loop_id"], 0)
+        self.assertEqual(result["sota_hypothesis"], {"hypothesis": "h0"})
+        self.assertEqual(result["sota_feedback"], {"decision": True, "reason": "r0"})
+        self.assertEqual(result["sota_metrics"], {"IC": 0.01})
+        self.assertEqual(len(result["sota_factors"]), 1)
+        self.assertEqual(result["sota_factors"][0]["name"], "factor_0")
+
+    def test_last_accepted_loop_becomes_sota(self):
+        # Loop 0 accepted, loop 1 rejected, loop 2 accepted -> SOTA should be loop 2
+        messages = []
+        for loop_id, decision in [(0, True), (1, False), (2, True)]:
+            messages.extend(self._loop_messages(loop_id, decision))
+        result = server_app._sota_from_messages(messages)
+        self.assertNotIn("error", result)
+        self.assertEqual(result["sota_loop_id"], 2)
+        self.assertEqual(result["sota_hypothesis"], {"hypothesis": "h2"})
+        self.assertEqual(result["sota_metrics"], {"IC": 0.03})
+        self.assertEqual(result["sota_factors"][0]["name"], "factor_2")
+
+    def test_rejected_last_loop_does_not_overwrite_sota(self):
+        # hot-clause 场景：loop 7 accepted，loop 8 rejected -> SOTA 应为 loop 7
+        messages = []
+        for loop_id in range(9):
+            decision = loop_id == 7
+            messages.extend(self._loop_messages(loop_id, decision))
+        result = server_app._sota_from_messages(messages)
+        self.assertNotIn("error", result)
+        self.assertEqual(result["sota_loop_id"], 7)
+        self.assertEqual(result["sota_hypothesis"], {"hypothesis": "h7"})
+
+    def test_all_rejected_returns_error(self):
+        messages = []
+        for loop_id in range(3):
+            messages.extend(self._loop_messages(loop_id, False))
+        result = server_app._sota_from_messages(messages)
+        self.assertIn("error", result)
+
+    def test_no_feedback_returns_error(self):
+        messages = [
+            self._make_message(0, "research.hypothesis", {"hypothesis": "h0"}),
+            self._make_message(0, "feedback.metric", {"result": json.dumps({"IC": 0.01})}),
+        ]
+        result = server_app._sota_from_messages(messages)
+        self.assertIn("error", result)
+
+
 class CollectExistingTraceIdsTestCase(unittest.TestCase):
     """测试 _collect_existing_trace_ids 的文件系统扫描 + 内存 catalog 合并行为。"""
 

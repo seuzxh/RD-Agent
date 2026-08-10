@@ -97,7 +97,14 @@ export function useMultiAlpha() {
         messages.value = [...messages.value, ...updates]
         if (selectedLoop.value == null) {
           const loops = messages.value.map(message => Number(message.loop_id)).filter(Number.isFinite)
-          if (loops.length) selectedLoop.value = Math.max(...loops)
+          const sotaLoop = loops.length
+            ? loops.slice().reverse().find(loop => {
+                const fb = messages.value.find(m => Number(m.loop_id) === loop && m.tag === 'feedback.hypothesis_feedback')?.content
+                const decision = typeof fb === 'object' && fb !== null ? (fb as any).decision : null
+                return decision === true || decision === 'True' || decision === 'true'
+              })
+            : undefined
+          if (loops.length) selectedLoop.value = sotaLoop ?? Math.max(...loops)
         }
         remember(id, messages.value)
         const status = deriveTraceStatus(messages.value)
@@ -140,7 +147,14 @@ export function useMultiAlpha() {
       if (generation !== selection) return
       messages.value = result
       const loops = [...new Set(result.map(message => Number(message.loop_id)).filter(Number.isFinite))].sort((a, b) => a - b)
-      selectedLoop.value = loops.length ? loops[loops.length - 1] : null
+      const sotaLoop = loops.length
+        ? loops.slice().reverse().find(loop => {
+            const fb = result.find(m => Number(m.loop_id) === loop && m.tag === 'feedback.hypothesis_feedback')?.content
+            const decision = typeof fb === 'object' && fb !== null ? (fb as any).decision : null
+            return decision === true || decision === 'True' || decision === 'true'
+          })
+        : undefined
+      selectedLoop.value = loops.length ? (sotaLoop ?? loops[loops.length - 1]) : null
       // 不覆盖已有的 error 状态：deriveTraceStatus 仅凭 END tag 判 done，
       // 但崩溃/停止的任务也有 END（后端补的），会误判为 done。
       // /traces/status 的 error（进程已死）是更可靠的终态判断。

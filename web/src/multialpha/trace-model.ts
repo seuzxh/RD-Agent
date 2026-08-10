@@ -24,6 +24,8 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
   // C7: 单遍扫描，合并 latest() 查找 + loop/end/error/config/tasks/metric 收集
   const loopSet=new Set<number>(),loopMetricMap:Record<number,Record<string,number|string>>={}
   let hasEnd=false,hasError=false,firstConfig:unknown,firstTasksLoop0:unknown,userInputObj:Record<string,unknown>|null=null
+  // 记录每个 loop 的 feedback.hypothesis_feedback.decision，用于定位 SOTA
+  const acceptedLoops=new Set<number>()
   // token_cost 全量收集（按模型聚合），不受 loop 过滤
   const tokenByModelMap:Record<string,{prompt:number;completion:number;calls:number}>={}
   // latest-by-tag（仅限 selectedLoop 范围内）
@@ -38,6 +40,11 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
     else if(tag==='feedback.config'&&firstConfig===undefined)firstConfig=m.content
     else if(tag==='research.tasks'&&lid===0&&firstTasksLoop0===undefined)firstTasksLoop0=m.content
     else if(tag==='feedback.metric'&&Number.isFinite(lid)){loopMetricMap[lid]=parseMetricValues(m.content)}
+    // 收集被采纳的 loop：feedback.hypothesis_feedback.decision 为 true
+    else if(tag==='feedback.hypothesis_feedback'&&Number.isFinite(lid)){
+      const fb=objectValue(m.content)
+      if(fb&&parseFeedback(fb).decision===true)acceptedLoops.add(lid)
+    }
     // 用户原始输入：无 loop_id，全局只取首条（不受 loop 过滤）
     else if(tag==='task.user_input'&&userInputObj===null)userInputObj=objectValue(m.content)
     // token_cost 全量收集按模型聚合（不受 loop 过滤）
@@ -70,6 +77,7 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
   const loops=[...loopSet].sort((a,b)=>a-b)
   const loopMetrics:Record<number,string>={}
   for(const loopId of loops){const metric=loopMetricMap[loopId];if(metric&&metric.IC!=null)loopMetrics[loopId]=`IC=${Number(metric.IC).toFixed(3)}`}
+  const sotaLoop=loops.length?loops.slice().reverse().find(lid=>acceptedLoops.has(lid))??null:null
   const tokenByModel:TokenByModel[]=Object.entries(tokenByModelMap).map(([model,v])=>({model,...v})).sort((a,b)=>(b.prompt+b.completion)-(a.prompt+a.completion))
   const promptTokens=tokenByModel.reduce((s,t)=>s+t.prompt,0)
   const completionTokens=tokenByModel.reduce((s,t)=>s+t.completion,0)
@@ -84,5 +92,5 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
     loops:userInputObj.loops==null?undefined:Number(userInputObj.loops),
     autoMode:typeof userInputObj.auto_mode==='boolean'?userInputObj.auto_mode:userInputObj.auto_mode===undefined?undefined:String(userInputObj.auto_mode)==='true',
   }:null
-  return{hasEnd,hasError,loops,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:promptTokens+completionTokens,callCount:tokenByModel.reduce((s,t)=>s+t.calls,0),tokenByModel,loopMetrics,userInput}
+  return{hasEnd,hasError,loops,sotaLoop,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:promptTokens+completionTokens,callCount:tokenByModel.reduce((s,t)=>s+t.calls,0),tokenByModel,loopMetrics,userInput}
 }

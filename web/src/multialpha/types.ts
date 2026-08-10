@@ -15,7 +15,8 @@ export interface UserInput { description:string; scenario?:string; loops?:number
 export interface TokenByModel { model:string; prompt:number; completion:number; calls:number }
 
 export interface TraceViewModel {
-  hasEnd:boolean; hasError:boolean; loops:number[]; hypothesis:Record<string,unknown>|null
+  hasEnd:boolean; hasError:boolean; loops:number[]; sotaLoop:number|null
+  hypothesis:Record<string,unknown>|null
   initialTasks:FactorItem[]; config:Array<{key:string;value:string}>; factors:FactorItem[]; codes:CodeFile[]
   chartRef:ChartRef|null; chartHtml:string; metrics:MetricItem[]; metricValues:Record<string,number|string>; feedback:FeedbackSummary
   promptTokens:number; completionTokens:number; totalTokens:number; callCount:number; tokenByModel:TokenByModel[]; loopMetrics:Record<number,string>

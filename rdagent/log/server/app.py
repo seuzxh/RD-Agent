@@ -275,12 +275,12 @@ trace_states: dict[str, dict] = {}
 
 
 def _derive_status_from_tags(tags_seen: set[str]) -> str:
-    """从已观察的 tag 集合推导 trace 状态（复用前端 deriveTraceStatus 逻辑）。"""
+    """从已观察的 tag 集合推导 trace 状态。
+
+    注意：feedback.hypothesis_feedback / feedback.metric 在每一轮 Loop 结束时
+    都会发送，不能作为整个任务完成的标志。只有 END 标签才表示任务真正结束。
+    """
     if "END" in tags_seen:
-        return "done"
-    has_final_feedback = "feedback.hypothesis_feedback" in tags_seen
-    has_metric = "feedback.metric" in tags_seen
-    if has_final_feedback and has_metric:
         return "done"
     if any("error" in t.lower() for t in tags_seen):
         return "error"
@@ -290,22 +290,22 @@ def _derive_status_from_tags(tags_seen: set[str]) -> str:
 def _resolve_trace_status(external_id: str, catalog_status: str) -> str:
     """结合 catalog 状态 + 进程存活状态，给出最终对外状态。
 
-    - catalog 已判 done/error → 直接采用（完成信号可靠，无需检查进程）
-    - catalog 判 running → 检查进程是否真的存活：
-        存活 → running；已死/不存在 → error（异常终止）
+    进程存活检查优先级最高：只要子进程还在跑，就一定是 running，
+    因为每一轮 Loop 结束时的 feedback 标签会被 catalog 误判为 done。
 
-    注意：直接用 catalog 已存的 status（由 _index_trace_catalog_from_files
-    或 _update_trace_state 推导），不重新调 _derive_status_from_tags——
-    因为 catalog 路径的 _tags_seen 存的是路径关键字（'feedback'/'hypothesis'），
-    粒度与 _derive_status_from_tags 要求的完整 tag 名不一致。
+    - 进程存活 → running（覆盖 catalog 的 done 误判）
+    - 进程已死/不存在：
+        catalog 判 done → done（历史任务由 feedback+hypothesis 标记完成）
+        catalog 判 running → error（进程异常终止但未写 END）
     """
-    if catalog_status != "running":
-        return catalog_status
-
     internal_id = str(log_folder_path / external_id)
     task = rdagent_processes.get(internal_id)
     if task is not None and task.is_alive():
         return "running"
+
+    if catalog_status != "running":
+        return catalog_status
+
     return "error"
 
 
@@ -551,51 +551,69 @@ def _sota_from_messages(messages: list[dict]) -> dict:
 
     Fallback for webUI-launched tasks where no __session__/ exists but the
     message stream contains research.hypothesis / evolving.codes / feedback.* tags.
+
+    SOTA is defined as the *last* loop whose ``feedback.hypothesis_feedback`` has
+    ``decision == True``. All artifacts (hypothesis, factors, codes, metrics,
+    feedback) are taken from that accepted loop.
     """
     import json as _json
 
-    # Find the last accepted feedback (decision=True)
-    sota_loop = None
-    sota_hypothesis = None
-    sota_feedback = None
-    sota_metrics = {}
-    sota_factors = []
-    sota_codes = []
+    accepted_loops: list[int | None] = []
+    per_loop: dict[int | None, dict[str, dict]] = {}
 
     for msg in messages:
         tag = msg.get("tag", "")
         content = msg.get("content", {})
         loop_id = msg.get("loop_id")
 
-        if tag == "research.hypothesis" and isinstance(content, dict):
-            sota_hypothesis = content
-            sota_loop = loop_id
-        elif tag == "research.tasks" and isinstance(content, list):
-            sota_factors = content if isinstance(content, list) else []
-        elif tag == "evolving.codes" and isinstance(content, list):
-            sota_codes = content
-        elif tag == "feedback.metric" and isinstance(content, dict):
-            result_str = content.get("result", "")
-            if isinstance(result_str, str):
-                try:
-                    sota_metrics = _json.loads(result_str)
-                except Exception:
-                    pass
-            sota_loop = loop_id
-        elif tag == "feedback.hypothesis_feedback" and isinstance(content, dict):
-            sota_feedback = content
+        if not isinstance(content, (dict, list)):
+            continue
 
-    if not sota_hypothesis and not sota_metrics:
-        return {"error": "No SOTA data", "detail": "Message stream has no hypothesis or metric messages"}
+        if loop_id not in per_loop:
+            per_loop[loop_id] = {}
+
+        if tag in (
+            "research.hypothesis",
+            "research.tasks",
+            "evolving.codes",
+            "feedback.metric",
+            "feedback.hypothesis_feedback",
+        ):
+            per_loop[loop_id][tag] = content
+
+        if tag == "feedback.hypothesis_feedback" and isinstance(content, dict) and content.get("decision") is True:
+            accepted_loops.append(loop_id)
+
+    if not accepted_loops:
+        return {"error": "No SOTA data", "detail": "No accepted feedback (decision=True) found"}
+
+    sota_loop = accepted_loops[-1]
+    sota_data = per_loop.get(sota_loop, {})
+
+    sota_hypothesis = sota_data.get("research.hypothesis")
+    sota_feedback = sota_data.get("feedback.hypothesis_feedback")
+
+    sota_metrics: dict = {}
+    metric_content = sota_data.get("feedback.metric")
+    if isinstance(metric_content, dict):
+        result_str = metric_content.get("result", "")
+        if isinstance(result_str, str):
+            try:
+                sota_metrics = _json.loads(result_str)
+            except Exception:
+                pass
+
+    sota_factors = sota_data.get("research.tasks", [])
+    sota_codes = sota_data.get("evolving.codes", [])
 
     # Build factor list with code
     factors_out = []
-    for i, f in enumerate(sota_factors):
+    for i, f in enumerate(sota_factors if isinstance(sota_factors, list) else []):
         if not isinstance(f, dict):
             continue
         name = f.get("name", f.get("factor_name", f"factor_{i}"))
         code = ""
-        for c in sota_codes:
+        for c in sota_codes if isinstance(sota_codes, list) else []:
             if isinstance(c, dict) and c.get("target_task_name") == name:
                 ws = c.get("workspace", {})
                 if isinstance(ws, dict):
