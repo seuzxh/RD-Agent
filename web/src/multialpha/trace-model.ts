@@ -1,4 +1,4 @@
-import type { ChartRef,CodeFile,FactorItem,FeedbackSummary,MetricItem,TokenByModel,TraceMessage,TraceStatus,TraceViewModel,UserInput } from './types'
+import type { ChartRef,CodeFile,FactorItem,FeedbackSummary,MetricItem,TokenByAgent,TraceMessage,TraceStatus,TraceViewModel,UserInput } from './types'
 
 function objectValue(value:unknown):Record<string,unknown>|null{if(value&&typeof value==='object'&&!Array.isArray(value))return value as Record<string,unknown>;if(typeof value!=='string')return null;try{return objectValue(JSON.parse(value))}catch{return null}}
 function arrayValue(value:unknown):unknown[]{if(Array.isArray(value))return value;if(typeof value!=='string')return[];try{const parsed=JSON.parse(value);return Array.isArray(parsed)?parsed:[]}catch{return[]}}
@@ -26,8 +26,17 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
   let hasEnd=false,hasError=false,firstConfig:unknown,firstTasksLoop0:unknown,userInputObj:Record<string,unknown>|null=null
   // 记录每个 loop 的 feedback.hypothesis_feedback.decision，用于定位 SOTA
   const acceptedLoops=new Set<number>()
-  // token_cost 全量收集（按模型聚合），不受 loop 过滤
-  const tokenByModelMap:Record<string,{prompt:number;completion:number;calls:number}>={}
+  // token_cost 全量收集（按智能体/步骤聚合），不受 loop 过滤
+  const tokenByAgentMap:Record<string,{prompt:number;completion:number;calls:number}>={}
+  // 根据消息流推断当前 token_cost 归属的智能体/步骤
+  let currentAgent = '其他'
+  const agentTagMap:Record<string,string>={
+    'research.hypothesis':'假设生成',
+    'research.tasks':'实验设计',
+    'evolving.codes':'代码实现',
+    'feedback.metric':'回测执行',
+    'feedback.hypothesis_feedback':'反馈评审',
+  }
   // latest-by-tag（仅限 selectedLoop 范围内）
   let latHypothesis:TraceMessage|undefined,latTasks:TraceMessage|undefined,latCodes:TraceMessage|undefined
   let latMetric:TraceMessage|undefined,latFeedback:TraceMessage|undefined,latChart:TraceMessage|undefined
@@ -47,16 +56,17 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
     }
     // 用户原始输入：无 loop_id，全局只取首条（不受 loop 过滤）
     else if(tag==='task.user_input'&&userInputObj===null)userInputObj=objectValue(m.content)
-    // token_cost 全量收集按模型聚合（不受 loop 过滤）
+    // 更新当前智能体归属（用于后续 token_cost 归因）
+    if(agentTagMap[tag])currentAgent=agentTagMap[tag]
+    // token_cost 全量收集按智能体聚合（不受 loop 过滤）
     else if(tag==='token_cost'){
       const tc=objectValue(m.content)||{}
-      const model=String(tc.model||'unknown')
       const pt=Number(tc.prompt_tokens||tc.accumulated_prompt_tokens||0)
       const ct=Number(tc.completion_tokens||tc.accumulated_completion_tokens||0)
-      if(!tokenByModelMap[model])tokenByModelMap[model]={prompt:0,completion:0,calls:0}
-      tokenByModelMap[model].prompt+=pt
-      tokenByModelMap[model].completion+=ct
-      tokenByModelMap[model].calls++
+      if(!tokenByAgentMap[currentAgent])tokenByAgentMap[currentAgent]={prompt:0,completion:0,calls:0}
+      tokenByAgentMap[currentAgent].prompt+=pt
+      tokenByAgentMap[currentAgent].completion+=ct
+      tokenByAgentMap[currentAgent].calls++
     }
     // latest-by-tag（仅限 loop 范围内）
     if(loop==null||lid==null||lid===loop){
@@ -78,9 +88,9 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
   const loopMetrics:Record<number,string>={}
   for(const loopId of loops){const metric=loopMetricMap[loopId];if(metric&&metric.IC!=null)loopMetrics[loopId]=`IC=${Number(metric.IC).toFixed(3)}`}
   const sotaLoop=loops.length?loops.slice().reverse().find(lid=>acceptedLoops.has(lid))??null:null
-  const tokenByModel:TokenByModel[]=Object.entries(tokenByModelMap).map(([model,v])=>({model,...v})).sort((a,b)=>(b.prompt+b.completion)-(a.prompt+a.completion))
-  const promptTokens=tokenByModel.reduce((s,t)=>s+t.prompt,0)
-  const completionTokens=tokenByModel.reduce((s,t)=>s+t.completion,0)
+  const tokenByAgent:TokenByAgent[]=Object.entries(tokenByAgentMap).map(([agent,v])=>({agent,...v})).sort((a,b)=>(b.prompt+b.completion)-(a.prompt+a.completion))
+  const promptTokens=tokenByAgent.reduce((s,t)=>s+t.prompt,0)
+  const completionTokens=tokenByAgent.reduce((s,t)=>s+t.completion,0)
   // C6 防御：chartRef 仅当 trace_id 是非空字符串时才有效，否则走 chartHtml fallback。
   // 历史 trace 走老的 _obj_to_json 时可能仍内联 chart_html（没有 chart_ref），不能把
   // {chart_html: "..."} 误判为 ChartRef，否则 iframe 会拼出 id=undefined 的 URL。
@@ -92,5 +102,5 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
     loops:userInputObj.loops==null?undefined:Number(userInputObj.loops),
     autoMode:typeof userInputObj.auto_mode==='boolean'?userInputObj.auto_mode:userInputObj.auto_mode===undefined?undefined:String(userInputObj.auto_mode)==='true',
   }:null
-  return{hasEnd,hasError,loops,sotaLoop,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:promptTokens+completionTokens,callCount:tokenByModel.reduce((s,t)=>s+t.calls,0),tokenByModel,loopMetrics,userInput}
+  return{hasEnd,hasError,loops,sotaLoop,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:promptTokens+completionTokens,callCount:tokenByAgent.reduce((s,t)=>s+t.calls,0),tokenByAgent,loopMetrics,userInput}
 }
