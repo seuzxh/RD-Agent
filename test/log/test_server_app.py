@@ -339,7 +339,7 @@ class TaskLifecycleStateTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()[0]["status"], "running")
 
-    def test_legacy_complete_loop_without_end_is_error_after_restart(self) -> None:
+    def test_legacy_completed_trace_without_persisted_end_stays_done(self) -> None:
         feedback_dir = self.trace_dir / "Loop_0" / "feedback" / "123"
         hypothesis_dir = self.trace_dir / "Loop_0" / "propose" / "hypothesis" / "123"
         feedback_dir.mkdir(parents=True)
@@ -349,7 +349,21 @@ class TaskLifecycleStateTestCase(unittest.TestCase):
 
         server_app._index_trace_catalog_from_files(self.trace_dir, self.trace_id)
 
-        self.assertEqual(server_app.trace_states[self.trace_id]["status"], "error")
+        self.assertEqual(server_app.trace_states[self.trace_id]["status"], "done")
+
+    def test_durable_running_state_overrides_legacy_completion_heuristic(self) -> None:
+        self._create_state()
+        update_task_state(self.trace_dir, status="running")
+        feedback_dir = self.trace_dir / "Loop_0" / "feedback" / "123"
+        hypothesis_dir = self.trace_dir / "Loop_0" / "propose" / "hypothesis" / "123"
+        feedback_dir.mkdir(parents=True)
+        hypothesis_dir.mkdir(parents=True)
+        (feedback_dir / "2026-08-11_00-00-00-000001.pkl").write_bytes(b"x")
+        (hypothesis_dir / "2026-08-11_00-00-01-000001.pkl").write_bytes(b"x")
+
+        server_app._index_trace_catalog_from_files(self.trace_dir, self.trace_id)
+
+        self.assertEqual(server_app.trace_states[self.trace_id]["status"], "running")
 
 
 if __name__ == "__main__":

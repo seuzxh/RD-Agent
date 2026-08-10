@@ -1017,11 +1017,12 @@ def _index_trace_catalog_from_files(trace_dir: Path, trace_id: str) -> None:
     created_at = min(timestamps) if timestamps else None
     updated_at = max(timestamps) if timestamps else None
 
-    if 'END' in tags_seen:
+    if 'END' in tags_seen or ('feedback' in tags_seen and 'hypothesis' in tags_seen):
         status = 'done'
     else:
-        # A complete loop is not a complete task.  Without a durable lifecycle
-        # state or END marker, restart recovery must fail closed.
+        # Legacy traces predate durable lifecycle state and never persisted the
+        # in-memory END message.  Keep the historical completion heuristic for
+        # those traces only; managed tasks are overridden by durable state below.
         status = 'error'
 
     trace_states[trace_id] = {

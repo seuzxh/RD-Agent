@@ -32,7 +32,7 @@
 | TS-18 | END 成功映射 | `END.end_code=0` | 前端推导 `done` |
 | TS-19 | END 失败映射 | `END.end_code=-1/-2/正数` | 前端推导 `error` |
 | TS-20 | 状态权威性 | 消息含单轮反馈，后端返回 running | 页面保持 running |
-| TS-21 | 历史兼容 | 旧 trace 无状态文件但有可靠历史完成信号 | 沿用历史状态投影 |
+| TS-21 | 历史兼容 | 旧 trace 无状态文件、无落盘 END，但有 feedback + hypothesis | 保持历史兼容状态 `done` |
 | TS-22 | 新任务无首个 pickle | 仅存在生命周期文件 | `/traces` 与 `/traces/status` 仍能列出任务 |
 | TS-23 | Worker 启动失败 | `process.start()` 抛异常 | `error/bootstrap_failed`，释放已分配 GPU |
 
