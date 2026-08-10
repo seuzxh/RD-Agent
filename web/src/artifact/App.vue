@@ -75,7 +75,7 @@
             <el-table-column prop="type" label="类型" width="80"/>
             <el-table-column prop="hypothesis_text" label="假设" min-width="200"/>
             <el-table-column prop="decision" label="决策" width="80">
-              <template #default="{ row }"><el-tag :type="row.decision?'success':'danger'" size="small">{{ row.decision?'采纳':'拒绝' }}</el-tag></template>
+              <template #default="{ row }"><el-tag :type="row.decision==null?'info':row.decision?'success':'danger'" size="small">{{ row.decision==null?'进行中':row.decision?'采纳':'拒绝' }}</el-tag></template>
             </el-table-column>
           </el-table>
         </section>

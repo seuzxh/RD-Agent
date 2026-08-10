@@ -22,7 +22,7 @@
       <el-table-column type="expand">
         <template #default="{ row }">
           <div class="detail">
-            <section v-if="row.formulation"><b>公式</b><p>{{ row.formulation }}</p></section>
+            <section v-if="row.formulation"><b>公式</b><FormulaBlock :formula="row.formulation" /></section>
             <section v-if="row.code_path">
               <b>代码</b>
               <pre v-if="rowCode[row._codeKey]">{{ rowCode[row._codeKey] }}</pre>
@@ -54,6 +54,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { fetchCode } from './api'
+import FormulaBlock from './components/FormulaBlock.vue'
 
 const props = defineProps<{ factors: any[] }>()
 const statusFilter = ref('')
@@ -113,7 +114,7 @@ function toggleStrategy(s: string) { activeStrategy.value = activeStrategy.value
 .detail { padding: 12px; }
 .detail section { margin-bottom: 12px; }
 .detail b { display: block; font-size: 12px; color: #909399; margin-bottom: 4px; }
-.detail pre { background: #f5f7fa; padding: 8px; border-radius: 4px; font-size: 12px; max-height: 200px; overflow: auto; }
+.detail pre { background: #f5f7fa; padding: 8px; border-radius: 4px; font-size: 12px; max-height: 200px; overflow: auto; font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
 .detail .hint { color: #909399; font-size: 12px; }
 .empty { text-align: center; padding: 40px; color: #909399; }
 </style>
