@@ -1,4 +1,4 @@
-import type { ChartRef,CodeFile,FactorItem,FeedbackSummary,MetricItem,TraceMessage,TraceStatus,TraceViewModel,UserInput } from './types'
+import type { ChartRef,CodeFile,FactorItem,FeedbackSummary,MetricItem,TokenByModel,TraceMessage,TraceStatus,TraceViewModel,UserInput } from './types'
 
 function objectValue(value:unknown):Record<string,unknown>|null{if(value&&typeof value==='object'&&!Array.isArray(value))return value as Record<string,unknown>;if(typeof value!=='string')return null;try{return objectValue(JSON.parse(value))}catch{return null}}
 function arrayValue(value:unknown):unknown[]{if(Array.isArray(value))return value;if(typeof value!=='string')return[];try{const parsed=JSON.parse(value);return Array.isArray(parsed)?parsed:[]}catch{return[]}}
@@ -24,7 +24,8 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
   // C7: 单遍扫描，合并 latest() 查找 + loop/end/error/config/tasks/metric 收集
   const loopSet=new Set<number>(),loopMetricMap:Record<number,Record<string,number|string>>={}
   let hasEnd=false,hasError=false,firstConfig:unknown,firstTasksLoop0:unknown,userInputObj:Record<string,unknown>|null=null
-  let token:Record<string,unknown>={}
+  // token_cost 全量收集（按模型聚合），不受 loop 过滤
+  const tokenByModelMap:Record<string,{prompt:number;completion:number;calls:number}>={}
   // latest-by-tag（仅限 selectedLoop 范围内）
   let latHypothesis:TraceMessage|undefined,latTasks:TraceMessage|undefined,latCodes:TraceMessage|undefined
   let latMetric:TraceMessage|undefined,latFeedback:TraceMessage|undefined,latChart:TraceMessage|undefined
@@ -39,10 +40,20 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
     else if(tag==='feedback.metric'&&Number.isFinite(lid)){loopMetricMap[lid]=parseMetricValues(m.content)}
     // 用户原始输入：无 loop_id，全局只取首条（不受 loop 过滤）
     else if(tag==='task.user_input'&&userInputObj===null)userInputObj=objectValue(m.content)
+    // token_cost 全量收集按模型聚合（不受 loop 过滤）
+    else if(tag==='token_cost'){
+      const tc=objectValue(m.content)||{}
+      const model=String(tc.model||'unknown')
+      const pt=Number(tc.prompt_tokens||tc.accumulated_prompt_tokens||0)
+      const ct=Number(tc.completion_tokens||tc.accumulated_completion_tokens||0)
+      if(!tokenByModelMap[model])tokenByModelMap[model]={prompt:0,completion:0,calls:0}
+      tokenByModelMap[model].prompt+=pt
+      tokenByModelMap[model].completion+=ct
+      tokenByModelMap[model].calls++
+    }
     // latest-by-tag（仅限 loop 范围内）
     if(loop==null||lid==null||lid===loop){
-      if(tag==='token_cost')token=objectValue(m.content)||{}
-      else if(tag==='research.hypothesis')latHypothesis=m
+      if(tag==='research.hypothesis')latHypothesis=m
       else if(tag==='research.tasks')latTasks=m
       else if(tag==='evolving.codes')latCodes=m
       else if(tag==='feedback.metric')latMetric=m
@@ -59,8 +70,9 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
   const loops=[...loopSet].sort((a,b)=>a-b)
   const loopMetrics:Record<number,string>={}
   for(const loopId of loops){const metric=loopMetricMap[loopId];if(metric&&metric.IC!=null)loopMetrics[loopId]=`IC=${Number(metric.IC).toFixed(3)}`}
-  const promptTokens=Number(token.accumulated_prompt_tokens||token.prompt_tokens||0)
-  const completionTokens=Number(token.accumulated_completion_tokens||token.completion_tokens||0)
+  const tokenByModel:TokenByModel[]=Object.entries(tokenByModelMap).map(([model,v])=>({model,...v})).sort((a,b)=>(b.prompt+b.completion)-(a.prompt+a.completion))
+  const promptTokens=tokenByModel.reduce((s,t)=>s+t.prompt,0)
+  const completionTokens=tokenByModel.reduce((s,t)=>s+t.completion,0)
   // C6 防御：chartRef 仅当 trace_id 是非空字符串时才有效，否则走 chartHtml fallback。
   // 历史 trace 走老的 _obj_to_json 时可能仍内联 chart_html（没有 chart_ref），不能把
   // {chart_html: "..."} 误判为 ChartRef，否则 iframe 会拼出 id=undefined 的 URL。
@@ -72,5 +84,5 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
     loops:userInputObj.loops==null?undefined:Number(userInputObj.loops),
     autoMode:typeof userInputObj.auto_mode==='boolean'?userInputObj.auto_mode:userInputObj.auto_mode===undefined?undefined:String(userInputObj.auto_mode)==='true',
   }:null
-  return{hasEnd,hasError,loops,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:Number(token.total_tokens||promptTokens+completionTokens),callCount:Number(token.call_count||0),loopMetrics,userInput}
+  return{hasEnd,hasError,loops,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:promptTokens+completionTokens,callCount:tokenByModel.reduce((s,t)=>s+t.calls,0),tokenByModel,loopMetrics,userInput}
 }
