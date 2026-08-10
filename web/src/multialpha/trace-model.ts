@@ -26,16 +26,14 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
   let hasEnd=false,hasError=false,firstConfig:unknown,firstTasksLoop0:unknown,userInputObj:Record<string,unknown>|null=null
   // 记录每个 loop 的 feedback.hypothesis_feedback.decision，用于定位 SOTA
   const acceptedLoops=new Set<number>()
-  // token_cost 全量收集（按智能体/步骤聚合），不受 loop 过滤
   const tokenByAgentMap:Record<string,{prompt:number;completion:number;calls:number}>={}
-  // 根据消息流推断当前 token_cost 归属的智能体/步骤
-  let currentAgent = '其他'
-  const agentTagMap:Record<string,string>={
-    'research.hypothesis':'假设生成',
-    'research.tasks':'实验设计',
-    'evolving.codes':'代码实现',
-    'feedback.metric':'回测执行',
-    'feedback.hypothesis_feedback':'反馈评审',
+  const agentLabelMap:Record<string,string>={
+    propose:'假设生成',
+    exp_gen:'实验设计',
+    coding:'代码实现',
+    running:'回测执行',
+    feedback:'反馈评审',
+    other:'其他',
   }
   // latest-by-tag（仅限 selectedLoop 范围内）
   let latHypothesis:TraceMessage|undefined,latTasks:TraceMessage|undefined,latCodes:TraceMessage|undefined
@@ -56,17 +54,17 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
     }
     // 用户原始输入：无 loop_id，全局只取首条（不受 loop 过滤）
     else if(tag==='task.user_input'&&userInputObj===null)userInputObj=objectValue(m.content)
-    // 更新当前智能体归属（用于后续 token_cost 归因）
-    if(agentTagMap[tag])currentAgent=agentTagMap[tag]
-    // token_cost 全量收集按智能体聚合（不受 loop 过滤）
-    else if(tag==='token_cost'){
+    // token_cost 全量收集按智能体聚合（不受 loop 过滤）；agent 由后端从 tag 上下文直接标注
+    if(tag==='token_cost'){
       const tc=objectValue(m.content)||{}
-      const pt=Number(tc.prompt_tokens||tc.accumulated_prompt_tokens||0)
-      const ct=Number(tc.completion_tokens||tc.accumulated_completion_tokens||0)
-      if(!tokenByAgentMap[currentAgent])tokenByAgentMap[currentAgent]={prompt:0,completion:0,calls:0}
-      tokenByAgentMap[currentAgent].prompt+=pt
-      tokenByAgentMap[currentAgent].completion+=ct
-      tokenByAgentMap[currentAgent].calls++
+      const pt=Number(tc.prompt_tokens||0)
+      const ct=Number(tc.completion_tokens||0)
+      const rawAgent=String(tc.agent||'other')
+      const agent=agentLabelMap[rawAgent]||rawAgent
+      if(!tokenByAgentMap[agent])tokenByAgentMap[agent]={prompt:0,completion:0,calls:0}
+      tokenByAgentMap[agent].prompt+=pt
+      tokenByAgentMap[agent].completion+=ct
+      tokenByAgentMap[agent].calls++
     }
     // latest-by-tag（仅限 loop 范围内）
     if(loop==null||lid==null||lid===loop){

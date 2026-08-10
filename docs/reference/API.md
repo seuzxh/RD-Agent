@@ -351,6 +351,84 @@ curl "http://localhost:19899/traces/any/sota?log_path=log/2026-07-19_03-38-42"
 
 实现：`rdagent/log/server/app.py:get_sota` → `query_sota`（session 模式）/ `_sota_from_messages`（消息流回退模式）。
 
+#### `GET /api/v2/trace/token` — Token 消耗统计
+
+```bash
+curl "http://localhost:19899/api/v2/trace/token?id=Finance%20Data%20Building/plain-transformation"
+```
+
+| 参数 | 位置 | 必填 | 说明 |
+|---|---|---|---|
+| `id` | query | ✅ | trace id，形如 `Finance Data Building/<name>` |
+
+从内存消息缓冲（运行中任务）或 pkl 文件（历史任务）中提取所有 `token_cost` 消息，按**智能体**和 **loop** 两个维度聚合。智能体归因由后端从 logger tag 上下文中直接提取（`agent_from_tag`），不依赖消息时序推断。
+
+**响应**（200）：
+
+```json
+{
+  "total": {
+    "prompt_tokens": 4500,
+    "completion_tokens": 1200,
+    "total_tokens": 5700,
+    "cost": 0.123456,
+    "calls": 15
+  },
+  "by_agent": [
+    {
+      "agent": "代码实现",
+      "prompt_tokens": 2000,
+      "completion_tokens": 800,
+      "cost": 0.05,
+      "calls": 6
+    },
+    {
+      "agent": "假设生成",
+      "prompt_tokens": 1500,
+      "completion_tokens": 200,
+      "cost": 0.04,
+      "calls": 3
+    }
+  ],
+  "by_loop": [
+    {
+      "loop_id": 0,
+      "prompt_tokens": 3000,
+      "completion_tokens": 800,
+      "cost": 0.08,
+      "calls": 10
+    }
+  ]
+}
+```
+
+**字段说明**：
+
+| 字段 | 说明 |
+|---|---|
+| `total` | 全 trace 汇总：prompt/completion/total tokens、美元成本（litellm `completion_cost` 估算）、LLM 调用次数 |
+| `by_agent` | 按智能体分组（中文标签：假设生成/实验设计/代码实现/回测执行/反馈评审/其他），按 token 总量降序 |
+| `by_loop` | 按 loop_id 分组（0, 1, 2...），按 loop 升序 |
+
+**智能体归因规则**（`agent_from_tag`，`rdagent/log/ui/storage.py`）：
+
+| tag 特征 | agent | 中文标签 |
+|---|---|---|
+| `.hypothesis.` + `direct_exp_gen` | `propose` | 假设生成 |
+| `direct_exp_gen`（实验生成部分） | `exp_gen` | 实验设计 |
+| `coding` 或 `evo_loop` | `coding` | 代码实现 |
+| `running` | `running` | 回测执行 |
+| `feedback` | `feedback` | 反馈评审 |
+| 其他 | `other` | 其他 |
+
+**响应**（400）：`{"error": "Missing 'id' parameter"}`
+**响应**（404）：`{"error": "Trace not found"}`
+**响应**（422）：`{"error": "Invalid trace id"}`（路径越界）
+
+实现：`rdagent/log/server/app.py:get_trace_token` → `_collect_token_stats`。
+
+> **与 `/trace` 消息流的关系**：`token_cost` 消息仍通过 `POST /trace` 增量推送（每条 LLM 调用后发送一条），前端 `TokenDashboard` 组件从消息流中实时聚合展示。此 API 提供独立的聚合查询入口，适合程序化调用或页面首次加载时批量获取，无需扫描全部消息。运行中任务的 token 数据随 `/trace` 5s 轮询同步更新，无需单独轮询此接口。
+
 ### 2.9 核心数据结构
 
 ```python
@@ -415,7 +493,7 @@ class RDAgentTask:
 | **回测曲线** | `feedback.return_chart` | `chart_html`（plotly 内嵌 HTML）| ResultWorkspace 曲线 tab（iframe srcdoc 渲染）| POST /trace |
 | **反馈决策交互** | `user_interaction.request` | `{decision, reason, ...}`（HypothesisFeedback 对象字段）| UserInteractionDialog（decision select[true/false] + reason textarea）| POST /user_interaction/submit |
 | **最终结论** | `feedback.hypothesis_feedback` | `observations`, `hypothesis_evaluation`, `new_hypothesis`, `decision`, `reason`, `exception` | ResultWorkspace 结论 tab（decision chip + feedbackItems）+ AgentFlow 反馈节点（stat=已采纳/已拒绝）+ MetricsPanel（反馈摘要）| POST /trace |
-| **token 用量** | `token_cost` | `model`, `prompt_tokens`, `completion_tokens`, `cost`, `accumulated_cost` | TokenDashboard（总/输入/输出/调用次数；`cost` 的 NaN 已 sanitize 为 0.0）| POST /trace |
+| **token 用量** | `token_cost` | `model`, `prompt_tokens`, `completion_tokens`, `cost`, `accumulated_cost`, `agent`（后端从 tag 直接标注：propose/exp_gen/coding/running/feedback/other） | TokenDashboard（总/输入/输出/调用次数；按智能体分组；`cost` 的 NaN 已 sanitize 为 0.0）| POST /trace（实时消息流）+ GET /api/v2/trace/token（聚合查询）|
 | **任务完成** | `END` | `error_msg`, `end_code` | DetailHeader（状态→done）+ 前端停止轮询 | POST /trace（检测到 END 后不再请求）|
 
 #### 贯穿全流程的接口
@@ -423,6 +501,7 @@ class RDAgentTask:
 | 功能 | 接口 | 前端组件 | 说明 |
 |---|---|---|---|
 | 任务列表 | GET /traces | TaskSidebar + LandingTerminal（ticker） | 首页加载 + 刷新时调用 |
+| Token 统计 | GET /api/v2/trace/token | TokenDashboard（可选批量加载） | 按智能体/loop 聚合 token 消耗；运行中任务通过 /trace 消息流实时更新 |
 | 实时日志 | GET /stdout（Range）| LogConsole | 2s 轮询，`Range: bytes=<offset>-` 增量拉取（206/416 响应）|
 | 任务控制 | POST /control | DetailHeader（停止按钮）| `action=stop` 终止 task |
 | 任务创建 | POST /upload | NewTaskDialog | multipart 表单（scenario/loops/description/files）|
@@ -774,6 +853,8 @@ class APIBackend(ABC):
 ```
 
 默认实现：`LiteLLMAPIBackend`（`rdagent/oai/backend/litellm.py`），通过 `litellm` 转发；旧版 `DeprecBackend`（`deprec.py`）保留兼容。
+
+> **Token 统计**：`LiteLLMAPIBackend` 在每次 chat completion 后自动记录 token 消耗：通过 `litellm.token_counter()` 估算 prompt/completion tokens，`litellm.completion_cost()` 估算美元成本，累加到模块级全局变量 `ACC_COST`，并通过 `logger.log_object({...}, tag="token_cost")` 写入日志。消息完整 tag 形如 `Loop_0.direct_exp_gen.hypothesis.token_cost.<pid>`，其中包含 loop 编号和步骤名。`DeprecBackend` 和 `PydanticAIBackend` 不记录 token_cost。详见 [§2 token API](#get-apiv2tracetoken--token-消耗统计)。
 
 #### ChatSession（多轮会话）
 

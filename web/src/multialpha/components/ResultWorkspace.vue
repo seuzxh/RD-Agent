@@ -155,7 +155,7 @@ const feedbackItems = computed(() => [
 
 function formatMetric(item: MetricItem) {
   if (item.rawValue == null) return item.value
-  if (item.percent) return `${(Math.abs(item.rawValue) * 100).toFixed(2)}%`
+  if (item.percent) return `${(item.rawValue * 100).toFixed(2)}%`
   return item.rawValue.toFixed(4)
 }
 async function copyCode() {
@@ -185,7 +185,7 @@ const sotaMetricList = computed(() => {
   for (const [key, label] of Object.entries(labels)) {
     if (m[key] != null) {
       const v = Number(m[key])
-      out[label] = label.includes('年化') || label.includes('回撤') ? `${(Math.abs(v) * 100).toFixed(2)}%` : v.toFixed(4)
+      out[label] = label.includes('年化') || label.includes('回撤') ? `${(v * 100).toFixed(2)}%` : v.toFixed(4)
     }
   }
   return out

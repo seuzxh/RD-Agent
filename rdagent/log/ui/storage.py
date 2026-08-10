@@ -10,6 +10,31 @@ from rdagent.log.utils import extract_evoid, extract_loopid_func_name, gen_datet
 from .conf import UI_SETTING
 
 
+AGENT_LABELS: dict[str, str] = {
+    "propose": "假设生成",
+    "exp_gen": "实验设计",
+    "coding": "代码实现",
+    "running": "回测执行",
+    "feedback": "反馈评审",
+    "other": "其他",
+}
+
+
+def agent_from_tag(tag: str) -> str:
+    tag_lower = tag.lower()
+    if ".hypothesis." in tag_lower and "direct_exp_gen" in tag_lower:
+        return "propose"
+    if "direct_exp_gen" in tag_lower:
+        return "exp_gen"
+    if "coding" in tag_lower or "evo_loop" in tag_lower:
+        return "coding"
+    if "running" in tag_lower:
+        return "running"
+    if "feedback" in tag_lower:
+        return "feedback"
+    return "other"
+
+
 class WebStorage(Storage):
     """
     The storage for web app.
@@ -282,10 +307,6 @@ class WebStorage(Storage):
                     },
                 }
         elif "token_cost" in tag:
-            # litellm emits {model, prompt_tokens, completion_tokens, cost, accumulated_cost}
-            # per LLM call (rdagent/oai/backend/litellm.py). cost may be NaN when litellm
-            # can't estimate the price for a model; JSON has no NaN, so sanitize to 0.0
-            # (the old project's storage.py did the same, see _obj_to_json token_cost branch).
             import math
 
             raw = obj if isinstance(obj, dict) else {}
@@ -294,6 +315,7 @@ class WebStorage(Storage):
                     0.0 if isinstance(v, float) and math.isinf(v) else v)
                 for k, v in raw.items()
             }
+            token_obj["agent"] = agent_from_tag(tag)
             data = {
                 "id": id,
                 "msg": {

@@ -909,6 +909,106 @@ def get_chart_artifact():
 
 # ==================== Chart Artifact END ============================
 
+
+def _collect_token_stats(messages: list[dict]) -> dict:
+    from rdagent.log.ui.storage import AGENT_LABELS, agent_from_tag
+
+    by_agent: dict[str, dict] = {}
+    total_prompt = 0
+    total_completion = 0
+    total_cost = 0.0
+    total_calls = 0
+
+    for msg in messages:
+        tag = msg.get("tag", "")
+        if tag != "token_cost":
+            continue
+
+        content = msg.get("content") or {}
+        if not isinstance(content, dict):
+            continue
+
+        agent_key = content.get("agent") or agent_from_tag(msg.get("old_tag", ""))
+        agent_label = AGENT_LABELS.get(agent_key, agent_key)
+
+        prompt = int(content.get("prompt_tokens") or 0)
+        completion = int(content.get("completion_tokens") or 0)
+        cost = float(content.get("cost") or 0.0)
+        loop_id = msg.get("loop_id")
+
+        if agent_label not in by_agent:
+            by_agent[agent_label] = {
+                "agent": agent_label,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "cost": 0.0,
+                "calls": 0,
+            }
+        by_agent[agent_label]["prompt_tokens"] += prompt
+        by_agent[agent_label]["completion_tokens"] += completion
+        by_agent[agent_label]["cost"] += cost
+        by_agent[agent_label]["calls"] += 1
+
+        total_prompt += prompt
+        total_completion += completion
+        total_cost += cost
+        total_calls += 1
+
+    by_loop: dict[int, dict] = {}
+    for msg in messages:
+        if msg.get("tag") != "token_cost":
+            continue
+        content = msg.get("content") or {}
+        if not isinstance(content, dict):
+            continue
+        lid = msg.get("loop_id")
+        if lid is None:
+            continue
+        lid = int(lid)
+        if lid not in by_loop:
+            by_loop[lid] = {"loop_id": lid, "prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0, "calls": 0}
+        by_loop[lid]["prompt_tokens"] += int(content.get("prompt_tokens") or 0)
+        by_loop[lid]["completion_tokens"] += int(content.get("completion_tokens") or 0)
+        by_loop[lid]["cost"] += float(content.get("cost") or 0.0)
+        by_loop[lid]["calls"] += 1
+
+    return {
+        "total": {
+            "prompt_tokens": total_prompt,
+            "completion_tokens": total_completion,
+            "total_tokens": total_prompt + total_completion,
+            "cost": round(total_cost, 6),
+            "calls": total_calls,
+        },
+        "by_agent": sorted(by_agent.values(), key=lambda x: x["prompt_tokens"] + x["completion_tokens"], reverse=True),
+        "by_loop": sorted(by_loop.values(), key=lambda x: x["loop_id"]),
+    }
+
+
+@app.route("/api/v2/trace/token", methods=["GET"])
+def get_trace_token():
+    trace_id = request.args.get("id", "").strip()
+    if not trace_id:
+        return jsonify({"error": "Missing 'id' parameter"}), 400
+
+    try:
+        trace_dir = (log_folder_path / trace_id).resolve()
+        if os.path.commonpath([str(trace_dir), str(log_folder_path)]) != str(log_folder_path):
+            return jsonify({"error": "Invalid trace id"}), 422
+    except (ValueError, OSError):
+        return jsonify({"error": "Invalid trace id"}), 422
+
+    task = rdagent_processes.get(str(trace_dir))
+    if task is None and trace_dir.is_dir():
+        read_trace(trace_dir, id=str(trace_dir))
+        task = rdagent_processes.get(str(trace_dir))
+
+    if task is None:
+        return jsonify({"error": "Trace not found"}), 404
+
+    return jsonify(_collect_token_stats(task.messages)), 200
+
+
 @app.route("/trace", methods=["POST"])
 def update_trace():
     data = request.get_json()
