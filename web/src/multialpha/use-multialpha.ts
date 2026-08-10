@@ -162,7 +162,7 @@ export function useMultiAlpha() {
     data.append('scenario', scenario); data.append('loops', String(payload.loops))
     if (payload.description) data.append('description', payload.description)
     if (payload.modelSelector && payload.modelSelector !== 'lgbm') data.append('model_selector', payload.modelSelector)
-    data.append('auto_mode', String(payload.autoMode ?? true))
+    data.append('auto_mode', String(payload.autoMode))
     payload.files.forEach(file => data.append('files', file))
     const result = await uploadTask(data)
     if (!result.id) throw new Error(result.error || '任务启动失败')
