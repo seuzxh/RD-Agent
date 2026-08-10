@@ -5,10 +5,14 @@ function arrayValue(value:unknown):unknown[]{if(Array.isArray(value))return valu
 function textValue(value:unknown):string{if(typeof value==='string')return value;if(value==null)return'';try{return JSON.stringify(value,null,2)}catch{return String(value)}}
 
 export function deriveTraceStatus(messages:TraceMessage[]):TraceStatus{
-  let hasEnd=false,hasFinalFeedback=false,hasMetric=false,hasError=false
-  for(let i=messages.length-1;i>=0;i--){const t=messages[i].tag;if(t==='END')hasEnd=true;else if(t==='feedback.hypothesis_feedback')hasFinalFeedback=true;else if(t==='feedback.metric')hasMetric=true;else if(/error/i.test(t||''))hasError=true}
-  if(hasEnd||(hasFinalFeedback&&hasMetric))return 'done'
-  if(hasError)return 'error'
+  for(let i=messages.length-1;i>=0;i--){
+    const message=messages[i]
+    if(message.tag==='END'){
+      const content=objectValue(message.content)
+      const endCode=Number(content?.end_code)
+      return Number.isFinite(endCode)&&endCode===0?'done':'error'
+    }
+  }
   return 'running'
 }
 
@@ -23,7 +27,7 @@ function parseConfig(value:unknown){const data=objectValue(value);const raw=text
 export function buildTraceView(messages:TraceMessage[],loop:number|null,status?:'running'|'done'|'error'|'idle'):TraceViewModel{
   // C7: 单遍扫描，合并 latest() 查找 + loop/end/error/config/tasks/metric 收集
   const loopSet=new Set<number>(),loopMetricMap:Record<number,Record<string,number|string>>={}
-  let hasEnd=false,hasError=false,hasFinalFeedback=false,hasMetric=false,firstConfig:unknown,firstTasksLoop0:unknown,userInputObj:Record<string,unknown>|null=null
+  let hasEnd=false,hasError=false,firstConfig:unknown,firstTasksLoop0:unknown,userInputObj:Record<string,unknown>|null=null
   // 记录每个 loop 的 feedback.hypothesis_feedback.decision，用于定位 SOTA
   const acceptedLoops=new Set<number>()
   const tokenByAgentMap:Record<string,{prompt:number;completion:number;calls:number}>={}
@@ -57,8 +61,6 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null,status?:
     else if(tag==='task.user_input'&&userInputObj===null)userInputObj=objectValue(m.content)
     // 运行状态标志位（独立判断，不能放入上面的 else-if 链，否则会拦截
     // feedback.metric / feedback.hypothesis_feedback 的数据收集分支）
-    if(tag==='feedback.hypothesis_feedback')hasFinalFeedback=true
-    if(tag==='feedback.metric')hasMetric=true
     // token_cost 全量收集按智能体聚合（不受 loop 过滤）；agent 由后端从 tag 上下文直接标注
     if(tag==='token_cost'){
       const tc=objectValue(m.content)||{}
@@ -109,7 +111,7 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null,status?:
     autoMode:typeof userInputObj.auto_mode==='boolean'?userInputObj.auto_mode:userInputObj.auto_mode===undefined?undefined:String(userInputObj.auto_mode)==='true',
   }:null
   let currentStep:AgentStep=null
-  const isRunning=status==='running'||(!status&&!hasEnd&&!hasError&&!(hasFinalFeedback&&hasMetric))
+  const isRunning=status==='running'||(!status&&!hasEnd&&!hasError)
   if(isRunning){
     if(!hypothesis)currentStep='hypothesis'
     else if(!tasks.length)currentStep='design'

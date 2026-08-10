@@ -11,9 +11,11 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from rdagent.log.server import app as server_app
+from rdagent.log.server.task_state import create_task_state, read_task_state, update_task_state
 
 
 class SotaFromMessagesTestCase(unittest.TestCase):
@@ -169,6 +171,185 @@ class CollectExistingTraceIdsTestCase(unittest.TestCase):
         ids = server_app._collect_existing_trace_ids(missing_root)
 
         self.assertIn(running, ids)
+
+    def test_task_state_without_pickle_is_listed(self) -> None:
+        trace_dir = self.trace_root / "Finance Data Building" / "starting-task"
+        create_task_state(
+            trace_dir,
+            task_id="Finance Data Building/starting-task",
+            scenario="Finance Data Building",
+            server_instance_id="server-a",
+            server_pid=100,
+            requested_loops=3,
+            task_token="token-a",
+        )
+
+        ids = server_app._collect_existing_trace_ids(self.trace_root)
+
+        self.assertIn("Finance Data Building/starting-task", ids)
+
+
+class TaskLifecycleStateTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp_dir = tempfile.TemporaryDirectory()
+        self.trace_dir = Path(self._tmp_dir.name) / "Finance Data Building" / "task-a"
+        self.trace_id = "Finance Data Building/task-a"
+        self._orig_trace_states = server_app.trace_states.copy()
+        server_app.trace_states.clear()
+
+    def tearDown(self) -> None:
+        server_app.trace_states.clear()
+        server_app.trace_states.update(self._orig_trace_states)
+        self._tmp_dir.cleanup()
+
+    def _create_state(self):
+        return create_task_state(
+            self.trace_dir,
+            task_id=self.trace_id,
+            scenario="Finance Data Building",
+            server_instance_id="server-a",
+            server_pid=100,
+            requested_loops=3,
+            task_token="token-a",
+        )
+
+    def test_loop_feedback_does_not_finish_task(self) -> None:
+        for tag in ("research.hypothesis", "feedback.metric", "feedback.hypothesis_feedback"):
+            server_app._update_trace_state(
+                self.trace_id,
+                {"tag": tag, "loop_id": 0, "content": {"decision": False}},
+            )
+
+        self.assertEqual(server_app.trace_states[self.trace_id]["status"], "running")
+
+    def test_end_code_controls_terminal_status(self) -> None:
+        server_app._update_trace_state(self.trace_id, {"tag": "END", "content": {"end_code": 0}})
+        self.assertEqual(server_app.trace_states[self.trace_id]["status"], "done")
+
+        server_app.trace_states.clear()
+        server_app._update_trace_state(self.trace_id, {"tag": "END", "content": {"end_code": -1}})
+        self.assertEqual(server_app.trace_states[self.trace_id]["status"], "error")
+
+    def test_no_sota_with_zero_exit_is_done(self) -> None:
+        self._create_state()
+        task = SimpleNamespace(
+            log_trace_path=str(self.trace_dir),
+            messages=[{"tag": "feedback.hypothesis_feedback", "content": {"decision": False}}],
+            assigned_gpu=None,
+        )
+
+        server_app._finalize_task(task, self.trace_id, 0)
+
+        state = read_task_state(self.trace_dir)
+        self.assertEqual(state["status"], "done")
+        self.assertEqual(state["reason"], "completed")
+        self.assertEqual(task.messages[-1]["tag"], "END")
+
+    def test_user_cancel_cannot_be_overwritten_by_watcher(self) -> None:
+        self._create_state()
+        update_task_state(self.trace_dir, status="error", end_code=-1, reason="user_cancelled")
+        task = SimpleNamespace(log_trace_path=str(self.trace_dir), messages=[], assigned_gpu=None)
+
+        server_app._finalize_task(task, self.trace_id, -15)
+
+        state = read_task_state(self.trace_dir)
+        self.assertEqual(state["reason"], "user_cancelled")
+        self.assertEqual(state["end_code"], -1)
+
+    def test_restart_marks_running_task_error_and_cleans_resources(self) -> None:
+        self._create_state()
+        update_task_state(self.trace_dir, status="running", worker_pid=123, worker_create_time=456.0)
+
+        with mock.patch.object(server_app, "_terminate_persisted_worker") as terminate, mock.patch.object(
+            server_app, "_cleanup_task_containers",
+        ) as cleanup:
+            server_app._recover_interrupted_tasks(Path(self._tmp_dir.name))
+
+        state = read_task_state(self.trace_dir)
+        self.assertEqual(state["status"], "error")
+        self.assertEqual(state["reason"], "server_restarted")
+        terminate.assert_called_once()
+        cleanup.assert_called_once_with("token-a")
+
+    def test_restart_marks_incomplete_state_unknown(self) -> None:
+        self.trace_dir.mkdir(parents=True)
+        (self.trace_dir / ".task-state.json").write_text(
+            json.dumps({"schema_version": 1, "status": "running"}),
+            encoding="utf-8",
+        )
+
+        server_app._recover_interrupted_tasks(Path(self._tmp_dir.name))
+
+        state = read_task_state(self.trace_dir)
+        self.assertEqual(state["status"], "error")
+        self.assertEqual(state["reason"], "state_unknown_after_restart")
+
+    def test_pid_create_time_mismatch_is_not_killed(self) -> None:
+        process = mock.Mock()
+        process.create_time.return_value = 999.0
+        with mock.patch.object(server_app.psutil, "Process", return_value=process), mock.patch.object(
+            server_app.os, "killpg",
+        ) as killpg:
+            server_app._terminate_persisted_worker(
+                {"worker_pid": 123, "worker_create_time": 456.0, "process_group_id": 123},
+            )
+
+        process.terminate.assert_not_called()
+        process.kill.assert_not_called()
+        killpg.assert_not_called()
+
+    def test_process_bootstrap_failure_is_persisted(self) -> None:
+        task = server_app.RDAgentTask(
+            target_name="fin_factor",
+            kwargs={},
+            stdout_path=str(self.trace_dir.with_suffix(".log")),
+            log_trace_path=str(self.trace_dir),
+            scenario="Finance Data Building",
+            trace_name="task-a",
+            create_process=False,
+            assigned_gpu=2,
+        )
+        task.process = mock.Mock()
+        task.process.start.side_effect = RuntimeError("cannot start")
+
+        with mock.patch.object(server_app, "_release_gpu") as release_gpu, self.assertRaisesRegex(
+            RuntimeError, "cannot start"
+        ):
+            task.start()
+
+        state = read_task_state(self.trace_dir)
+        self.assertEqual(state["status"], "error")
+        self.assertEqual(state["reason"], "bootstrap_failed")
+        self.assertEqual(state["end_code"], -3)
+        release_gpu.assert_called_once_with(2)
+        task.process = None
+        task.stop()
+
+    def test_status_endpoint_keeps_loop_feedback_running(self) -> None:
+        self._create_state()
+        update_task_state(self.trace_dir, status="running")
+        server_app._update_trace_state(
+            self.trace_id,
+            {"tag": "feedback.hypothesis_feedback", "loop_id": 0, "content": {"decision": False}},
+        )
+
+        with mock.patch.object(server_app, "log_folder_path", Path(self._tmp_dir.name)):
+            response = server_app.app.test_client().get("/traces/status", query_string={"id": self.trace_id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()[0]["status"], "running")
+
+    def test_legacy_complete_loop_without_end_is_error_after_restart(self) -> None:
+        feedback_dir = self.trace_dir / "Loop_0" / "feedback" / "123"
+        hypothesis_dir = self.trace_dir / "Loop_0" / "propose" / "hypothesis" / "123"
+        feedback_dir.mkdir(parents=True)
+        hypothesis_dir.mkdir(parents=True)
+        (feedback_dir / "2026-08-11_00-00-00-000001.pkl").write_bytes(b"x")
+        (hypothesis_dir / "2026-08-11_00-00-01-000001.pkl").write_bytes(b"x")
+
+        server_app._index_trace_catalog_from_files(self.trace_dir, self.trace_id)
+
+        self.assertEqual(server_app.trace_states[self.trace_id]["status"], "error")
 
 
 if __name__ == "__main__":

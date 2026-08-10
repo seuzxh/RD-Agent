@@ -2,8 +2,10 @@ import json
 import logging
 import os
 import random
+import signal
 import threading
 import traceback
+import uuid
 from collections import defaultdict
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
@@ -11,6 +13,7 @@ from multiprocessing import Process, Queue
 from pathlib import Path
 from queue import Empty
 
+import psutil
 import randomname
 import typer
 from flask import Flask, jsonify, request, send_file, send_from_directory
@@ -18,6 +21,13 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 from rdagent.log.storage import FileStorage
+from rdagent.log.server.task_state import (
+    STATE_FILENAME,
+    create_task_state,
+    read_task_state,
+    update_task_state,
+    write_task_state,
+)
 from rdagent.log.ui.conf import UI_SETTING
 from rdagent.log.ui.storage import WebStorage
 from rdagent.log.utils import extract_loopid_func_name
@@ -97,6 +107,7 @@ _configure_app_logger()
 
 
 _TARGETS_WITHOUT_USER_INTERACTION = {"fin_factor_report", "fin_predict"}
+_SERVER_INSTANCE_ID = str(uuid.uuid4())
 
 
 class RDAgentTask:
@@ -111,6 +122,8 @@ class RDAgentTask:
         ui_server_port: int | None = None,
         create_process: bool = True,
         assigned_gpu: int | None = None,
+        requested_loops: int | None = None,
+        requested_items: int | None = None,
     ) -> None:
         self.target_name = target_name
         self.kwargs = kwargs
@@ -120,7 +133,11 @@ class RDAgentTask:
         self.trace_name = trace_name
         self.ui_server_port = ui_server_port
         self.assigned_gpu = assigned_gpu
+        self.requested_loops = requested_loops
+        self.requested_items = requested_items
+        self.task_token = str(uuid.uuid4())
         self.process: Process | None = None
+        self._watcher: threading.Thread | None = None
 
         # Two IPC queues for user interaction.
         # - `user_request_q`: rdagent subprocess -> server (dicts to render on frontend)
@@ -140,7 +157,62 @@ class RDAgentTask:
 
     def start(self) -> None:
         if self.process is not None:
-            self.process.start()
+            trace_dir = Path(self.log_trace_path)
+            external_id = _trace_id_to_external(self.log_trace_path)
+            create_task_state(
+                trace_dir,
+                task_id=external_id,
+                scenario=self.scenario,
+                server_instance_id=_SERVER_INSTANCE_ID,
+                server_pid=os.getpid(),
+                requested_loops=self.requested_loops,
+                requested_items=self.requested_items,
+                task_token=self.task_token,
+            )
+            try:
+                self.process.start()
+            except Exception:
+                update_task_state(
+                    trace_dir,
+                    status="error",
+                    end_code=-3,
+                    reason="bootstrap_failed",
+                )
+                if self.assigned_gpu is not None:
+                    _release_gpu(self.assigned_gpu)
+                    self.assigned_gpu = None
+                raise
+            worker_pid = self.process.pid
+            create_time = None
+            process_group_id = worker_pid
+            if worker_pid is not None:
+                try:
+                    create_time = psutil.Process(worker_pid).create_time()
+                except (psutil.Error, OSError):
+                    pass
+                for _ in range(50):
+                    try:
+                        process_group_id = os.getpgid(worker_pid)
+                        if process_group_id == worker_pid:
+                            break
+                    except OSError:
+                        break
+                    _perf_time.sleep(0.01)
+            update_task_state(
+                trace_dir,
+                status="running",
+                worker_pid=worker_pid,
+                worker_create_time=create_time,
+                process_group_id=process_group_id,
+            )
+            self._watcher = threading.Thread(target=self._watch_process, daemon=True)
+            self._watcher.start()
+
+    def _watch_process(self) -> None:
+        if self.process is None:
+            return
+        self.process.join()
+        _finalize_task(self, _trace_id_to_external(self.log_trace_path), self.get_end_code())
 
     def is_alive(self) -> bool:
         return self.process is not None and self.process.is_alive()
@@ -152,8 +224,26 @@ class RDAgentTask:
 
     def stop(self) -> None:
         if self.process is not None and self.process.is_alive():
-            self.process.terminate()
-            self.process.join()
+            pid = self.process.pid
+            try:
+                pgid = os.getpgid(pid) if pid is not None else None
+                if pid is not None and pgid == pid:
+                    os.killpg(pgid, signal.SIGTERM)
+                else:
+                    self.process.terminate()
+            except OSError:
+                self.process.terminate()
+            self.process.join(timeout=5)
+            if self.process.is_alive():
+                try:
+                    pgid = os.getpgid(pid) if pid is not None else None
+                    if pid is not None and pgid == pid:
+                        os.killpg(pgid, signal.SIGKILL)
+                    else:
+                        self.process.kill()
+                except OSError:
+                    self.process.kill()
+                self.process.join(timeout=2)
 
         # Best-effort cleanup for IPC queues.
         for q in (self.user_request_q, self.user_response_q):
@@ -168,6 +258,11 @@ class RDAgentTask:
 
     def _run(self) -> None:
         import os as _os
+        try:
+            _os.setsid()
+        except OSError:
+            pass
+        _os.environ["MULTIALPHA_TASK_ID"] = self.task_token
         # GPU 轮转：子进程隔离到分配的物理 GPU
         if self.assigned_gpu is not None:
             _os.environ["CUDA_VISIBLE_DEVICES"] = str(self.assigned_gpu)
@@ -264,6 +359,159 @@ def _release_gpu(gpu_id: int) -> None:
     with _gpu_pool_lock:
         _gpu_pool.discard(gpu_id)
 
+
+def _cleanup_task_containers(task_token: str | None) -> None:
+    if not task_token:
+        return
+    try:
+        import docker
+
+        client = docker.from_env(timeout=3)
+        for container in client.containers.list(all=True, filters={"label": f"multialpha.task_id={task_token}"}):
+            try:
+                container.stop(timeout=3)
+            except Exception:
+                pass
+            try:
+                container.remove(force=True)
+            except Exception:
+                app.logger.exception("Failed to remove task container %s", container.id)
+    except Exception:
+        app.logger.exception("Failed to clean Docker resources for task %s", task_token)
+
+
+def _terminate_persisted_worker(state: dict) -> None:
+    pid = state.get("worker_pid")
+    expected_create_time = state.get("worker_create_time")
+    pgid = state.get("process_group_id")
+    if not isinstance(pid, int) or not isinstance(expected_create_time, (int, float)):
+        return
+    try:
+        proc = psutil.Process(pid)
+        if abs(proc.create_time() - float(expected_create_time)) > 0.01:
+            app.logger.warning("Skip stale PID %s: create time mismatch", pid)
+            return
+    except (psutil.Error, OSError):
+        return
+
+    try:
+        if isinstance(pgid, int) and pgid == pid and os.getpgid(pid) == pgid:
+            os.killpg(pgid, signal.SIGTERM)
+        else:
+            proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except psutil.TimeoutExpired:
+            if isinstance(pgid, int) and pgid == pid:
+                os.killpg(pgid, signal.SIGKILL)
+            else:
+                proc.kill()
+    except (psutil.Error, OSError):
+        app.logger.exception("Failed to terminate persisted worker %s", pid)
+
+
+def _recover_interrupted_tasks(trace_root: Path) -> None:
+    if not trace_root.exists():
+        return
+    for path in trace_root.rglob(STATE_FILENAME):
+        trace_dir = path.parent
+        try:
+            state = read_task_state(trace_dir)
+        except Exception:
+            app.logger.exception("Invalid task state at %s", path)
+            write_task_state(
+                trace_dir,
+                {
+                    "schema_version": 1,
+                    "task_id": str(trace_dir.relative_to(trace_root)),
+                    "scenario": trace_dir.parent.name,
+                    "status": "error",
+                    "end_code": -2,
+                    "reason": "state_unknown_after_restart",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+            continue
+        if state is None:
+            continue
+        status = state.get("status")
+        task_id = state.get("task_id")
+        if status not in {"starting", "running", "done", "error"} or not isinstance(task_id, str) or not task_id:
+            app.logger.error("Incomplete task state at %s", path)
+            write_task_state(
+                trace_dir,
+                {
+                    **state,
+                    "status": "error",
+                    "end_code": -2,
+                    "reason": "state_unknown_after_restart",
+                },
+            )
+            continue
+        if status in {"done", "error"}:
+            continue
+        update_task_state(
+            trace_dir,
+            status="error",
+            end_code=-2,
+            reason="server_restarted",
+        )
+        _terminate_persisted_worker(state)
+        _cleanup_task_containers(state.get("task_token"))
+
+
+def _finalize_task(task: "RDAgentTask", external_id: str, end_code: int) -> None:
+    trace_dir = Path(task.log_trace_path)
+    try:
+        state = read_task_state(trace_dir)
+    except Exception:
+        state = None
+    if state and state.get("status") in {"done", "error"}:
+        if task.assigned_gpu is not None:
+            _release_gpu(task.assigned_gpu)
+            task.assigned_gpu = None
+        return
+
+    status = "done" if end_code == 0 else "error"
+    reason = "completed" if end_code == 0 else "process_failed"
+    persisted = update_task_state(trace_dir, status=status, end_code=end_code, reason=reason)
+    if persisted and (persisted.get("status") != status or persisted.get("reason") != reason):
+        if task.assigned_gpu is not None:
+            _release_gpu(task.assigned_gpu)
+            task.assigned_gpu = None
+        return
+    if not task.messages or task.messages[-1].get("tag") != "END":
+        end_msg = {
+            "tag": "END",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "content": {
+                "error_msg": "RD-Agent process has completed."
+                if end_code == 0
+                else f"RD-Agent process exited abnormally (exit code {end_code}).",
+                "end_code": end_code,
+                "reason": reason,
+                "traceback": _read_task_error_detail(task) if end_code != 0 else "",
+            }
+        }
+        task.messages.append(end_msg)
+        _update_trace_state(external_id, end_msg)
+    if task.assigned_gpu is not None:
+        _release_gpu(task.assigned_gpu)
+        task.assigned_gpu = None
+
+
+def _read_task_error_detail(task: "RDAgentTask") -> str:
+    log_path = Path(task.stdout_path)
+    if not log_path.exists():
+        return ""
+    try:
+        lines = log_path.read_text(errors="replace").splitlines()
+        traceback_starts = [i for i, line in enumerate(lines) if "Traceback (most recent call last)" in line]
+        detail = lines[traceback_starts[-1] :] if traceback_starts else lines[-30:]
+        return "\n".join(detail)[-3000:]
+    except Exception:
+        return "(failed to read log file)"
+
 # ==================== Catalog 状态投影层（C1）====================
 # 轻量读模型：trace_id → 状态快照，由事件流投影而来，列表/状态查询只读这里。
 trace_states: dict[str, dict] = {}
@@ -299,73 +547,24 @@ def _resolve_trace_status(external_id: str, catalog_status: str) -> str:
     """
     internal_id = str(log_folder_path / external_id)
     task = rdagent_processes.get(internal_id)
+    try:
+        durable_state = read_task_state(internal_id)
+    except Exception:
+        durable_state = None
+
+    if durable_state and durable_state.get("status") in {"done", "error"}:
+        return str(durable_state["status"])
 
     if task is not None and task.process is not None:
         if task.is_alive():
             return "running"
         # 进程已结束：以 exitcode 区分正常完成 / 异常终止
         end_code = task.get_end_code()
-        if end_code == 0:
-            # 确保 catalog 状态同步为 done（END 消息可能尚未被懒生成）
-            if catalog_status != "done":
-                _ensure_end_message(task, external_id)
-            return "done"
-        # exitcode != 0：异常终止，补写错误 END 消息（若尚未生成）
-        if catalog_status != "error":
-            _ensure_error_message(task, external_id)
-        return "error"
+        _finalize_task(task, external_id, end_code)
+        return "done" if end_code == 0 else "error"
 
     # 无进程对象（历史任务），信任 catalog
     return catalog_status
-
-
-def _ensure_error_message(task: "RDAgentTask", external_id: str) -> None:
-    """进程异常退出时，补写带错误信息的 END 消息并更新 catalog。"""
-    if task.messages and task.messages[-1].get("tag") == "END":
-        return
-    error_detail = ""
-    log_path = Path(task.stdout_path)
-    if log_path.exists():
-        try:
-            text = log_path.read_text(errors="replace")
-            lines = text.splitlines()
-            tb_start = -1
-            for i, line in enumerate(lines):
-                if "Traceback (most recent call last)" in line:
-                    tb_start = i
-            if tb_start >= 0:
-                error_detail = "\n".join(lines[tb_start:])
-            else:
-                error_detail = "\n".join(lines[-30:])
-        except Exception:
-            error_detail = "(failed to read log file)"
-    end_msg = {
-        "tag": "END",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "content": {
-            "error_msg": f"RD-Agent process exited abnormally (exit code {task.get_end_code()}).",
-            "end_code": task.get_end_code(),
-            "traceback": error_detail[-3000:] if error_detail else "",
-        },
-    }
-    task.messages.append(end_msg)
-    _update_trace_state(external_id, end_msg)
-
-
-def _ensure_end_message(task: "RDAgentTask", external_id: str) -> None:
-    """进程正常结束但 END 消息尚未生成时，补写 END 并更新 catalog。"""
-    if task.messages and task.messages[-1].get("tag") == "END":
-        return
-    end_msg = {
-        "tag": "END",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "content": {
-            "error_msg": "RD-Agent process has completed.",
-            "end_code": task.get_end_code(),
-        },
-    }
-    task.messages.append(end_msg)
-    _update_trace_state(external_id, end_msg)
 
 
 def _update_trace_state(trace_id: str, msg: dict) -> None:
@@ -402,6 +601,13 @@ def _update_trace_state(trace_id: str, msg: dict) -> None:
         state["updated_at"] = ts
 
     state["status"] = _derive_status_from_tags(state["_tags_seen"])
+    if tag == "END":
+        content = msg.get("content") if isinstance(msg.get("content"), dict) else {}
+        try:
+            end_code = int(content["end_code"])
+        except (KeyError, TypeError, ValueError):
+            end_code = 1
+        state["status"] = "done" if end_code == 0 else "error"
 
 
 def _trace_state_public(state: dict) -> dict:
@@ -412,6 +618,8 @@ def _trace_state_public(state: dict) -> dict:
         "created_at": state["created_at"],
         "updated_at": state["updated_at"],
         "has_chart": state["has_chart"],
+        "end_code": state.get("end_code"),
+        "reason": state.get("reason"),
     }
 
 
@@ -558,7 +766,25 @@ def _read_trace_into(log_path: Path, task: RDAgentTask) -> None:
                 last_timestamp = msg.timestamp
 
     now = datetime.now(timezone.utc)
-    if last_timestamp and (now - last_timestamp).total_seconds() > 1800:
+    try:
+        durable = read_task_state(log_path)
+    except Exception:
+        durable = None
+    if durable and durable.get("status") in {"done", "error"} and (
+        not task.messages or task.messages[-1].get("tag") != "END"
+    ):
+        task.messages.append(
+            {
+                "tag": "END",
+                "timestamp": durable.get("updated_at") or now.isoformat(),
+                "content": {
+                    "error_msg": durable.get("reason") or "Task has ended.",
+                    "end_code": durable.get("end_code", 1),
+                    "reason": durable.get("reason"),
+                },
+            }
+        )
+    elif durable is None and last_timestamp and (now - last_timestamp).total_seconds() > 1800:
         task.messages.append(
             {
                 "tag": "END",
@@ -719,7 +945,7 @@ def _collect_existing_trace_ids(trace_root: Path) -> list[str]:
                 continue
             if "uploads" in trace_dir.relative_to(trace_root).parts:
                 continue
-            if not any(trace_dir.rglob("*.pkl")):
+            if not (trace_dir / STATE_FILENAME).is_file() and not any(trace_dir.rglob("*.pkl")):
                 continue
             trace_ids.add(trace_dir.relative_to(trace_root).as_posix())
 
@@ -744,6 +970,21 @@ def _index_trace_catalog_from_files(trace_dir: Path, trace_id: str) -> None:
     import re as _re
     pkls = list(trace_dir.rglob("*.pkl"))
     if not pkls:
+        try:
+            durable = read_task_state(trace_dir)
+        except Exception:
+            durable = None
+        if durable:
+            trace_states[trace_id] = {
+                "status": durable.get("status", "error"),
+                "loops": set(),
+                "created_at": durable.get("created_at"),
+                "updated_at": durable.get("updated_at"),
+                "has_chart": False,
+                "end_code": durable.get("end_code"),
+                "reason": durable.get("reason"),
+                "_tags_seen": set(),
+            }
         return
 
     timestamps = []
@@ -776,9 +1017,11 @@ def _index_trace_catalog_from_files(trace_dir: Path, trace_id: str) -> None:
     created_at = min(timestamps) if timestamps else None
     updated_at = max(timestamps) if timestamps else None
 
-    if 'END' in tags_seen or ('feedback' in tags_seen and 'hypothesis' in tags_seen):
+    if 'END' in tags_seen:
         status = 'done'
     else:
+        # A complete loop is not a complete task.  Without a durable lifecycle
+        # state or END marker, restart recovery must fail closed.
         status = 'error'
 
     trace_states[trace_id] = {
@@ -789,6 +1032,18 @@ def _index_trace_catalog_from_files(trace_dir: Path, trace_id: str) -> None:
         "has_chart": has_chart,
         "_tags_seen": tags_seen,
     }
+    try:
+        durable = read_task_state(trace_dir)
+    except Exception:
+        durable = None
+    if durable:
+        trace_states[trace_id].update(
+            status=durable.get("status", "error"),
+            created_at=durable.get("created_at") or created_at,
+            updated_at=durable.get("updated_at") or updated_at,
+            end_code=durable.get("end_code"),
+            reason=durable.get("reason"),
+        )
 
 
 def _load_existing_traces(trace_root: Path) -> None:
@@ -826,13 +1081,13 @@ def _find_chart_pkl(trace_dir: Path, loop_id: int | None) -> Path | None:
     pkls = sorted(trace_dir.glob(pattern), reverse=True)
     return pkls[0] if pkls else None
 
-
 def _generate_chart_html(df_pkl_path: Path) -> str:
     """从 chart pkl（DataFrame）生成 chart HTML（bootcdn CDN 加载 plotly.js，不内联）。
 
     落盘到 artifact cache 目录，后续请求直接 send_file。
     """
     import pickle as _pickle
+
     import plotly
     from rdagent.log.ui.qlib_report_figure import report_figure
 
@@ -908,8 +1163,8 @@ def get_chart_artifact():
 
     支持 If-None-Match → 304。HTML 通过 bootcdn CDN 加载 plotly.js（不内联 2.7MB）。
     """
-    from werkzeug.utils import secure_filename
 
+    from werkzeug.utils import secure_filename
     trace_id = request.args.get('id', '')
     loop_str = request.args.get('loop', '')
     if not trace_id:
@@ -1065,46 +1320,7 @@ def update_trace():
     _drain_user_requests_into_messages(task)
 
     if task.process is not None and not task.is_alive():
-        if not task.messages or task.messages[-1].get("tag") != "END":
-            end_code = task.get_end_code()
-            if end_code == 0:
-                end_msg = {
-                    "tag": "END",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "content": {
-                        "error_msg": "RD-Agent process has completed.",
-                        "end_code": end_code,
-                    },
-                }
-            else:
-                error_detail = ""
-                log_path = Path(task.stdout_path)
-                if log_path.exists():
-                    try:
-                        text = log_path.read_text(errors="replace")
-                        lines = text.splitlines()
-                        tb_start = -1
-                        for i, line in enumerate(lines):
-                            if "Traceback (most recent call last)" in line:
-                                tb_start = i
-                        if tb_start >= 0:
-                            error_detail = "\n".join(lines[tb_start:])
-                        else:
-                            error_detail = "\n".join(lines[-30:])
-                    except Exception:
-                        error_detail = "(failed to read log file)"
-                end_msg = {
-                    "tag": "END",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "content": {
-                        "error_msg": f"RD-Agent process exited abnormally (exit code {end_code}).",
-                        "end_code": end_code,
-                        "traceback": error_detail[-3000:] if error_detail else "",
-                    },
-                }
-            task.messages.append(end_msg)
-            _update_trace_state(_trace_id_to_external(trace_id), end_msg)
-            app.logger.warning(f"Process for {trace_id} has ended (exit_code={end_code}).")
+        _finalize_task(task, _trace_id_to_external(trace_id), task.get_end_code())
 
     total = len(task.messages)
 
@@ -1166,13 +1382,25 @@ def list_trace_statuses():
     Single bulk request replacing N+1 full-trace fetches on the homepage.
     Response is sorted by created_at DESC, id ASC.
     """
-    items = [
-        {"id": tid, **_trace_state_public({
-            **state,
-            "status": _resolve_trace_status(tid, state["status"]),
-        })}
-        for tid, state in trace_states.items()
-    ]
+    requested_id = request.args.get("id", "").strip()
+    items = []
+    for tid, state in trace_states.items():
+        if requested_id and tid != requested_id:
+            continue
+        public_state = {**state, "status": _resolve_trace_status(tid, state["status"])}
+        try:
+            durable = read_task_state(log_folder_path / tid)
+        except Exception:
+            durable = None
+        if durable:
+            public_state.update(
+                status=durable.get("status", public_state["status"]),
+                created_at=durable.get("created_at") or public_state.get("created_at"),
+                updated_at=durable.get("updated_at") or public_state.get("updated_at"),
+                end_code=durable.get("end_code"),
+                reason=durable.get("reason"),
+            )
+        items.append({"id": tid, **_trace_state_public(public_state)})
     items.sort(key=lambda x: (x.get("created_at") or "", x["id"]), reverse=True)
     return jsonify(items), 200
 
@@ -1289,10 +1517,25 @@ def upload_file():
         trace_name=trace_name,
         ui_server_port=app.config["UI_SERVER_PORT"],
         assigned_gpu=assigned_gpu,
+        requested_loops=loop_n_val if target_name != "fin_factor_report" else None,
+        requested_items=len(files) if target_name == "fin_factor_report" else None,
     )
     task.start()
     app.logger.warning(f"Task {log_trace_path} started.")
     rdagent_processes[str(log_trace_path)] = task
+    trace_states.setdefault(
+        f"{scenario}/{trace_name}",
+        {
+            "status": "running",
+            "loops": set(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": None,
+            "has_chart": False,
+            "end_code": None,
+            "reason": None,
+            "_tags_seen": set(),
+        },
+    )
     # 记录用户原始输入，供前端 TaskBrief 展示（区别于 LLM 生成的 hypothesis）。
     # 只进内存 messages（/trace 直接返回其切片），不调 _update_trace_state 以免污染 status/loops 投影。
     task.messages.append({
@@ -1303,7 +1546,7 @@ def upload_file():
             "scenario": scenario,
             "loops": loop_n_val,
             "auto_mode": auto_mode,
-        },
+        }
     })
     # 注意：不在此处初始化 trace_states（catalog）。
     # 子进程的第一条 /receive 消息到达时，_update_trace_state 会自动补建。
@@ -1312,7 +1555,7 @@ def upload_file():
         jsonify(
             {
                 "id": f"{scenario}/{trace_name}",
-            }
+            },
         ),
         200,
     )
@@ -1715,16 +1958,22 @@ def control_process():
         return jsonify({"error": "No running process for given id"}), 400
 
     try:
+        update_task_state(id, status="error", end_code=-1, reason="user_cancelled")
         if task.is_alive():
             task.stop()
+        _cleanup_task_containers(task.task_token)
 
         if not task.messages or task.messages[-1].get("tag") != "END":
             task.messages.append(
                 {
                     "tag": "END",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "content": {"error_msg": "RD-Agent process was stopped by user.", "end_code": -1},
-                }
+                    "content": {
+                        "error_msg": "RD-Agent process was stopped by user.",
+                        "end_code": -1,
+                        "reason": "user_cancelled",
+                    }
+                },
             )
             _update_trace_state(_trace_id_to_external(id), task.messages[-1])
             app.logger.warning(f"Process for {id} has been stopped.")
@@ -1927,6 +2176,19 @@ def run_predict():
     )
     task.start()
     rdagent_processes[str(log_trace_path)] = task
+    trace_states.setdefault(
+        f"{scenario}/{trace_name}",
+        {
+            "status": "running",
+            "loops": set(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": None,
+            "has_chart": False,
+            "end_code": None,
+            "reason": None,
+            "_tags_seen": set(),
+        },
+    )
     return jsonify({"task_id": f"{scenario}/{trace_name}"})
 
 
@@ -1962,6 +2224,7 @@ def server_static_files(fn):
 
 def main(port: int = 19899):
     app.config["UI_SERVER_PORT"] = port
+    _recover_interrupted_tasks(log_folder_path)
     _load_existing_traces(log_folder_path)
     app.run(debug=False, host="0.0.0.0", port=port)
 

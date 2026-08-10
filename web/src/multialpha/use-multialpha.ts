@@ -16,6 +16,7 @@ export function useMultiAlpha() {
   const loadingName = ref('')
   const selectedLoop = ref<number | null>(null)
   const statuses = ref<Record<string, TraceStatus>>({})
+  const createdAts = ref<Record<string, string | null>>({})
   const cache = new Map<string, TraceMessage[]>()
   const requests = new Map<string, Promise<TraceMessage[]>>()
   let activeController: AbortController | null = null
@@ -30,7 +31,7 @@ export function useMultiAlpha() {
 
   const tasks = computed<TraceTask[]>(() => traceIds.value.map(id => {
     const [scenario, ...name] = id.split('/')
-    return { id, scenario, name: name.join('/'), status: statuses.value[id] || 'idle' }
+    return { id, scenario, name: name.join('/'), status: statuses.value[id] || 'idle', createdAt: createdAts.value[id] ?? null }
   }))
   const view = computed(() => buildTraceView(messages.value, selectedLoop.value, statuses.value[currentTraceId.value]))
 
@@ -53,7 +54,7 @@ export function useMultiAlpha() {
         if (cached && statuses.value[id] !== 'error') statuses.value[id] = deriveTraceStatus(cached)
       }
       // C2: 批量获取所有 trace 状态（单次请求，替代 N+1 全量拉取）
-      loadStatusesBatch(generation)
+      await loadStatusesBatch(generation)
     }
     catch (error) { listError.value = error instanceof Error ? error.message : '任务列表加载失败'; ElMessage.error(listError.value) }
     finally { listLoading.value = false }
@@ -65,6 +66,7 @@ export function useMultiAlpha() {
       if (generation !== listGeneration) return  // 旧请求过期，丢弃
       for (const item of items) {
         statuses.value[item.id] = item.status
+        createdAts.value[item.id] = item.created_at
       }
       // /traces/status 已按 created_at DESC, id ASC 排序——据此重排 traceIds
       const order = new Map(items.map((it, i) => [it.id, i]))
@@ -78,6 +80,13 @@ export function useMultiAlpha() {
     } catch {
       // /traces/status 不可用：状态保持默认（idle），不影响列表展示
     }
+  }
+
+  async function refreshStatus(id: string) {
+    const items = await fetchTraceStatuses(id)
+    const item = items.find(candidate => candidate.id === id)
+    if (item) statuses.value[id] = item.status
+    return item?.status
   }
 
   function stopPolling() {
@@ -114,12 +123,13 @@ export function useMultiAlpha() {
           }
         }
         remember(id, messages.value)
-        const status = deriveTraceStatus(messages.value)
-        statuses.value[id] = status
-        if (status === 'done') return
+        const hasEnd = updates.some(message => message.tag === 'END')
+        if (hasEnd) statuses.value[id] = deriveTraceStatus(messages.value)
       }
     } catch { /* Keep the current rendered data and retry. */ }
     finally { pollBusy = false; pollController = null }
+    try { await refreshStatus(id) } catch { /* END remains a safe real-time fallback. */ }
+    if (statuses.value[id] === 'done' || statuses.value[id] === 'error') return
     if (currentTraceId.value === id) pollTimer = setTimeout(() => void poll(id), 5000)
   }
 
@@ -163,11 +173,13 @@ export function useMultiAlpha() {
           })
         : undefined
       selectedLoop.value = loops.length ? (sotaLoop ?? loops[loops.length - 1]) : null
-      // 不覆盖已有的 error 状态：deriveTraceStatus 仅凭 END tag 判 done，
-      // 但崩溃/停止的任务也有 END（后端补的），会误判为 done。
-      // /traces/status 的 error（进程已死）是更可靠的终态判断。
-      if (statuses.value[id] !== 'error') statuses.value[id] = deriveTraceStatus(result)
-      if (statuses.value[id] !== 'done') void poll(id)
+      if (!statuses.value[id] || statuses.value[id] === 'idle') {
+        try { await refreshStatus(id) } catch { statuses.value[id] = deriveTraceStatus(result) }
+      }
+      if (result.some(message => message.tag === 'END') && !statuses.value[id]) {
+        statuses.value[id] = deriveTraceStatus(result)
+      }
+      if (statuses.value[id] !== 'done' && statuses.value[id] !== 'error') void poll(id)
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       ElMessage.error(error instanceof Error ? error.message : '任务详情加载失败')
@@ -209,7 +221,7 @@ export function useMultiAlpha() {
   async function stopCurrentTask() {
     if (!currentTraceId.value) return
     await controlTask(currentTraceId.value, 'stop')
-    statuses.value[currentTraceId.value] = 'done'; stopPolling(); ElMessage.success('任务已停止')
+    statuses.value[currentTraceId.value] = 'error'; stopPolling(); ElMessage.success('任务已取消')
   }
 
   function selectLoop(loop: number | null) {
