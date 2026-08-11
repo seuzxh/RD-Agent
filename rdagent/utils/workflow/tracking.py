@@ -401,6 +401,23 @@ class WorkflowTracker:
                 max_drawdown=max_drawdown_val,
                 information_ratio=information_ratio_val,
             )
+
+            # Backfill metrics to each produced model row, matched by name.
+            # A fin_model downstream produces a model that belongs to the parent
+            # strategy — register its metrics under the parent's id too.
+            model_strategy_id = self._model_strategy_id()
+            for task in getattr(exp, "sub_tasks", []):
+                if self._is_factor_task(task):
+                    continue
+                name = self._task_name(task)
+                if not name:
+                    continue
+                db.update_model_metrics(
+                    model_strategy_id, name,
+                    annualized_return=annualized_return_val,
+                    max_drawdown=max_drawdown_val,
+                    information_ratio=information_ratio_val,
+                )
         except Exception:
             logger.warning(f"on_step_complete(running): failed to extract metrics for {strategy_id} loop {loop_id}")
 

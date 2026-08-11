@@ -511,24 +511,29 @@ class ResearchDB:
             )
             self.conn.commit()
 
-    def update_models_metrics_for_loop(
+    def update_model_metrics(
         self,
         strategy_id: str,
-        loop_id: int,
+        name: str,
         *,
         annualized_return: float | None = None,
         max_drawdown: float | None = None,
         information_ratio: float | None = None,
     ) -> None:
-        """Update metrics for all models in a specific loop (round_number = loop_id)."""
+        """Update metrics for a single model row matched by (strategy_id, name).
+
+        Targets an exact row by name (not round_number) to avoid collisions when
+        a fin_model downstream model shares a strategy_id with the parent's own
+        models of the same round.
+        """
         with _lock:
             self.conn.execute(
                 """UPDATE models SET
                        annualized_return = COALESCE(?, annualized_return),
                        max_drawdown = COALESCE(?, max_drawdown),
                        information_ratio = COALESCE(?, information_ratio)
-                   WHERE strategy_id = ? AND round_number = ?""",
-                (annualized_return, max_drawdown, information_ratio, strategy_id, loop_id),
+                   WHERE strategy_id = ? AND name = ?""",
+                (annualized_return, max_drawdown, information_ratio, strategy_id, name),
             )
             self.conn.commit()
 
