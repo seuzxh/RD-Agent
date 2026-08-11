@@ -8,8 +8,10 @@ from typing import Optional
 import fire
 
 from rdagent.app.qlib_rd_loop.conf import MODEL_PROP_SETTING
+from rdagent.app.qlib_rd_loop.strategy_loader import load_parent_strategy
 from rdagent.components.workflow.rd_loop import RDLoop
 from rdagent.core.exception import ModelEmptyError
+from rdagent.log import rdagent_logger as logger
 
 
 class ModelRDLoop(RDLoop):
@@ -24,6 +26,7 @@ def main(
     checkout: bool = True,
     base_features_path: Optional[str] = None,
     description: Optional[str] = None,
+    factor_pool_source: Optional[str] = None,
     **kwargs,
 ):
     """
@@ -41,6 +44,24 @@ def main(
     else:
         model_loop = ModelRDLoop.load(path, checkout=checkout)
     model_loop._init_base_features(base_features_path)
+
+    # Factor-pool downstream: when a parent strategy is provided, replace the
+    # ALPHA20 base features with the parent's SOTA factor pool and inject the
+    # strategy so its model registry / SOTA branches activate.
+    if factor_pool_source:
+        parent = load_parent_strategy(factor_pool_source)
+        if parent is not None:
+            pool_factors = parent.alpha_pool.get_sota_factors()
+            if pool_factors:
+                model_loop.plan["features"] = {f.name: f.expression for f in pool_factors}
+                model_loop.plan["feature_codes"] = {f.name: f.code for f in pool_factors}
+            else:
+                logger.warning(
+                    f"No SOTA factors found in parent strategy '{factor_pool_source}'; keeping ALPHA20 baseline."
+                )
+            model_loop.set_strategy(parent)
+        else:
+            logger.warning(f"Failed to load parent strategy '{factor_pool_source}'; using ALPHA20 baseline.")
 
     auto_mode = kwargs.get("auto_mode", False)
     has_queues = "user_interaction_queues" in kwargs and kwargs["user_interaction_queues"] is not None

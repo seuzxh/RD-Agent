@@ -6,10 +6,9 @@ from rdagent.core.conf import RD_AGENT_SETTINGS
 from rdagent.core.exception import ModelEmptyError
 from rdagent.core.utils import cache_with_pickle
 from rdagent.log import rdagent_logger as logger
-from rdagent.scenarios.qlib.developer.utils import process_factor_data
+from rdagent.scenarios.qlib.developer.utils import _build_sota_factor_df
 from rdagent.scenarios.qlib.domain import CompositeModel, SignalStatus, StrategyMetrics
 from rdagent.scenarios.qlib.evaluation import QlibBacktestExecutor
-from rdagent.scenarios.qlib.experiment.factor_experiment import QlibFactorExperiment
 from rdagent.scenarios.qlib.experiment.model_experiment import QlibModelExperiment
 
 executor = QlibBacktestExecutor()
@@ -40,16 +39,7 @@ class QlibModelRunner(CachedRunner[QlibModelExperiment]):
         executor.ensure_baseline_executed(exp, self.develop)
 
         exist_sota_factor_exp = False
-        sota_factor_df = None
-        if self.strategy is not None and self.strategy.alpha_pool.sota_count > 0:
-            logger.info("SOTA factor processing (from SignalPool) ...")
-            if len(exp.based_experiments) > 0:
-                sota_exps = [
-                    be for be in exp.based_experiments
-                    if isinstance(be, QlibFactorExperiment) and be.result is not None
-                ]
-                if len(sota_exps) > 0:
-                    sota_factor_df = process_factor_data(sota_exps)
+        sota_factor_df = _build_sota_factor_df(self.strategy, exp)
 
         if sota_factor_df is not None and not sota_factor_df.empty:
             exist_sota_factor_exp = True

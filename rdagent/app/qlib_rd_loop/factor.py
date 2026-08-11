@@ -9,6 +9,7 @@ from typing import Any, Optional
 import fire
 
 from rdagent.app.qlib_rd_loop.conf import FACTOR_PROP_SETTING
+from rdagent.app.qlib_rd_loop.strategy_loader import load_parent_strategy
 from rdagent.components.workflow.rd_loop import RDLoop
 from rdagent.core.exception import CoderError, FactorEmptyError
 from rdagent.log import rdagent_logger as logger
@@ -36,6 +37,7 @@ def main(
     checkout_path: Optional[str] = None,
     base_features_path: Optional[str] = None,
     description: Optional[str] = None,
+    factor_pool_source: Optional[str] = None,
     **kwargs,
 ):
     """
@@ -57,6 +59,16 @@ def main(
         factor_loop = FactorRDLoop.load(path, checkout=checkout)
 
     factor_loop._init_base_features(base_features_path)
+
+    # Inject a parent strategy (if provided) so the runner's SignalPool /
+    # ModelRegistry branches activate. Base features are NOT replaced here —
+    # only fin_model consumes the pool as its base feature set.
+    if factor_pool_source:
+        parent = load_parent_strategy(factor_pool_source)
+        if parent is not None:
+            factor_loop.set_strategy(parent)
+        else:
+            logger.warning(f"Failed to load parent strategy '{factor_pool_source}'; running without strategy.")
 
     # Determine interaction mode:
     # - auto_mode=True → fully autonomous, no interaction at all (CLI-style)

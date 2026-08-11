@@ -59,6 +59,8 @@ class RDLoop(LoopBase, metaclass=LoopMeta):
             import_class(PROP_SETTING.runner)(scen) if hasattr(PROP_SETTING, "runner") and PROP_SETTING.runner else None
         )
 
+        self.strategy: Any = None  # set via set_strategy(); injected into runners for SignalPool / ModelRegistry
+
         self.summarizer: Experiment2Feedback = (
             import_class(PROP_SETTING.summarizer)(scen)
             if hasattr(PROP_SETTING, "summarizer") and PROP_SETTING.summarizer
@@ -71,6 +73,19 @@ class RDLoop(LoopBase, metaclass=LoopMeta):
     def _set_interactor(self, user_request_q: Queue, user_response_q: Queue):
         self.user_request_q = user_request_q
         self.user_response_q = user_response_q
+
+    def set_strategy(self, strategy) -> None:
+        """Inject a domain Strategy into the loop and its runners.
+
+        Activates the runners' SignalPool / ModelRegistry branches (SOTA factor
+        processing, model registration). No-op when a runner has no ``strategy``
+        attribute (falls back to previous behavior).
+        """
+        self.strategy = strategy
+        for attr in ("runner", "factor_runner", "model_runner"):
+            r = getattr(self, attr, None)
+            if r is not None and hasattr(r, "strategy"):
+                r.strategy = strategy
 
     def _init_base_features(self, base_features_path: str | None):
         if base_features_path is not None:

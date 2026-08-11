@@ -13,7 +13,7 @@ from rdagent.components.runner import CachedRunner
 from rdagent.core.exception import FactorEmptyError
 from rdagent.log import rdagent_logger as logger
 from rdagent.oai.llm_utils import md5_hash
-from rdagent.scenarios.qlib.developer.utils import process_factor_data
+from rdagent.scenarios.qlib.developer.utils import _build_sota_factor_df
 from rdagent.scenarios.qlib.domain import FactorMetrics, RawFactor, SignalStatus
 from rdagent.scenarios.qlib.evaluation import QlibBacktestExecutor
 from rdagent.scenarios.qlib.experiment.factor_experiment import QlibFactorExperiment
@@ -92,16 +92,7 @@ class QlibFactorRunner(CachedRunner[QlibFactorExperiment]):
         )
 
         # ── SOTA factors: from SignalPool ──
-        sota_factor_df = None
-        if self.strategy is not None and self.strategy.alpha_pool.sota_count > 0:
-            logger.info("SOTA factor processing (from SignalPool) ...")
-            if len(exp.based_experiments) > 0:
-                sota_exps = [
-                    be for be in exp.based_experiments
-                    if isinstance(be, QlibFactorExperiment) and be.result is not None
-                ]
-                if len(sota_exps) > 0:
-                    sota_factor_df = process_factor_data(sota_exps)
+        sota_factor_df = _build_sota_factor_df(self.strategy, exp)
 
         # ── Process new factors ──
         # If the experiment has no custom sub-tasks (e.g. first-run baseline),

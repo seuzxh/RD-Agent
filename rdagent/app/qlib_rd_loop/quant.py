@@ -8,6 +8,7 @@ from typing import Any, Optional
 import fire
 
 from rdagent.app.qlib_rd_loop.conf import QUANT_PROP_SETTING
+from rdagent.app.qlib_rd_loop.strategy_loader import load_parent_strategy
 from rdagent.components.workflow.conf import BasePropSetting
 from rdagent.components.workflow.rd_loop import RDLoop
 from rdagent.core.conf import RD_AGENT_SETTINGS
@@ -58,6 +59,8 @@ class QuantRDLoop(RDLoop):
         logger.log_object(self.factor_runner, tag="factor runner")
         self.model_runner: Developer = import_class(PROP_SETTING.model_runner)(scen)
         logger.log_object(self.model_runner, tag="model runner")
+
+        self.strategy: Any = None  # set via set_strategy(); injected into runners
 
         self.factor_summarizer: Experiment2Feedback = import_class(PROP_SETTING.factor_summarizer)(scen)
         logger.log_object(self.factor_summarizer, tag="factor summarizer")
@@ -136,6 +139,7 @@ def main(
     checkout: bool = True,
     base_features_path: Optional[str] = None,
     description: Optional[str] = None,
+    factor_pool_source: Optional[str] = None,
     **kwargs,
 ):
     """
@@ -149,6 +153,16 @@ def main(
     else:
         quant_loop = QuantRDLoop.load(path, checkout=checkout)
     quant_loop._init_base_features(base_features_path)
+
+    # Inject a parent strategy (if provided) so the runners' SignalPool /
+    # ModelRegistry branches activate. Base features are NOT replaced here —
+    # only fin_model consumes the pool as its base feature set.
+    if factor_pool_source:
+        parent = load_parent_strategy(factor_pool_source)
+        if parent is not None:
+            quant_loop.set_strategy(parent)
+        else:
+            logger.warning(f"Failed to load parent strategy '{factor_pool_source}'; running without strategy.")
 
     auto_mode = kwargs.get("auto_mode", False)
     has_queues = "user_interaction_queues" in kwargs and kwargs["user_interaction_queues"] is not None

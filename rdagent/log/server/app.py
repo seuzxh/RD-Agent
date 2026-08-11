@@ -950,6 +950,7 @@ def upload_file():
             "base_features_path": str(trace_files_path),
             "description": request.form.get("description"),
             "auto_mode": auto_mode,
+            "factor_pool_source": request.form.get("factor_pool_source"),
         }
     if scenario == "Finance Whole Pipeline":
         target_name = "fin_quant"
