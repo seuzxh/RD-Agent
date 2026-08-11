@@ -60,6 +60,9 @@ def main(
                     f"No SOTA factors found in parent strategy '{factor_pool_source}'; keeping ALPHA20 baseline."
                 )
             model_loop.set_strategy(parent)
+            # Record the parent association so the tracker routes the produced
+            # model into the parent's Model Lab (strategy_id = 父策略).
+            model_loop.parent_strategy_id = factor_pool_source
         else:
             logger.warning(f"Failed to load parent strategy '{factor_pool_source}'; using ALPHA20 baseline.")
 

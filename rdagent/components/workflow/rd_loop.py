@@ -60,6 +60,10 @@ class RDLoop(LoopBase, metaclass=LoopMeta):
         )
 
         self.strategy: Any = None  # set via set_strategy(); injected into runners for SignalPool / ModelRegistry
+        # Set by a fin_model loop that consumes a parent strategy's factor pool
+        # (factor_pool_source). The tracker routes produced models to this parent
+        # strategy_id so they merge into the parent's Model Lab.
+        self.parent_strategy_id: Any = None
 
         self.summarizer: Experiment2Feedback = (
             import_class(PROP_SETTING.summarizer)(scen)

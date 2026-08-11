@@ -210,6 +210,19 @@ class WorkflowTracker:
             duration_ms=None,  # timing is handled by LoopBase
         )
 
+    def _model_strategy_id(self) -> str | None:
+        """Strategy id under which a produced model should be recorded.
+
+        A fin_model run that consumes a parent strategy's factor pool produces a
+        model that *belongs* to the parent (strategy_id = 父策略), so it must be
+        registered under the parent's id for the Model Lab to merge it in.
+        Falls back to the run's own derived strategy id otherwise.
+        """
+        parent_id = getattr(self.loop_base, "parent_strategy_id", None)
+        if parent_id:
+            return parent_id
+        return self._derive_strategy_id()
+
     def _detect_experiment_type(self, exp: Any) -> str:
         """Detect whether an experiment is 'alpha' (factor) or 'model'.
 
@@ -319,8 +332,11 @@ class WorkflowTracker:
                     if ws_path:
                         code_path = str(Path(ws_path) / "model.py")
 
+                # A fin_model consuming a parent's factor pool produces a model
+                # that belongs to the parent — register it under the parent's
+                # strategy_id so it merges into the parent's Model Lab.
                 db.upsert_model(
-                    strategy_id, name,
+                    self._model_strategy_id(), name,
                     experiment_id=experiment_id,
                     model_type=getattr(task, "model_type", None),
                     architecture=getattr(task, "architecture", None),
@@ -451,7 +467,9 @@ class WorkflowTracker:
                 if self._is_factor_task(task):
                     db.update_factor_status(strategy_id, name, status)
                 else:
-                    db.update_model_status(strategy_id, name, status)
+                    # Match the model's registration strategy id (parent for a
+                    # fin_model downstream), not the run's own derived id.
+                    db.update_model_status(self._model_strategy_id(), name, status)
 
         # The record step only fires when a loop has run end-to-end. The
         # `decision` reflects whether the factors beat SOTA — a rejected round
