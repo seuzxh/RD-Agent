@@ -13,6 +13,7 @@
           <el-option label="已淘汰" value="deprecated"/>
         </el-select>
         <el-input v-model="search" size="small" placeholder="搜索因子名..." clearable style="width:200px"/>
+        <el-button type="primary" size="small" style="margin-left:auto" @click="emit('createModel', [...factors])">新建模型任务</el-button>
       </div>
       <el-table :data="filteredFactors" size="small">
         <el-table-column type="expand">
@@ -43,10 +44,10 @@
 </template>
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { fetchStrategyFactors } from '../../services/research-api'
+import { fetchStrategyFactors, type FactorItem } from '../../services/research-api'
 
 const props = defineProps<{ strategyId: string }>()
-defineEmits<{ retry: [] }>()
+const emit = defineEmits<{ retry: []; createModel: [factors: FactorItem[]] }>()
 
 const loading = ref(false)
 const error = ref('')
