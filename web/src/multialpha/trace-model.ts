@@ -16,6 +16,27 @@ export function deriveTraceStatus(messages:TraceMessage[]):TraceStatus{
   return 'running'
 }
 
+export interface PipelineStage { name:string; state:'done'|'active'|'idle' }
+
+const pipelineStageDefs:[string,string[]][]= [
+  ['假设生成',['research.hypothesis']],
+  ['实验设计',['research.tasks']],
+  ['因子代码',['evolving.codes']],
+  ['收益曲线',['feedback.metric','feedback.return_chart']],
+  ['反馈评审',['evolving.feedbacks','feedback.hypothesis_feedback']],
+]
+
+export function derivePipelineStages(messages:TraceMessage[],status:TraceStatus):PipelineStage[]{
+  const tags=new Set(messages.map(item=>item.tag))
+  let activeFound=false
+  return pipelineStageDefs.map(([name,required])=>{
+    const done=required.some(tag=>tags.has(tag))
+    const active=status==='running'&&!done&&!activeFound
+    if(active)activeFound=true
+    return{name,state:done?'done':active?'active':'idle'}
+  })
+}
+
 function parseFactors(value:unknown):FactorItem[]{return arrayValue(value).map((item,index)=>{const data=objectValue(item)||{};const variables=objectValue(data.variables);return{name:String(data.name||data.factor_name||data.task_name||`Factor ${index+1}`),description:String(data.description||data.factor_description||''),formula:String(data.formulation||data.formula||data.expression||''),variables:variables?Object.fromEntries(Object.entries(variables).map(([key,val])=>[key,textValue(val)])):undefined,code:String(data.code||'')}})}
 function parseCodes(value:unknown):CodeFile[]{const files:CodeFile[]=[];for(const raw of arrayValue(value)){const item=objectValue(raw);const workspace=objectValue(item?.workspace);if(!item||!workspace||!Object.keys(workspace).length)continue;for(const [name,content] of Object.entries(workspace)){if(typeof content==='string'&&content.trim())files.push({name,content,target:String(item.target_task_name||''),evoId:item.evo_id as string|number|undefined})}}if(files.length)return files;const data=objectValue(value);if(typeof data?.code==='string')return[{name:'factor.py',content:data.code}];if(typeof value==='string')return[{name:'factor.py',content:value}];return[]}
 function parseMetricValues(value:unknown):Record<string,number|string>{const data=objectValue(value);if(!data)return{};const nested=objectValue(data.result);const source=nested||objectValue(data.metrics)||data;return Object.fromEntries(Object.entries(source).filter(([,item])=>['string','number'].includes(typeof item)).map(([key,item])=>[key,item as number|string]))}

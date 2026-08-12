@@ -11,27 +11,12 @@
 </template>
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TraceMessage } from '../types'
+import { derivePipelineStages } from '../trace-model'
+import type { TraceMessage, TraceStatus } from '../types'
 
-const props = defineProps<{ messages: TraceMessage[] }>()
+const props = defineProps<{ messages: TraceMessage[]; status: TraceStatus }>()
 
-const defs: [string, string[]][] = [
-  ['假设生成', ['research.hypothesis']],
-  ['实验设计', ['research.tasks']],
-  ['因子代码', ['evolving.codes']],
-  ['收益曲线', ['feedback.metric', 'feedback.return_chart']],
-  ['反馈评审', ['evolving.feedbacks', 'feedback.hypothesis_feedback']],
-]
-
-const stages = computed(() => {
-  const tags = new Set(props.messages.map(item => item.tag))
-  let activeFound = false
-  return defs.map(([name, required]) => {
-    const done = required.some(tag => tags.has(tag))
-    const state = done ? 'done' : !activeFound ? (activeFound = true, 'active') : 'idle'
-    return { name, state }
-  })
-})
+const stages = computed(() => derivePipelineStages(props.messages, props.status))
 </script>
 <style scoped>
 .pipeline-spinner{
