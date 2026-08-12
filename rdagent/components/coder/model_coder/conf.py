@@ -16,7 +16,7 @@ class ModelCoSTEERSettings(CoSTEERSettings):
 def get_model_env(
     conf_type: Optional[str] = None,
     extra_volumes: dict = {},
-    running_timeout_period: int = 600,
+    running_timeout_period: int = 3600,
     enable_cache: Optional[bool] = None,
 ) -> Env:
     conf = ModelCoSTEERSettings()

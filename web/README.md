@@ -1,7 +1,7 @@
 # Multiαlpha Web
 
 Vite + Vue 3 + TypeScript 前端，多页应用（MPA）结构。当前生产构建仅输出
-**MultiAlpha 量化决策终端**入口。
+**Multiα1pha 量化决策终端**入口。
 
 ## 环境要求
 
@@ -22,20 +22,20 @@ npm install
 npm run dev
 ```
 
-- 开发服务器监听 `http://localhost:8080`，并自动打开 MultiAlpha 入口。
-- MultiAlpha API 请求通过 Vite 代理转发到 `http://localhost:19899`，覆盖以下路径：
+- 开发服务器监听 `http://localhost:8080`，并自动打开 Multiα1pha 入口。
+- Multiα1pha API 请求通过 Vite 代理转发到 `http://localhost:19899`，覆盖以下路径：
   `/traces` `/trace` `/predict` `/upload` `/control` `/logs` `/stdout` `/health`
 
 入口地址：
 
 | 入口 | 开发访问地址 | 说明 |
 | --- | --- | --- |
-| MultiAlpha | http://localhost:8080/multialpha.html | 当前主入口，`dev` 默认打开 |
+| Multiα1pha | http://localhost:8080/multialpha.html | 当前主入口，`dev` 默认打开 |
 | Finance Prediction | http://localhost:8080/predict.html | 股池预测，独立页面，与主页平级 |
 | R&D-Agent | http://localhost:8080/ | 原 R&D-Agent 应用，仅开发模式可访问 |
 
 > 生产构建目前不输出 `index.html`，R&D-Agent 入口仅在 `npm run dev` 下可用。
-> MultiAlpha 与 Finance Prediction 是两个相互独立的 Vue 应用（各自 `createApp`），主页通过"📊 预测"按钮跨页跳转到 `predict.html`。
+> Multiα1pha 与 Finance Prediction 是两个相互独立的 Vue 应用（各自 `createApp`），主页通过"📊 预测"按钮跨页跳转到 `predict.html`。
 
 ## 生产构建
 

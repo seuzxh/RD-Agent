@@ -268,14 +268,14 @@ onMounted(loadSchema)
 </script>
 
 <style scoped>
-.settings-page { display: flex; height: 100%; position: relative; }
+.settings-page { display: flex; flex: 1; width: 100%; height: 100%; position: relative; }
 .settings-nav { width: 200px; flex: none; border-right: 1px solid var(--ma-line); background: #fff; padding: 8px 0; overflow-y: auto; }
 .nav-header { padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--ma-gold-dark); }
 .nav-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 16px; border: 0; border-left: 3px solid transparent; background: none; text-align: left; cursor: pointer; font-size: 13px; color: var(--ma-ink); }
 .nav-item:hover { background: var(--ma-surface-2); }
 .nav-item.active { border-left-color: var(--ma-gold); background: var(--ma-gold-soft); color: var(--ma-gold-dark); font-weight: 500; }
 .nav-icon { font-size: 14px; }
-.settings-main { flex: 1; overflow-y: auto; padding: 20px; max-width: 960px; margin: 0 auto; }
+.settings-main { flex: 1; overflow-y: auto; padding: 24px 32px 60px; }
 .settings-loading, .settings-error { display: flex; align-items: center; gap: 8px; justify-content: center; padding: 60px; color: var(--ma-muted); }
 .settings-error { color: var(--ma-danger); }
 .group-title { margin: 0 0 16px; font-size: 18px; font-weight: 600; }

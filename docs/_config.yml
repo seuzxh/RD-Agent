@@ -1,0 +1,33 @@
+title: MultiAlpha
+description: 基于 RD-Agent + Qlib 的量化金融因子挖掘平台文档
+
+# 项目页面必须设置 baseurl！仓库名是 RD-Agent
+url: "https://seuzxh.github.io"
+baseurl: "/RD-Agent"
+
+# 不使用外部主题，使用自定义 _layouts/default.html
+# theme: minima
+
+# Markdown 处理
+markdown: kramdown
+kramdown:
+  parse_block_html: true
+  syntax_highlighter: rouge
+
+# 排除非文档文件
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor
+  - .sass-cache
+  - .jekyll-cache
+  - .jekyll-metadata
+  - superpowers
+
+# 页面默认布局
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default

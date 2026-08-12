@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import random
+import threading
 import traceback
 from collections import defaultdict
 from contextlib import redirect_stderr, redirect_stdout
@@ -125,6 +126,7 @@ class RDAgentTask:
         trace_name: str,
         ui_server_port: int | None = None,
         create_process: bool = True,
+        assigned_gpu: int | None = None,
     ) -> None:
         self.target_name = target_name
         self.kwargs = kwargs
@@ -133,6 +135,7 @@ class RDAgentTask:
         self.scenario = scenario
         self.trace_name = trace_name
         self.ui_server_port = ui_server_port
+        self.assigned_gpu = assigned_gpu
         self.process: Process | None = None
 
         # Two IPC queues for user interaction.
@@ -181,6 +184,9 @@ class RDAgentTask:
 
     def _run(self) -> None:
         import os as _os
+        # GPU 轮转：子进程隔离到分配的物理 GPU
+        if self.assigned_gpu is not None:
+            _os.environ["CUDA_VISIBLE_DEVICES"] = str(self.assigned_gpu)
         # Ensure critical env vars survive into the forked subprocess.
         # Some environments (nohup, systemd) don't propagate these properly.
         if not _os.environ.get("CONDA_DEFAULT_ENV"):
@@ -245,6 +251,37 @@ class RDAgentTask:
 rdagent_processes: dict[str, RDAgentTask] = {}
 log_folder_path = Path(UI_SETTING.trace_folder).absolute()
 
+# ==================== GPU 池（多任务轮转分配）====================
+def _detect_gpu_count() -> int:
+    """启动时自动探测可用 GPU 数量。"""
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=index", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=5)
+        return len([l for l in result.stdout.strip().split("\n") if l.strip()])
+    except Exception:
+        return 0
+
+_gpu_pool_lock = threading.Lock()
+_gpu_pool: set[int] = set()       # 已分配的 GPU id
+_gpu_total: int = _detect_gpu_count()
+
+def _acquire_gpu() -> int | None:
+    """分配一个空闲 GPU。全部占用时返回 None（降级为共享全部 GPU）。"""
+    if _gpu_total == 0:
+        return None
+    with _gpu_pool_lock:
+        for gid in range(_gpu_total):
+            if gid not in _gpu_pool:
+                _gpu_pool.add(gid)
+                return gid
+    return None
+
+def _release_gpu(gpu_id: int) -> None:
+    with _gpu_pool_lock:
+        _gpu_pool.discard(gpu_id)
+
 # ==================== Catalog 状态投影层（C1）====================
 # 轻量读模型：trace_id → 状态快照，由事件流投影而来，列表/状态查询只读这里。
 trace_states: dict[str, dict] = {}
@@ -264,12 +301,12 @@ app.config["_LOG_FOLDER_PATH"] = str(log_folder_path)
 
 
 def _derive_status_from_tags(tags_seen: set[str]) -> str:
-    """从已观察的 tag 集合推导 trace 状态（复用前端 deriveTraceStatus 逻辑）。"""
+    """从已观察的 tag 集合推导 trace 状态。
+
+    注意：feedback.hypothesis_feedback / feedback.metric 在每一轮 Loop 结束时
+    都会发送，不能作为整个任务完成的标志。只有 END 标签才表示任务真正结束。
+    """
     if "END" in tags_seen:
-        return "done"
-    has_final_feedback = "feedback.hypothesis_feedback" in tags_seen
-    has_metric = "feedback.metric" in tags_seen
-    if has_final_feedback and has_metric:
         return "done"
     if any("error" in t.lower() for t in tags_seen):
         return "error"
@@ -279,22 +316,22 @@ def _derive_status_from_tags(tags_seen: set[str]) -> str:
 def _resolve_trace_status(external_id: str, catalog_status: str) -> str:
     """结合 catalog 状态 + 进程存活状态，给出最终对外状态。
 
-    - catalog 已判 done/error → 直接采用（完成信号可靠，无需检查进程）
-    - catalog 判 running → 检查进程是否真的存活：
-        存活 → running；已死/不存在 → error（异常终止）
+    进程存活检查优先级最高：只要子进程还在跑，就一定是 running，
+    因为每一轮 Loop 结束时的 feedback 标签会被 catalog 误判为 done。
 
-    注意：直接用 catalog 已存的 status（由 _index_trace_catalog_from_files
-    或 _update_trace_state 推导），不重新调 _derive_status_from_tags——
-    因为 catalog 路径的 _tags_seen 存的是路径关键字（'feedback'/'hypothesis'），
-    粒度与 _derive_status_from_tags 要求的完整 tag 名不一致。
+    - 进程存活 → running（覆盖 catalog 的 done 误判）
+    - 进程已死/不存在：
+        catalog 判 done → done（历史任务由 feedback+hypothesis 标记完成）
+        catalog 判 running → error（进程异常终止但未写 END）
     """
-    if catalog_status != "running":
-        return catalog_status
-
     internal_id = str(log_folder_path / external_id)
     task = rdagent_processes.get(internal_id)
     if task is not None and task.is_alive():
         return "running"
+
+    if catalog_status != "running":
+        return catalog_status
+
     return "error"
 
 
@@ -540,51 +577,69 @@ def _sota_from_messages(messages: list[dict]) -> dict:
 
     Fallback for webUI-launched tasks where no __session__/ exists but the
     message stream contains research.hypothesis / evolving.codes / feedback.* tags.
+
+    SOTA is defined as the *last* loop whose ``feedback.hypothesis_feedback`` has
+    ``decision == True``. All artifacts (hypothesis, factors, codes, metrics,
+    feedback) are taken from that accepted loop.
     """
     import json as _json
 
-    # Find the last accepted feedback (decision=True)
-    sota_loop = None
-    sota_hypothesis = None
-    sota_feedback = None
-    sota_metrics = {}
-    sota_factors = []
-    sota_codes = []
+    accepted_loops: list[int | None] = []
+    per_loop: dict[int | None, dict[str, dict]] = {}
 
     for msg in messages:
         tag = msg.get("tag", "")
         content = msg.get("content", {})
         loop_id = msg.get("loop_id")
 
-        if tag == "research.hypothesis" and isinstance(content, dict):
-            sota_hypothesis = content
-            sota_loop = loop_id
-        elif tag == "research.tasks" and isinstance(content, list):
-            sota_factors = content if isinstance(content, list) else []
-        elif tag == "evolving.codes" and isinstance(content, list):
-            sota_codes = content
-        elif tag == "feedback.metric" and isinstance(content, dict):
-            result_str = content.get("result", "")
-            if isinstance(result_str, str):
-                try:
-                    sota_metrics = _json.loads(result_str)
-                except Exception:
-                    pass
-            sota_loop = loop_id
-        elif tag == "feedback.hypothesis_feedback" and isinstance(content, dict):
-            sota_feedback = content
+        if not isinstance(content, (dict, list)):
+            continue
 
-    if not sota_hypothesis and not sota_metrics:
-        return {"error": "No SOTA data", "detail": "Message stream has no hypothesis or metric messages"}
+        if loop_id not in per_loop:
+            per_loop[loop_id] = {}
+
+        if tag in (
+            "research.hypothesis",
+            "research.tasks",
+            "evolving.codes",
+            "feedback.metric",
+            "feedback.hypothesis_feedback",
+        ):
+            per_loop[loop_id][tag] = content
+
+        if tag == "feedback.hypothesis_feedback" and isinstance(content, dict) and content.get("decision") is True:
+            accepted_loops.append(loop_id)
+
+    if not accepted_loops:
+        return {"error": "No SOTA data", "detail": "No accepted feedback (decision=True) found"}
+
+    sota_loop = accepted_loops[-1]
+    sota_data = per_loop.get(sota_loop, {})
+
+    sota_hypothesis = sota_data.get("research.hypothesis")
+    sota_feedback = sota_data.get("feedback.hypothesis_feedback")
+
+    sota_metrics: dict = {}
+    metric_content = sota_data.get("feedback.metric")
+    if isinstance(metric_content, dict):
+        result_str = metric_content.get("result", "")
+        if isinstance(result_str, str):
+            try:
+                sota_metrics = _json.loads(result_str)
+            except Exception:
+                pass
+
+    sota_factors = sota_data.get("research.tasks", [])
+    sota_codes = sota_data.get("evolving.codes", [])
 
     # Build factor list with code
     factors_out = []
-    for i, f in enumerate(sota_factors):
+    for i, f in enumerate(sota_factors if isinstance(sota_factors, list) else []):
         if not isinstance(f, dict):
             continue
         name = f.get("name", f.get("factor_name", f"factor_{i}"))
         code = ""
-        for c in sota_codes:
+        for c in sota_codes if isinstance(sota_codes, list) else []:
             if isinstance(c, dict) and c.get("target_task_name") == name:
                 ws = c.get("workspace", {})
                 if isinstance(ws, dict):
@@ -718,11 +773,11 @@ def _load_existing_traces(trace_root: Path) -> None:
 # C4: /receive 收到 feedback.return_chart 时，把 5MB chart_html 替换为轻量 descriptor。
 # C5: GET /api/v2/trace/artifact 按 trace_id + loop_id 按需生成 chart HTML。
 
-# plotly.js CDN URL（bootcdn 国内镜像）的规范定义在
-# rdagent/log/ui/qlib_report_figure.py 的 _PLOTLY_VERSION/_PLOTLY_CDN_URL（共享生成器使用）。
-# 版本选择说明：bootcdn 同步自 cdnjs，plotly.js 在 cdnjs 上最高只到 3.1.1（6.x 未同步，会 404）。
-# 2.35.3 是 cdnjs/bootcdn 上稳定可用的最高 2.x 版本，覆盖 report_figure 用到的全部
-# trace/layout 特性；Python 后端仍可用任意版本生成 figure JSON（仅作为数据源）。
+# plotly.js 本地化（原 bootcdn CDN 国内加载耗时 ~10s，改为本地静态文件）。
+# 文件位于 git_ignore_folder/static/assets/plotly-2.35.3.min.js
+# 由 Flask send_from_directory 服务，与 multialpha JS/CSS 同源同速。
+_PLOTLY_VERSION = "2.35.3"
+_PLOTLY_LOCAL_PATH = f"/assets/plotly-{_PLOTLY_VERSION}.min.js"
 
 
 def _find_chart_pkl(trace_dir: Path, loop_id: int | None) -> Path | None:
@@ -844,6 +899,65 @@ def get_chart_artifact():
 
 # ==================== Chart Artifact END ============================
 
+@app.route("/trace", methods=["POST"])
+def update_trace():
+    data = request.get_json()
+    trace_id = data.get("id")
+    return_all = data.get("all")
+    reset = data.get("reset")
+    cursor = data.get("cursor")  # frontend-managed cursor (message index)
+    log_folder_path = Path(UI_SETTING.trace_folder).absolute()
+    if not trace_id:
+        return jsonify({"error": "Trace ID is required"}), 400
+    trace_id = str(log_folder_path / trace_id)
+
+    task = _get_or_create_task(trace_id)
+
+    # Make sure any pending user-interaction requests are visible to the frontend.
+    _drain_user_requests_into_messages(task)
+
+    if task.process is not None and not task.is_alive():
+        if not task.messages or task.messages[-1].get("tag") != "END":
+            task.messages.append(
+                {
+                    "tag": "END",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "content": {
+                        "error_msg": "RD-Agent process has completed.",
+                        "end_code": task.get_end_code(),
+                    },
+                }
+            )
+            _update_trace_state(_trace_id_to_external(trace_id), task.messages[-1])
+            app.logger.warning(f"Process for {trace_id} has ended.")
+
+    total = len(task.messages)
+
+    # Cursor-based: frontend sends its current message count as cursor.
+    # Returns all messages from cursor to end (no random batching).
+    # Falls back to legacy pointer mode if cursor not provided.
+    if cursor is not None:
+        start = max(0, int(cursor))
+    else:
+        # Legacy pointer mode (backward compat for older frontends)
+        user_ip = request.remote_addr
+        if reset:
+            task.pointers[user_ip] = 0
+        start = task.pointers[user_ip]
+
+    if return_all:
+        start = 0
+
+    returned_msgs = task.messages[start:total]
+
+    # Update legacy pointer for backward compat
+    if cursor is None:
+        user_ip = request.remote_addr
+        task.pointers[user_ip] = total
+
+    return jsonify(returned_msgs), 200
+
+
 @app.route("/stdout", methods=["GET"])
 def download_stdout_file():
     trace_id = request.args.get("id", "")
@@ -919,9 +1033,15 @@ def upload_file():
             else:
                 return jsonify({"error": "Invalid file path"}), 400
 
-    # 并发限制：运行中任务达上限时拒绝新建
+    # 并发限制 + GPU 回收：顺便释放已结束任务的 GPU
     max_concurrent = getattr(UI_SETTING, 'max_concurrent_tasks', 10)
-    running_count = sum(1 for t in rdagent_processes.values() if t.is_alive())
+    running_count = 0
+    for t in rdagent_processes.values():
+        if t.is_alive():
+            running_count += 1
+        elif t.assigned_gpu is not None:
+            _release_gpu(t.assigned_gpu)
+            t.assigned_gpu = None
     if running_count >= max_concurrent:
         return jsonify({
             "error": f"当前有 {running_count} 个任务正在运行（上限 {max_concurrent}），请等待部分任务完成后再新建"
@@ -981,6 +1101,11 @@ def upload_file():
         os.environ.pop("QLIB_FACTOR_MODEL_SELECTOR", None)
 
     app.logger.info(f"Started process for {log_trace_path} with target: {target_name}, kwargs: {kwargs}")
+    assigned_gpu = _acquire_gpu()
+    if assigned_gpu is not None:
+        app.logger.info(f"GPU allocation: assigned GPU {assigned_gpu} for {log_trace_path}")
+    else:
+        app.logger.info(f"GPU allocation: no free GPU, using shared mode for {log_trace_path}")
     task = RDAgentTask(
         target_name=target_name,
         kwargs=kwargs,
@@ -989,6 +1114,7 @@ def upload_file():
         scenario=scenario,
         trace_name=trace_name,
         ui_server_port=app.config["UI_SERVER_PORT"],
+        assigned_gpu=assigned_gpu,
     )
     task.start()
     app.logger.warning(f"Task {log_trace_path} started.")
@@ -1044,6 +1170,70 @@ def upload_file():
         ),
         200,
     )
+
+
+@app.route("/upload/poll", methods=["GET"])
+def poll_upload_ready():
+    """轮询任务文件是否就绪。
+
+    子进程启动后写的第一个 pkl 在 scenario/ 目录下（RDLoop.__init__ 里
+    logger.log_object(scen, tag="scenario")）。检查 pkl 文件（而非仅检查目录），
+    确保就绪标准与 /traces 的可见性标准一致（/traces 要求 rglob("*.pkl") 非空），
+    避免 scenario/ 已 mkdir 但 pkl 尚未落盘时 ready=true 导致跳转后 404。
+    """
+    trace_id = request.args.get("id", "")
+    if not trace_id:
+        return jsonify({"error": "id is required"}), 400
+    trace_dir = (log_folder_path / trace_id).resolve()
+    # 路径越界校验
+    try:
+        if os.path.commonpath([str(trace_dir), str(log_folder_path)]) != str(log_folder_path):
+            return jsonify({"error": "Invalid id"}), 422
+    except (ValueError, OSError):
+        return jsonify({"error": "Invalid id"}), 422
+    ready = any((trace_dir / "scenario").rglob("*.pkl"))
+    return jsonify({"ready": ready}), 200
+
+
+@app.route("/receive", methods=["POST"])
+def receive_msgs():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data received"}), 400
+    except Exception as e:
+        return jsonify({"error": "Internal Server Error"}), 500
+
+    if isinstance(data, list):
+        for d in data:
+            _process_incoming_message(d["id"], d["msg"])
+    else:
+        _process_incoming_message(data["id"], data["msg"])
+
+    return jsonify({"status": "success"}), 200
+
+
+def _process_incoming_message(internal_id: str, msg: dict) -> None:
+    """C4: 处理收到的消息——对 chart 消息做 descriptor 替换，然后 append + 投影。"""
+    tag = msg.get("tag", "")
+    external_id = _trace_id_to_external(internal_id)
+
+    # C4: chart 消息替换为轻量 descriptor（不 append 5MB chart_html）
+    if tag == "feedback.return_chart":
+        loop_id = msg.get("loop_id")
+        timestamp = msg.get("timestamp", datetime.now(timezone.utc).isoformat())
+        descriptor = _make_chart_descriptor(external_id, loop_id, timestamp)
+        task = _get_running_task(internal_id)
+        if task is not None:
+            task.messages.append(descriptor)
+        _update_trace_state(external_id, descriptor)
+        return
+
+    # 普通消息：正常 append + 投影
+    task = _get_running_task(internal_id)
+    if task is not None:
+        task.messages.append(msg)
+    _update_trace_state(external_id, msg)
 
 
 @app.route("/health", methods=["GET"])
@@ -1166,6 +1356,50 @@ def get_settings_schema():
     """返回配置 schema + 当前值（密钥脱敏），供设置页动态渲染表单。"""
     from rdagent.log.server.settings_schema import build_schema_response
     return jsonify(build_schema_response()), 200
+
+
+@app.route("/settings/models", methods=["GET"])
+def list_available_models():
+    """获取当前订阅套餐支持的模型列表（火山引擎 ListArkCodingPlanModel）。
+
+    用户每次进入设置页时前端调一次。AK/SK 缺失时返回静态 fallback。
+    """
+    # 用户指定的额外备选模型（不在 ListArkCodingPlanModel 返回中，手动合并）
+    extra_chat = ["doubao-seed-evolving", "doubao-seed-2.1-turbo", "kimi-k3"]
+
+    ak = os.environ.get("VOLC_ACCESS_KEY", "")
+    sk = os.environ.get("VOLC_SECRET_KEY", "")
+    if not ak or not sk:
+        # 无 AK/SK → 静态 fallback（含 extra）
+        from rdagent.log.server.settings_schema import CHAT_MODEL_OPTIONS, EMBEDDING_MODEL_OPTIONS
+        return jsonify({"chat_models": CHAT_MODEL_OPTIONS, "embedding_models": EMBEDDING_MODEL_OPTIONS}), 200
+
+    try:
+        from volcenginesdkcore import UniversalApi, UniversalInfo, ApiClient, Configuration
+        config = Configuration()
+        config.ak = ak
+        config.sk = sk
+        config.region = "cn-beijing"
+        config.host = "open.volcengineapi.com"
+        config.scheme = "https"
+        config.auto_retry = False
+        client = ApiClient(config)
+        api = UniversalApi(client)
+        info = UniversalInfo(
+            method="POST", service="ark", version="2024-01-01",
+            action="ListArkCodingPlanModel", content_type="application/json",
+        )
+        resp = api.do_call(info, {})
+        api_models = [item["ModelID"] for item in resp.get("Datas", [])]
+        # 合并 extra 备选 + API 返回，去重，加 openai/ 前缀
+        all_chat = sorted(set(api_models + extra_chat))
+        chat_models = [f"openai/{m}" for m in all_chat]
+        embedding_models = ["openai/doubao-embedding-vision"]
+        return jsonify({"chat_models": chat_models, "embedding_models": embedding_models}), 200
+    except Exception as e:
+        app.logger.warning(f"ListArkCodingPlanModel failed: {e}, using fallback")
+        from rdagent.log.server.settings_schema import CHAT_MODEL_OPTIONS, EMBEDDING_MODEL_OPTIONS
+        return jsonify({"chat_models": CHAT_MODEL_OPTIONS, "embedding_models": EMBEDDING_MODEL_OPTIONS}), 200
 
 
 @app.route("/settings", methods=["POST"])

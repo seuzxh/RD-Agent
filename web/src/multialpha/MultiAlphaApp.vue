@@ -8,60 +8,30 @@
       <SettingsPage v-else-if="isSettings" @home="navigateHome"/>
       <section v-else-if="invalidTrace" class="invalid-trace"><span>404 · TRACE NOT FOUND</span><h2>未找到该任务</h2><p>{{ requestedTraceId }}</p><el-button type="primary" @click="navigateHome">返回终端首页</el-button></section>
       <template v-else>
-        <section class="workspace">
-          <DetailHeader :name="currentTask?.name||currentTraceId" :scenario="currentTask?.scenario||''" :status="currentTask?.status||'idle'" :loop="selectedLoop" @stop="stopCurrentTask"/>
-          <el-tabs type="border-card" class="artifact-tabs">
-            <el-tab-pane label="📊 Strategy Dashboard">
-              <StrategyDashboard :strategy-id="currentTraceId" @retry="loadTraceIds"/>
-            </el-tab-pane>
-            <el-tab-pane label="🔬 Alpha Lab">
-              <AlphaLabPanel :strategy-id="currentTraceId" @retry="loadTraceIds" @create-model="openModelDialog"/>
-            </el-tab-pane>
-            <el-tab-pane label="🤖 Model Lab">
-              <ModelLabPanel :strategy-id="currentTraceId" @retry="loadTraceIds"/>
-            </el-tab-pane>
-            <el-tab-pane label="⚡ Live Lab">
-              <PipelineStages :pipeline-nodes="pipelineNodes"/>
-              <TaskBrief :experiments="experiments"/>
-              <AgentFlow :experiments="experiments"/>
-              <LoopSwitcher v-model="selectedLoop" :experiments="experiments"/>
-              <TokenDashboard :nodes="pipelineNodes"/>
-            </el-tab-pane>
-            <el-tab-pane label="📋 Report">
-              <ReportPanel :strategy-id="currentTraceId" @retry="loadTraceIds"/>
-            </el-tab-pane>
-          </el-tabs>
-          <ResultWorkspace :trace-id="currentTraceId" :factors="view.factors" :codes="view.codes" :chart-ref="view.chartRef" :chart-html="view.chartHtml" :metrics="view.metrics" :feedback="view.feedback" @download="downloadResult"/>
-          <MetricsPanel :metrics="view.metrics" :factors="view.factors" :hypothesis="view.hypothesis" :feedback="view.feedback" @download="downloadResult"/>
-          <TraceLoading :visible="loading" :name="loadingName"/>
-        </section>
+        <section class="workspace"><DetailHeader :name="currentTask?.name||currentTraceId" :scenario="currentTask?.scenario||''" :status="currentTask?.status||'idle'" :loop="selectedLoop" @stop="stopCurrentTask"/><PipelineStages :messages="scopedMessages"/><TaskBrief :hypothesis="view.hypothesis" :config="view.config" :factors="view.initialTasks" :user-input="view.userInput"/><AgentFlow :messages="scopedMessages" :factors="view.factors" :codes="view.codes" :metric-values="view.metricValues" :feedback="view.feedback" :hypothesis="view.hypothesis" :status="currentTask?.status||'idle'"/><LoopSwitcher v-model="selectedLoop" :loops="view.loops" :metrics="view.loopMetrics" :sota-loop="view.sotaLoop"/><TokenDashboard :total="view.totalTokens" :prompt="view.promptTokens" :completion="view.completionTokens" :calls="view.callCount" :by-agent="view.tokenByAgent"/><ResultWorkspace :trace-id="currentTraceId" :factors="view.factors" :codes="view.codes" :chart-ref="view.chartRef" :chart-html="view.chartHtml" :metrics="view.metrics" :feedback="view.feedback" @download="downloadResult"/><TraceLoading :visible="loading" :name="loadingName"/></section>
+        <MetricsPanel :metrics="view.metrics" :factors="view.factors" :hypothesis="view.hypothesis" :feedback="view.feedback" @download="downloadResult"/>
       </template>
     </main>
-    <LogConsole :trace-id="currentTraceId" :status="currentTask?.status||'idle'"/><NewTaskDialog ref="dialogRef" v-model="dialogOpen" @submit="handleCreate"/><ModelTaskDialog ref="modelDialogRef" v-model="modelDialogOpen" :strategy-id="modelStrategyId" :factors="modelFactors" @submit="handleModelCreate"/><UserInteractionDialog :messages="messages" :trace-id="currentTraceId"/>
+    <div v-if="uploading" class="upload-overlay"><div class="upload-overlay-card"><span class="loading-spinner" /><section><strong>正在初始化任务环境</strong><p>{{ uploadName }} · 预计 3-5 秒</p></section></div></div>
+    <LogConsole :trace-id="currentTraceId" :status="currentTask?.status||'idle'"/><NewTaskDialog ref="dialogRef" v-model="dialogOpen" @submit="handleCreate"/><UserInteractionDialog :messages="messages" :trace-id="currentTraceId"/>
   </div>
 </template>
 <script setup lang="ts">
-import { computed,onMounted,ref,watch } from 'vue';import { useRoute,useRouter } from 'vue-router';import { ElMessage } from 'element-plus';import { useMultiAlpha } from './use-multialpha'
-import TopBar from './components/TopBar.vue';import TaskSidebar from './components/TaskSidebar.vue';import LandingTerminal from './components/LandingTerminal.vue';import DetailHeader from './components/DetailHeader.vue'
-import PipelineStages from './components/PipelineStages.vue';import TaskBrief from './components/TaskBrief.vue';import AgentFlow from './components/AgentFlow.vue';import LoopSwitcher from './components/LoopSwitcher.vue'
-import TokenDashboard from './components/TokenDashboard.vue';import ResultWorkspace from './components/ResultWorkspace.vue';import MetricsPanel from './components/MetricsPanel.vue'
-import LogConsole from './components/LogConsole.vue';import TraceLoading from './components/TraceLoading.vue';import NewTaskDialog from './components/NewTaskDialog.vue';import ModelTaskDialog from './components/ModelTaskDialog.vue'
-import UserInteractionDialog from './components/UserInteractionDialog.vue';import SettingsPage from './components/SettingsPage.vue'
-import StrategyDashboard from './components/StrategyDashboard.vue';import AlphaLabPanel from './components/AlphaLabPanel.vue';import ModelLabPanel from './components/ModelLabPanel.vue';import ReportPanel from './components/ReportPanel.vue'
-import type { TaskMethod } from './types';import type { FactorItem } from '../services/research-api'
-const route=useRoute(),router=useRouter();const {tasks,currentTraceId,messages,loading,loadingName,listLoading,listError,selectedLoop,view,pipelineNodes,experiments,loadTraceIds,selectTrace,goHome,createTask,stopCurrentTask}=useMultiAlpha();const dialogOpen=ref(false);const dialogRef=ref<InstanceType<typeof NewTaskDialog>|null>(null)
-const modelDialogOpen=ref(false);const modelDialogRef=ref<InstanceType<typeof ModelTaskDialog>|null>(null);const modelStrategyId=ref('');const modelFactors=ref<FactorItem[]>([])
+import { computed,onMounted,ref,watch } from 'vue';import { useRoute,useRouter } from 'vue-router';import { ElMessage } from 'element-plus';import { useMultiAlpha } from './use-multialpha';import TopBar from './components/TopBar.vue';import TaskSidebar from './components/TaskSidebar.vue';import LandingTerminal from './components/LandingTerminal.vue';import DetailHeader from './components/DetailHeader.vue';import PipelineStages from './components/PipelineStages.vue';import TaskBrief from './components/TaskBrief.vue';import AgentFlow from './components/AgentFlow.vue';import LoopSwitcher from './components/LoopSwitcher.vue';import TokenDashboard from './components/TokenDashboard.vue';import ResultWorkspace from './components/ResultWorkspace.vue';import MetricsPanel from './components/MetricsPanel.vue';import LogConsole from './components/LogConsole.vue';import TraceLoading from './components/TraceLoading.vue';import NewTaskDialog from './components/NewTaskDialog.vue';import UserInteractionDialog from './components/UserInteractionDialog.vue';import SettingsPage from './components/SettingsPage.vue';import type { TaskMethod } from './types'
+const route=useRoute(),router=useRouter();const {tasks,currentTraceId,messages,loading,loadingName,listLoading,listError,selectedLoop,view,loadTraceIds,selectTrace,goHome,createTask,stopCurrentTask,uploading,uploadName,waitForTaskReady}=useMultiAlpha();const dialogOpen=ref(false);const dialogRef=ref<InstanceType<typeof NewTaskDialog>|null>(null)
 const requestedTraceId=computed(()=>typeof route.params.traceId==='string'?route.params.traceId:'');const isHome=computed(()=>route.name==='multialpha-home');const isPredict=computed(()=>route.name==='multialpha-predict');const isSettings=computed(()=>route.name==='multialpha-settings');const currentTask=computed(()=>tasks.value.find(task=>task.id===currentTraceId.value));const invalidTrace=computed(()=>!isHome.value&&!isPredict.value&&!isSettings.value&&!listLoading.value&&!tasks.value.some(task=>task.id===requestedTraceId.value))
+const scopedMessages=computed(()=>selectedLoop.value==null?messages.value:messages.value.filter(message=>message.loop_id==null||Number(message.loop_id)===selectedLoop.value))
 async function syncRoute(){if(isHome.value){goHome();return}if(requestedTraceId.value&&!invalidTrace.value&&currentTraceId.value!==requestedTraceId.value)await selectTrace(requestedTraceId.value)}
 watch(()=>route.fullPath,()=>void syncRoute());onMounted(async()=>{await loadTraceIds();await syncRoute()})
 const navigateHome=()=>void router.push({name:'multialpha-home'});const navigateTask=(id:string)=>void router.push({name:'multialpha-task',params:{traceId:id}});const navigatePredict=()=>{window.location.href='./predict.html'};const navigateSettings=()=>void router.push({name:'multialpha-settings'});function focusTasks(){document.querySelector('.task-sidebar')?.classList.add('attention');setTimeout(()=>document.querySelector('.task-sidebar')?.classList.remove('attention'),900)}function openDialog(method:TaskMethod){const runningCount=tasks.value.filter(t=>t.status==='running').length;if(runningCount>=10){ElMessage.warning(`当前有 ${runningCount} 个任务运行中（上限 10），请等待部分完成后再新建`);return}dialogOpen.value=true;requestAnimationFrame(()=>dialogRef.value?.open(method))}
-async function handleCreate(payload:{method:TaskMethod;description:string;scenario:string;loops:number;modelSelector?:string;autoMode?:boolean;files:File[]}){try{const id=await createTask(payload);dialogOpen.value=false;await router.push({name:'multialpha-task',params:{traceId:id}});ElMessage.success('任务已启动')}catch(error){ElMessage.error(error instanceof Error?error.message:'任务启动失败')}}
-function openModelDialog(factors:FactorItem[]){if(!currentTraceId.value)return;modelStrategyId.value=currentTraceId.value;modelFactors.value=factors;modelDialogOpen.value=true;requestAnimationFrame(()=>modelDialogRef.value?.open())}
-async function handleModelCreate(payload:{description:string;strategyId:string;loops:number;modelSelector:string}){try{const id=await createTask({method:'text',description:payload.description,scenario:'Finance Model Implementation',loops:payload.loops,modelSelector:payload.modelSelector,factorPoolSource:payload.strategyId,files:[]});modelDialogOpen.value=false;await router.push({name:'multialpha-task',params:{traceId:id}});ElMessage.success('模型任务已启动')}catch(error){ElMessage.error(error instanceof Error?error.message:'模型任务启动失败')}}
+async function handleCreate(payload:{method:TaskMethod;description:string;scenario:string;loops:number;modelSelector?:string;autoMode?:boolean;files:File[]}){try{const id=await createTask(payload);dialogOpen.value=false;uploading.value=true;uploadName.value=id.split('/').slice(1).join('/')||id;await waitForTaskReady(id);uploading.value=false;await loadTraceIds();await router.push({name:'multialpha-task',params:{traceId:id}});ElMessage.success('任务已启动')}catch(error){uploading.value=false;ElMessage.error(error instanceof Error?error.message:'任务启动失败')}}
 function downloadResult(){const data={traceId:currentTraceId.value,loop:selectedLoop.value,metrics:view.value.metricValues,factors:view.value.factors,codes:view.value.codes,feedback:view.value.feedback};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download=`multialpha_${currentTraceId.value.replace(/[\/\s]/g,'_')}.json`;link.click();URL.revokeObjectURL(url)}
 </script>
 <style scoped>
 .predict-entry-btn{position:fixed;bottom:20px;left:290px;z-index:100;padding:8px 16px;border:none;border-radius:20px;background:var(--ma-gold);color:#fff;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15);transition:opacity .2s}
 .predict-entry-btn:hover{opacity:.85}
-.artifact-tabs { margin-top: 8px; }
+.upload-overlay{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;background:rgba(247,248,250,.9);backdrop-filter:blur(3px)}
+.upload-overlay-card{min-width:330px;padding:20px 24px;display:flex;align-items:center;gap:16px;border:1px solid var(--ma-line);border-radius:9px;background:#fff;box-shadow:var(--ma-shadow)}
+.upload-overlay-card strong{font-size:14px}
+.upload-overlay-card p{margin:5px 0 0;color:var(--ma-muted);font-size:11px}
 </style>
