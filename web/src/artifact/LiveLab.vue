@@ -6,6 +6,11 @@
         <el-table-column label="任务 ID" min-width="160">
           <template #default="{ row }"><strong>{{ formatName(row.id) }}</strong></template>
         </el-table-column>
+        <el-table-column label="任务类型" width="110">
+          <template #default="{ row }">
+            <el-tag :type="scenarioType(row)" size="small">{{ scenarioLabel(row) }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="描述" min-width="200">
           <template #default="{ row }"><span class="desc">{{ row.description || '—' }}</span></template>
         </el-table-column>
@@ -112,7 +117,13 @@ const runningTasks = computed(() => props.strategies)
 
 // Pipeline stages from ResearchDB pipeline_nodes
 const pipelineStages = computed(() => {
-  const steps = pipelineNodes.value.map((n: any) => n.step_name)
+  // Filter to the selected loop so each round shows only its own progression.
+  // Before a loop is selected (selectedLoop == null), fall back to all nodes.
+  const loop = selectedLoop.value
+  const nodes = loop == null
+    ? pipelineNodes.value
+    : pipelineNodes.value.filter((n: any) => n.loop_id === loop)
+  const steps = nodes.map((n: any) => n.step_name)
   const defs = ['direct_exp_gen', 'coding', 'running', 'feedback', 'record']
   let activeFound = false
   return defs.map(name => {
@@ -184,6 +195,26 @@ const callCount = computed(() => pipelineNodes.value.reduce((s: number, n: any) 
 const totalTokens = computed(() => promptTokens.value + completionTokens.value)
 
 function formatName(s: string) { return (s || '').split('/').pop() || s || '' }
+
+// 任务类型标签：按 scenario 区分 fin_factor / fin_model / fin_quant / fin_factor_report，
+// scenario 缺失时回退到 id 前缀（id 形如 "<scenario>/<trace_name>"）。
+const SCENARIO_LABELS: Record<string, string> = {
+  'Finance Data Building': '因子挖掘',
+  'Finance Model Implementation': '模型实现',
+  'Finance Whole Pipeline': '量化全过程',
+  'Finance Data Building (Reports)': 'PDF因子挖掘',
+}
+const SCENARIO_TYPES: Record<string, string> = {
+  'Finance Data Building': 'primary',
+  'Finance Model Implementation': 'success',
+  'Finance Whole Pipeline': 'warning',
+  'Finance Data Building (Reports)': 'info',
+}
+function scenarioOf(row: any): string {
+  return row.scenario || (String(row.id || '').split('/')[0])
+}
+function scenarioLabel(row: any): string { return SCENARIO_LABELS[scenarioOf(row)] || '其他' }
+function scenarioType(row: any): string { return SCENARIO_TYPES[scenarioOf(row)] || 'info' }
 function formatTime(ts: string) { return ts ? ts.slice(0, 19) : '' }
 function statusType(s: string) { return s === 'running' ? 'warning' : s === 'completed' ? 'success' : 'info' }
 function statusLabel(s: string) { return s === 'running' ? '运行中' : s === 'completed' ? '已完成' : '待处理' }
