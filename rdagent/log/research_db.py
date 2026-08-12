@@ -511,6 +511,20 @@ class ResearchDB:
             )
             self.conn.commit()
 
+    def deprecate_active_models(self, strategy_id: str) -> None:
+        """Demote every still-active model of a strategy to ``deprecated``.
+
+        Used on run failure (``on_run_failed``) so a crash that interrupts the
+        loop before the record step does not leave ``active`` models behind —
+        those models were registered during coding but never finalized.
+        """
+        with _lock:
+            self.conn.execute(
+                "UPDATE models SET status = 'deprecated' WHERE strategy_id = ? AND status = 'active'",
+                (strategy_id,),
+            )
+            self.conn.commit()
+
     def update_model_metrics(
         self,
         strategy_id: str,

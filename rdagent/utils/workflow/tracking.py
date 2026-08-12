@@ -521,9 +521,21 @@ class WorkflowTracker:
             return
         try:
             from rdagent.log.research_db import ResearchDB
-            ResearchDB().update_strategy_status(strategy_id, "failed")
+            db = ResearchDB()
+            db.update_strategy_status(strategy_id, "failed")
         except Exception as e:
             logger.warning(f"on_run_failed: failed to update strategy status ({e})")
+            return
+        # A crash interrupts the loop before the record step, so models that were
+        # registered as "active" during coding are never finalized. Demote them to
+        # "deprecated" (not sota) to prevent stale active models from lingering.
+        # Match the registration strategy id used by _on_coding, not the run's own.
+        try:
+            model_sid = self._model_strategy_id()
+            if model_sid:
+                db.deprecate_active_models(model_sid)
+        except Exception as e:
+            logger.warning(f"on_run_failed: failed to deprecate active models ({e})")
 
     # ── helpers ──
 

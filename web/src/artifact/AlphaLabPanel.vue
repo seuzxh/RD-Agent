@@ -7,6 +7,7 @@
         <el-option label="已淘汰" value="deprecated"/>
       </el-select>
       <el-input v-model="search" size="small" placeholder="搜索因子名..." clearable style="width:200px"/>
+      <el-button type="primary" size="small" style="margin-left:auto" @click="emit('createModel', activeStrategy)">新建模型任务</el-button>
     </div>
     <div class="strategy-tags">
       <el-tag
@@ -57,6 +58,7 @@ import { fetchCode } from './api'
 import FormulaBlock from './components/FormulaBlock.vue'
 
 const props = defineProps<{ factors: any[] }>()
+const emit = defineEmits<{ createModel: [strategyId: string] }>()
 const statusFilter = ref('')
 const search = ref('')
 const activeStrategy = ref('')

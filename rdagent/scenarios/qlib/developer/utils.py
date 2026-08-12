@@ -129,32 +129,49 @@ def _process_message_and_df(
     return error_message
 
 
-def _build_sota_factor_df(strategy, exp) -> pd.DataFrame | None:
-    """Rebuild SOTA factor values for a model/factor runner.
+def _build_sota_factor_df(strategy, exp, factor_names: list[str] | None = None) -> pd.DataFrame | None:
+    """Rebuild factor values for a model/factor runner.
 
-    Prefers the strategy's alpha_pool (enables cross-strategy factor pools);
-    factors already covered by ``exp.base_features`` are excluded to avoid
-    duplication. Falls back to the same trace's ``based_experiments`` when the
-    alpha_pool path yields nothing. Returns ``None`` when no SOTA data is
-    available (runners then use their baseline config).
+    ``factor_names`` carries the dialog-picked factors (which may be non-SOTA);
+    it is resolved against the strategy's alpha_pool. When not provided, the
+    strategy's own ``factor_pool_names`` attribute is used, else the SOTA
+    factors. Factors already covered by ``exp.base_features`` are excluded to
+    avoid duplication. Falls back to the same trace's ``based_experiments``
+    when the alpha_pool path yields nothing. Returns ``None`` when no factor
+    data is available (runners then use their baseline config).
     """
-    if strategy is None or strategy.alpha_pool.sota_count <= 0:
+    if strategy is None:
         return None
-    logger.info("SOTA factor processing (from SignalPool) ...")
-    sota_factors = [f for f in strategy.alpha_pool.get_sota_factors() if f.name not in exp.base_features]
-    sota_factor_df = None
-    if sota_factors:
+    pool = strategy.alpha_pool
+    if factor_names is None:
+        factor_names = getattr(strategy, "factor_pool_names", None)
+
+    factors: list[RawFactor] = []
+    if factor_names:
+        factors = [
+            f for n in factor_names if (f := pool.get(n)) is not None and f.name not in exp.base_features
+        ]
+        if not factors:
+            logger.warning(f"Selected factors {factor_names} resolve to nothing usable; falling back to SOTA.")
+    if not factors:
+        if pool.sota_count <= 0:
+            return None
+        factors = [f for f in pool.get_sota_factors() if f.name not in exp.base_features]
+
+    logger.info(f"Factor pool processing ({len(factors)} factors) ...")
+    factor_df = None
+    if factors:
         try:
-            sota_factor_df = process_factor_pool(sota_factors)
+            factor_df = process_factor_pool(factors)
         except FactorEmptyError as e:
-            logger.warning(f"SOTA factor pool rebuild failed: {e}. Falling back to based_experiments.")
-    if sota_factor_df is None and len(exp.based_experiments) > 0:
+            logger.warning(f"Factor pool rebuild failed: {e}. Falling back to based_experiments.")
+    if factor_df is None and len(exp.based_experiments) > 0:
         sota_exps = [
             be for be in exp.based_experiments if isinstance(be, QlibFactorExperiment) and be.result is not None
         ]
         if sota_exps:
-            sota_factor_df = process_factor_data(sota_exps)
-    return sota_factor_df
+            factor_df = process_factor_data(sota_exps)
+    return factor_df
 
 
 def process_factor_data(exp_or_list: List[QlibFactorExperiment] | QlibFactorExperiment) -> pd.DataFrame:

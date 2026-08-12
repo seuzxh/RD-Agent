@@ -16,7 +16,7 @@ extract_model_formulation_system: |-
                 "hyperparameter_name_3": "value of hyperparameter 3"
             },
             "training_hyperparameters" {  # All values are for reference; you can set them yourself
-                "n_epochs": "100",
+                "n_epochs": "20",
                 "lr": "1e-3",
                 "early_stop": 10,
                 "batch_size": 256,

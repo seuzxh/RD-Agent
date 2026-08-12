@@ -111,7 +111,7 @@ class FactorReportLoop(FactorRDLoop, metaclass=LoopMeta):
 
     async def direct_exp_gen(self, prev_out: dict[str, Any]):
         while True:
-            if self.get_unfinished_loop_cnt(self.loop_idx) < RD_AGENT_SETTINGS.get_max_parallel():
+            if self.get_unfinished_loop_cnt(prev_out.get(self.LOOP_IDX_KEY, self.loop_idx)) < RD_AGENT_SETTINGS.get_max_parallel():
                 report_file_path = self.judge_pdf_data_items[self.loop_idx + self.shift_report]
                 logger.info(f"Processing number {self.loop_idx} report: {report_file_path}")
                 exp = extract_hypothesis_and_exp_from_reports(str(report_file_path))

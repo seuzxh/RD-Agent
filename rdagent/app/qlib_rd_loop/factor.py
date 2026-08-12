@@ -66,7 +66,7 @@ def main(
     if factor_pool_source:
         parent = load_parent_strategy(factor_pool_source)
         if parent is not None:
-            factor_loop.set_strategy(parent)
+            factor_loop._set_strategy(parent)
         else:
             logger.warning(f"Failed to load parent strategy '{factor_pool_source}'; running without strategy.")
 

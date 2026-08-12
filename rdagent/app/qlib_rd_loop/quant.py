@@ -76,7 +76,7 @@ class QuantRDLoop(RDLoop):
 
     async def direct_exp_gen(self, prev_out: dict[str, Any]):
         while True:
-            if self.get_unfinished_loop_cnt(self.loop_idx) < RD_AGENT_SETTINGS.get_max_parallel():
+            if self.get_unfinished_loop_cnt(prev_out.get(self.LOOP_IDX_KEY, self.loop_idx)) < RD_AGENT_SETTINGS.get_max_parallel():
                 hypo = self._propose()
                 assert hypo.action in ["factor", "model"]
                 if hypo.action == "factor":
@@ -160,7 +160,7 @@ def main(
     if factor_pool_source:
         parent = load_parent_strategy(factor_pool_source)
         if parent is not None:
-            quant_loop.set_strategy(parent)
+            quant_loop._set_strategy(parent)
         else:
             logger.warning(f"Failed to load parent strategy '{factor_pool_source}'; running without strategy.")
 

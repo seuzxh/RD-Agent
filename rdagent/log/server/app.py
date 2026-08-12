@@ -1071,6 +1071,7 @@ def upload_file():
             "description": request.form.get("description"),
             "auto_mode": auto_mode,
             "factor_pool_source": request.form.get("factor_pool_source"),
+            "factor_pool_names": request.form.get("factor_pool_names"),
         }
     if scenario == "Finance Whole Pipeline":
         target_name = "fin_quant"

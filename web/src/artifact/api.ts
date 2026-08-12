@@ -99,6 +99,26 @@ export function chartUrl(strategyId: string, loop?: number): string {
   return loop == null ? base : `${base}?loop=${loop}`
 }
 
+/** Create a fin_model (Model Implementation) task consuming a parent strategy's factor pool. */
+export async function createModelTask(payload: {
+  description: string
+  strategyId: string
+  loops: number
+  modelSelector: string
+  factorNames: string[]
+}): Promise<{ id?: string; error?: string }> {
+  const formData = new FormData()
+  formData.append('scenario', 'Finance Model Implementation')
+  formData.append('description', payload.description)
+  formData.append('loops', String(payload.loops))
+  formData.append('model_selector', payload.modelSelector)
+  formData.append('factor_pool_source', payload.strategyId)
+  if (payload.factorNames.length) formData.append('factor_pool_names', payload.factorNames.join(','))
+  formData.append('auto_mode', '1')
+  const resp = await fetch('/upload', { method: 'POST', body: formData })
+  return resp.json()
+}
+
 /** Factor/model source code via code_path */
 export async function fetchCode(
   strategyId: string,

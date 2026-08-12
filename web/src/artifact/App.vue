@@ -14,7 +14,7 @@
             <StrategyDashboard :strategies="strategies" @create="showCreateDialog=true" @select="selectedStrategyId=$event; detailVisible=true" />
           </el-tab-pane>
           <el-tab-pane label="🔬 因子库">
-            <AlphaLabPanel :factors="factors" />
+            <AlphaLabPanel :factors="factors" @create-model="openModelDialog" />
           </el-tab-pane>
           <el-tab-pane label="🤖 模型库">
             <ModelLabPanel :models="models" />
@@ -81,17 +81,26 @@
         </section>
       </div>
     </el-dialog>
+
+    <!-- Model Task Dialog -->
+    <ModelTaskDialog
+      v-model="modelDialogVisible"
+      :strategies="modelParentCandidates"
+      :default-strategy-id="modelDefaultStrategyId"
+      @submit="handleModelCreate"
+    />
   </div>
 </template>
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { onMounted, onUnmounted, ref } from 'vue'
-import { fetchAlphaLab, fetchModelLab, fetchReport, fetchStrategies } from './api'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { createModelTask, fetchAlphaLab, fetchModelLab, fetchReport, fetchStrategies } from './api'
 import StrategyDashboard from './StrategyDashboard.vue'
 import AlphaLabPanel from './AlphaLabPanel.vue'
 import ModelLabPanel from './ModelLabPanel.vue'
 import ReportPanel from './ReportPanel.vue'
 import LiveLab from './LiveLab.vue'
+import ModelTaskDialog, { type ModelParentCandidate } from './components/ModelTaskDialog.vue'
 
 const loading = ref(false)
 const error = ref('')
@@ -114,6 +123,24 @@ const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detailError = ref('')
 const detailData = ref<any>(null)
+
+// Model task dialog
+const modelDialogVisible = ref(false)
+const modelDefaultStrategyId = ref('')
+const modelParentCandidates = computed<ModelParentCandidate[]>(() => {
+  const byId = new Map<string, any[]>()
+  for (const f of factors.value) {
+    const id = f.strategy_id || f._strategy_name || ''
+    if (!id) continue
+    if (!byId.has(id)) byId.set(id, [])
+    byId.get(id)!.push(f)
+  }
+  return Array.from(byId.entries()).map(([id, fs]) => ({
+    id,
+    name: id.split('/').pop() || id,
+    factors: fs,
+  }))
+})
 
 async function loadAll() {
   loading.value = true; error.value = ''
@@ -160,6 +187,26 @@ async function createStrategy() {
     ElMessage.error(e.message)
   } finally {
     creating.value = false
+  }
+}
+
+function openModelDialog(strategyId: string) {
+  modelDefaultStrategyId.value = strategyId || modelParentCandidates.value[0]?.id || ''
+  modelDialogVisible.value = true
+}
+
+async function handleModelCreate(payload: { description: string; strategyId: string; loops: number; modelSelector: string; factorNames: string[] }) {
+  try {
+    const result = await createModelTask(payload)
+    if (result.id) {
+      ElMessage.success(`模型任务已启动: ${result.id}`)
+      modelDialogVisible.value = false
+      setTimeout(loadAll, 2000)
+    } else {
+      ElMessage.error(result.error || '启动失败')
+    }
+  } catch (e: any) {
+    ElMessage.error(e.message)
   }
 }
 

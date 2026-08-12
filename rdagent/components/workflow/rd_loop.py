@@ -78,12 +78,13 @@ class RDLoop(LoopBase, metaclass=LoopMeta):
         self.user_request_q = user_request_q
         self.user_response_q = user_response_q
 
-    def set_strategy(self, strategy) -> None:
+    def _set_strategy(self, strategy) -> None:
         """Inject a domain Strategy into the loop and its runners.
 
-        Activates the runners' SignalPool / ModelRegistry branches (SOTA factor
-        processing, model registration). No-op when a runner has no ``strategy``
-        attribute (falls back to previous behavior).
+        Named with a leading underscore so ``LoopMeta._get_steps`` does NOT
+        collect it as a workflow step (a ``set_strategy`` step would invoke this
+        method with the loop's prev_out dict, polluting ``self.strategy`` /
+        ``runner.strategy`` with the step-output dict instead of a Strategy).
         """
         self.strategy = strategy
         for attr in ("runner", "factor_runner", "model_runner"):
@@ -217,7 +218,14 @@ class RDLoop(LoopBase, metaclass=LoopMeta):
     # included steps
     async def direct_exp_gen(self, prev_out: dict[str, Any]):
         while True:
-            if self.get_unfinished_loop_cnt(self.loop_idx) < RD_AGENT_SETTINGS.get_max_parallel():
+            # The gate must count unfinished loops BEFORE the current one. Using the
+            # global kickoff counter (self.loop_idx) is wrong: it has already been
+            # advanced past the current loop, so it counts the current loop itself
+            # as unfinished and the gate `unfinished < max_parallel` never opens —
+            # deadlocking any task when max_parallel == 1. Use the loop index of the
+            # loop currently running this step (set via LOOP_IDX_KEY in _run_step).
+            current_loop = prev_out.get(self.LOOP_IDX_KEY, self.loop_idx)
+            if self.get_unfinished_loop_cnt(current_loop) < RD_AGENT_SETTINGS.get_max_parallel():
                 hypo = self._propose()
                 exp = self._exp_gen(hypo)
                 exp.base_features = self.plan["features"]

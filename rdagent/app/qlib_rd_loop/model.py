@@ -27,6 +27,7 @@ def main(
     base_features_path: Optional[str] = None,
     description: Optional[str] = None,
     factor_pool_source: Optional[str] = None,
+    factor_pool_names: Optional[str | list[str]] = None,
     **kwargs,
 ):
     """
@@ -46,20 +47,48 @@ def main(
     model_loop._init_base_features(base_features_path)
 
     # Factor-pool downstream: when a parent strategy is provided, replace the
-    # ALPHA20 base features with the parent's SOTA factor pool and inject the
+    # ALPHA20 base features with the parent's factor pool and inject the
     # strategy so its model registry / SOTA branches activate.
+    #
+    # The dialog lets the user pick factors: by default the SOTA ones, or
+    # manually when the parent has no SOTA. `factor_pool_names` carries that
+    # explicit selection, so even non-SOTA factors are honored. Resolution
+    # order: explicitly-selected names → parent's SOTA factors → ALPHA20.
     if factor_pool_source:
         parent = load_parent_strategy(factor_pool_source)
         if parent is not None:
-            pool_factors = parent.alpha_pool.get_sota_factors()
+            # Normalize factor_pool_names: a comma-separated string comes from
+            # the /upload form; a list/set may come from a direct CLI call.
+            if isinstance(factor_pool_names, str):
+                names = [n.strip() for n in factor_pool_names.split(",") if n.strip()]
+            elif factor_pool_names:
+                names = list(factor_pool_names)
+            else:
+                names = None
+
+            pool_factors = []
+            if names:
+                pool_factors = [
+                    f for f in (parent.alpha_pool.get(n) for n in names) if f is not None
+                ]
+                if not pool_factors:
+                    logger.warning(
+                        f"No selected factors resolve in parent strategy '{factor_pool_source}'; falling back to SOTA."
+                    )
+            if not pool_factors:
+                pool_factors = parent.alpha_pool.get_sota_factors()
             if pool_factors:
                 model_loop.plan["features"] = {f.name: f.expression for f in pool_factors}
                 model_loop.plan["feature_codes"] = {f.name: f.code for f in pool_factors}
             else:
                 logger.warning(
-                    f"No SOTA factors found in parent strategy '{factor_pool_source}'; keeping ALPHA20 baseline."
+                    f"No factors available in parent strategy '{factor_pool_source}'; keeping ALPHA20 baseline."
                 )
-            model_loop.set_strategy(parent)
+            # Attach the explicit selection so the runner's _build_sota_factor_df
+            # honors the dialog-picked factors (including non-SOTA ones) instead
+            # of only SOTA. set_strategy propagates the same object to runner.
+            parent.factor_pool_names = names
+            model_loop._set_strategy(parent)
             # Record the parent association so the tracker routes the produced
             # model into the parent's Model Lab (strategy_id = 父策略).
             model_loop.parent_strategy_id = factor_pool_source
