@@ -1159,6 +1159,8 @@ def upload_file():
                 "scenario": scenario,
                 "loops": loop_n_val,
                 "auto_mode": auto_mode,
+                "factor_pool_source": request.form.get("factor_pool_source"),
+                "factor_pool_names": request.form.get("factor_pool_names"),
             },
         )
     except Exception:

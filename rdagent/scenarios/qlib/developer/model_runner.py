@@ -47,6 +47,12 @@ class QlibModelRunner(CachedRunner[QlibModelExperiment]):
             executor.save_combined_factors(exp.experiment_workspace, combined_factors)
             num_features = str(len(exp.base_features) + len(combined_factors.columns))
 
+        # Python-code 因子池:base_features 为空,features 全来自 combined_factors_df.parquet。
+        # 此时用 conf_combined_factors_model.yaml(label-only QlibDataLoader + StaticDataLoader),
+        # 避免 conf_sota_factors_model.yaml 里 Alpha158DL 对空 feature 抛 "fields cannot be empty"。
+        combined_only = exist_sota_factor_exp and not exp.base_features
+        sota_config = "conf_combined_factors_model.yaml" if combined_only else "conf_sota_factors_model.yaml"
+
         if exp.sub_workspace_list[0].file_dict.get("model.py") is None:
             raise ModelEmptyError("model.py is empty")
         exp.experiment_workspace.inject_files(**{"model.py": exp.sub_workspace_list[0].file_dict["model.py"]})
@@ -67,7 +73,7 @@ class QlibModelRunner(CachedRunner[QlibModelExperiment]):
         if training_hyperparameters:
             env_to_use.update(
                 {
-                    "n_epochs": str(training_hyperparameters.get("n_epochs", "100")),
+                    "n_epochs": "3",   # 临时测试措施:训练太大(7.6M 行),10/5 epoch 都超时(3600s)被 kill,降到 3 使训练在超时前完成
                     "lr": str(training_hyperparameters.get("lr", "2e-4")),
                     "early_stop": str(training_hyperparameters.get("early_stop", 10)),
                     "batch_size": str(training_hyperparameters.get("batch_size", 256)),
@@ -83,7 +89,7 @@ class QlibModelRunner(CachedRunner[QlibModelExperiment]):
                 )
                 result, stdout = executor.execute_and_parse(
                     exp.experiment_workspace,
-                    qlib_config_name="conf_sota_factors_model.yaml",
+                    qlib_config_name=sota_config,
                     run_env=env_to_use,
                 )
             else:
@@ -98,7 +104,7 @@ class QlibModelRunner(CachedRunner[QlibModelExperiment]):
                 env_to_use.update({"dataset_cls": "DatasetH", "num_features": num_features})
                 result, stdout = executor.execute_and_parse(
                     exp.experiment_workspace,
-                    qlib_config_name="conf_sota_factors_model.yaml",
+                    qlib_config_name=sota_config,
                     run_env=env_to_use,
                 )
             else:

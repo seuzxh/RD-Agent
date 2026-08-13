@@ -36,9 +36,9 @@
       <el-table-column label="信息比率" width="90">
         <template #default="{ row }"><span>{{ (row.information_ratio ?? row.strategy_metrics?.information_ratio)?.toFixed(4) ?? '—' }}</span></template>
       </el-table-column>
-      <el-table-column label="状态" width="70">
+      <el-table-column label="状态" width="80">
         <template #default="{ row }">
-          <el-tag :type="row.status==='sota'?'success':'info'" size="small">{{ row.status==='sota'?'SOTA':'活跃' }}</el-tag>
+          <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="策略" min-width="140">
@@ -87,6 +87,18 @@ async function onExpandChange(row: any, expandedRows: any[]) {
   }
 }
 
+function statusType(s: string) {
+  if (s === 'sota') return 'success'
+  if (s === 'active') return 'primary'
+  if (s === 'deprecated') return 'info'
+  return 'warning'
+}
+function statusLabel(s: string) {
+  if (s === 'sota') return 'SOTA'
+  if (s === 'active') return '活跃'
+  if (s === 'deprecated') return '已淘汰'
+  return '待定'
+}
 function fmtPct(v: number | undefined | null) {
   if (v == null) return '—'
   return `${(Math.abs(v) * 100).toFixed(2)}%`

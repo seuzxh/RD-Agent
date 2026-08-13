@@ -78,8 +78,11 @@ def main(
             if not pool_factors:
                 pool_factors = parent.alpha_pool.get_sota_factors()
             if pool_factors:
-                model_loop.plan["features"] = {f.name: f.expression for f in pool_factors}
-                model_loop.plan["feature_codes"] = {f.name: f.code for f in pool_factors}
+                # Python-code 因子无 Qlib expression,经运行时 combined_factors_df.parquet
+                # 喂给模型(见 _build_sota_factor_df),不作为 Qlib base_features。
+                # 空 base_features + factor_pool_names → 模型只用这批因子 + label。
+                model_loop.plan["features"] = {}
+                model_loop.plan["feature_codes"] = {}
             else:
                 logger.warning(
                     f"No factors available in parent strategy '{factor_pool_source}'; keeping ALPHA20 baseline."

@@ -88,7 +88,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { fetchStrategyDetail, fetchCode, chartUrl as buildChartUrl } from './api'
+import { fetchStrategyDetail, fetchCode, fetchJson, chartUrl as buildChartUrl } from './api'
 import AgentFlow from './components/AgentFlow.vue'
 import ResultWorkspace from './components/ResultWorkspace.vue'
 import MetricsPanel from './components/MetricsPanel.vue'
@@ -223,10 +223,47 @@ function downloadResult() {
   // Leave the download handling to the parent in ticket 04; no-op for ticket 03.
 }
 
-// Refetch factor code via /code when strategy or loop changes
+// Refetch factor/model code via /code when strategy or loop changes
 async function reloadCodes() {
-  codes.value = []
   if (!selectedId.value) return
+  // fin_model tasks route their produced model to the parent factor-pool strategy:
+  // read the parent id from the task's user_input_snapshot and fetch the parent's model code.
+  if (String(selectedId.value).startsWith('Finance Model Implementation')) {
+    // user_input_snapshot is stored as a JSON string in SQLite; /detail returns it raw,
+    // so parse it before reading the parent reference.
+    const uis = strategyDetail.value?.user_input_snapshot
+    let parent: string | undefined
+    if (typeof uis === 'string') {
+      try { parent = JSON.parse(uis).factor_pool_source } catch { parent = undefined }
+    } else {
+      parent = uis?.factor_pool_source
+    }
+    if (!parent) return
+    // Only surface the model code once the current loop's coding step has actually
+    // completed — otherwise 代码实现 would prematurely show 完成 (from a stale parent
+    // model) while hypothesis/design is still producing the current model.
+    const loopId = selectedLoop.value
+    const codingDone = loopId == null
+      ? pipelineNodes.value.some(n => n.step_name === 'coding' && n.status === 'completed')
+      : pipelineNodes.value.some(n => n.loop_id === loopId && n.step_name === 'coding' && n.status === 'completed')
+    if (!codingDone) return
+    try {
+      const models = await fetchJson<{ name: string; experiment_id?: number }[]>(`/api/models?strategy_id=${encodeURIComponent(parent)}`)
+      // Correlate the current loop to its model via experiment_id: the produced model is
+      // registered under the parent strategy but keeps experiment_id = the task's own
+      // experiment (which carries the loop_id). This picks the exact model the current
+      // loop's coding generated, instead of the latest-created one (which may belong to
+      // another loop/task and would mismatch the shown code).
+      const exp = (strategyDetail.value?.experiments || []).find(e => e.loop_id === loopId)
+      const target = exp ? models.find(m => m.experiment_id === exp.id) : undefined
+      if (!target) return
+      try {
+        const res = await fetchCode(parent, target.name, 'model')
+        codes.value = res.code ? [{ name: res.name, content: res.code }] : []
+      } catch { /* keep empty */ }
+    } catch { /* keep empty */ }
+    return
+  }
   const names = factors.value.map(f => f.name).filter(Boolean)
   if (!names.length) return
   try {
@@ -242,7 +279,7 @@ async function reloadCodes() {
   } catch { /* keep empty */ }
 }
 
-watch([selectedId, selectedLoop], () => reloadCodes())
+watch([selectedId, selectedLoop], () => { codes.value = []; reloadCodes() })
 
 function subscribeSse(strategyId: string) {
   unsubscribeSse()
