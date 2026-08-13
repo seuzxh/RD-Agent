@@ -1,6 +1,6 @@
 import type { AgentAnalysis, AgentDirection, StockOption } from './types'
 
-const API_BASE = (import.meta.env.VITE_ANA_AGENTS_API_BASE || 'https://appt15.crsec.com.cn:3004').replace(/\/$/, '')
+const API_BASE = (import.meta.env.VITE_ANA_AGENTS_API_BASE || 'https://newapp.crsec.com.cn:3004').replace(/\/$/, '')
 const analysisMemoryCache = new Map<string, AgentAnalysis>()
 
 interface AnalysisPayload {

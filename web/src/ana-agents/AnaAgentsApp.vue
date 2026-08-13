@@ -37,7 +37,7 @@
               :remote-method="queueStockSearch"
               :loading="searchLoading"
               :no-data-text="searchError || '未找到匹配标的'"
-              placeholder="例如：600988 或 赤峰黄金"
+              placeholder="例如：601398"
               @change="handleStockChange"
             >
               <el-option
