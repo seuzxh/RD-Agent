@@ -32,10 +32,11 @@ npm run dev
 | --- | --- | --- |
 | Multiα1pha | http://localhost:8080/multialpha.html | 当前主入口，`dev` 默认打开 |
 | Finance Prediction | http://localhost:8080/predict.html | 股池预测，独立页面，与主页平级 |
-| R&D-Agent | http://localhost:8080/ | 原 R&D-Agent 应用，仅开发模式可访问 |
+| AI 投研圆桌 | http://localhost:8080/ana-agents.html | 六智能体观点总览 |
+| 智能体观点详情 | http://localhost:8080/ana-agent-detail.html | 单智能体观点详情，由总览页携带参数进入 |
 
-> 生产构建目前不输出 `index.html`，R&D-Agent 入口仅在 `npm run dev` 下可用。
-> Multiα1pha 与 Finance Prediction 是两个相互独立的 Vue 应用（各自 `createApp`），主页通过"📊 预测"按钮跨页跳转到 `predict.html`。
+> 旧 R&D-Agent 页面源码仍保留在 `src/views/`、`src/router/`、`src/main.ts` 和
+> `src/App.vue`，但已移除 HTML 入口，不参与开发入口和生产构建。
 
 ## 生产构建
 
@@ -47,7 +48,8 @@ npm run build
 npm run build:flask
 ```
 
-两种命令的产物一致，均为 `multialpha.html` + `assets/`，只是输出目录不同。
+两种命令的产物一致，均包含 `multialpha.html`、`predict.html`、`ana-agents.html`、
+`ana-agent-detail.html` 和 `assets/`，只是输出目录不同。
 
 ## 本地预览生产构建
 
@@ -67,13 +69,19 @@ npm run preview
 
 ```
 web/
-├── index.html              # R&D-Agent 入口（仅开发模式）
 ├── multialpha.html         # MultiAlpha 入口（主入口，参与生产构建）
+├── predict.html            # 股池预测入口
+├── ana-agents.html         # 六智能体观点总览入口
+├── ana-agent-detail.html   # 单智能体观点详情入口
 ├── vite.config.ts          # Vite 配置：MPA 入口、代理、端口、自动打开
 ├── package.json            # 脚本：dev / build / build:flask / preview
 └── src/
-    ├── main.ts             # R&D-Agent 应用入口
+    ├── main.ts             # 已废弃的 R&D-Agent 启动源码（无 HTML 入口）
+    ├── views/              # 已废弃的 R&D-Agent 页面源码
+    ├── router/             # 已废弃的 R&D-Agent 路由源码
     ├── multialpha/         # MultiAlpha 应用入口与逻辑
+    ├── predict/            # 股池预测应用入口与逻辑
+    ├── ana-agents/         # 六智能体总览及详情页逻辑
     └── services/           # API 封装（rdagent-api.ts），相对路径请求
 ```
 

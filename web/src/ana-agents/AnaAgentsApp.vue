@@ -134,8 +134,18 @@
             v-for="(agent, index) in AGENTS"
             :key="agent.id"
             class="agent-card"
-            :class="[`state-${agentStates[agent.id].status}`, analysisDirectionClass(agent.id)]"
+            :class="[
+              `state-${agentStates[agent.id].status}`,
+              analysisDirectionClass(agent.id),
+              { 'is-clickable': canOpenDetail(agent.id) },
+            ]"
             :style="{ '--agent-accent': agent.accent, '--reveal-delay': `${index * 65}ms` }"
+            :role="canOpenDetail(agent.id) ? 'link' : undefined"
+            :tabindex="canOpenDetail(agent.id) ? 0 : undefined"
+            :aria-label="canOpenDetail(agent.id) ? `查看${agent.name}${agent.dimension}观点详情` : undefined"
+            @click="openAgentDetail(agent)"
+            @keydown.enter="openAgentDetail(agent)"
+            @keydown.space.prevent="openAgentDetail(agent)"
           >
             <header class="agent-head">
               <div class="agent-portrait">
@@ -203,8 +213,11 @@
                 <span>结论</span>
                 {{ agentStates[agent.id].analysis?.summary || '本次分析暂无总结。' }}
               </blockquote>
-              <footer v-if="agentStates[agent.id].analysis?.createdAt">
-                数据生成于 {{ agentStates[agent.id].analysis?.createdAt }}
+              <footer>
+                <span v-if="agentStates[agent.id].analysis?.createdAt">
+                  数据生成于 {{ agentStates[agent.id].analysis?.createdAt }}
+                </span>
+                <b>查看详情&nbsp; ↗</b>
               </footer>
             </div>
 
@@ -354,14 +367,14 @@ function handleStockChange(stockId: string): void {
   resetAgentStates()
 }
 
-async function runAgent(agent: AgentDefinition, generation: number): Promise<void> {
+async function runAgent(agent: AgentDefinition, generation: number, forceRefresh = false): Promise<void> {
   if (!selectedStock.value) return
   agentControllers.get(agent.id)?.abort()
   const controller = new AbortController()
   agentControllers.set(agent.id, controller)
   agentStates[agent.id] = { status: 'loading', analysis: null, error: '' }
   try {
-    const analysis = await analyzeStock(agent.id, selectedStock.value.code, controller.signal)
+    const analysis = await analyzeStock(agent.id, selectedStock.value.code, controller.signal, forceRefresh)
     if (generation !== consultationGeneration || controller.signal.aborted) return
     agentStates[agent.id] = { status: 'success', analysis, error: '' }
   } catch (error) {
@@ -381,14 +394,15 @@ async function runAgent(agent: AgentDefinition, generation: number): Promise<voi
 async function startConsultation(): Promise<void> {
   if (!selectedStock.value) return
   abortAnalysis()
+  const forceRefresh = hasStarted.value
   hasStarted.value = true
   const generation = consultationGeneration
-  await Promise.allSettled(AGENTS.map((agent) => runAgent(agent, generation)))
+  await Promise.allSettled(AGENTS.map((agent) => runAgent(agent, generation, forceRefresh)))
 }
 
 function retryAgent(agent: AgentDefinition): void {
   if (!selectedStock.value) return
-  void runAgent(agent, consultationGeneration)
+  void runAgent(agent, consultationGeneration, true)
 }
 
 function directionLabel(direction?: AgentDirection): string {
@@ -404,6 +418,21 @@ function statusLabel(status: AgentResultStatus): string {
 function analysisDirectionClass(agentId: number): string {
   const direction = agentStates[agentId].analysis?.direction
   return direction ? `vote-${direction}` : ''
+}
+
+function canOpenDetail(agentId: number): boolean {
+  return agentStates[agentId].status === 'success' && agentStates[agentId].analysis !== null
+}
+
+function openAgentDetail(agent: AgentDefinition): void {
+  if (!selectedStock.value || !canOpenDetail(agent.id)) return
+  const params = new URLSearchParams({
+    agentId: String(agent.id),
+    stockCode: selectedStock.value.code,
+    stockName: selectedStock.value.name,
+  })
+  if (selectedStock.value.marketLabel) params.set('marketLabel', selectedStock.value.marketLabel)
+  window.location.href = `./ana-agent-detail.html?${params.toString()}`
 }
 
 onBeforeUnmount(() => {

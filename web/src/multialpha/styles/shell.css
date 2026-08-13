@@ -29,4 +29,46 @@
 .topbar-actions .el-button { height: 36px; padding-inline: 16px; border-radius: 4px; }
 .topbar-actions .el-button--primary { background: var(--ma-gold); border-color: var(--ma-gold); }
 .topbar-actions .el-button--primary:hover { background: var(--ma-gold-dark); border-color: var(--ma-gold-dark); }
-.task-sidebar { width: var(--ma-sidebar-width); }
+.task-sidebar { width: var(--ma-sidebar-width); overflow: hidden; }
+.task-sidebar-head { flex: none; padding: 15px 14px 0; }
+.task-sidebar-title,
+.task-list-summary { display: flex; align-items: center; justify-content: space-between; }
+.task-sidebar-title { margin-bottom: 15px; }
+.task-sidebar-title .section-kicker { margin: 0; }
+.task-sidebar-title > span,
+.task-list-summary small {
+  min-width: 24px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--ma-surface-2);
+  color: var(--ma-muted);
+  font: 600 10px/1.5 var(--ma-font-mono);
+  text-align: center;
+}
+.filter-label { margin-bottom: 7px; color: var(--ma-muted); font-size: 10px; font-weight: 600; letter-spacing: .5px; }
+.scenario-tabs { display: grid; gap: 3px; }
+.scenario-tabs button {
+  min-height: 34px;
+  padding: 0 10px 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ma-ink);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+.scenario-tabs button:hover { background: var(--ma-surface-2); }
+.scenario-tabs button.active { border-left-color: var(--ma-gold); background: var(--ma-gold-soft); color: var(--ma-gold-dark); font-weight: 600; }
+.scenario-tabs button small { color: var(--ma-muted); font: 500 10px var(--ma-font-mono); }
+.scenario-tabs button.active small { color: var(--ma-gold-dark); }
+.status-filter-label { margin-top: 15px; }
+.chip-row { margin-top: 0; flex-wrap: wrap; }
+.chip { padding-inline: 9px; }
+.task-list-summary { margin: 14px -14px 0; padding: 10px 14px; border-top: 1px solid var(--ma-line); }
+.task-list-summary > span { color: var(--ma-muted); font-size: 10px; font-weight: 600; letter-spacing: .5px; }
+.task-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }

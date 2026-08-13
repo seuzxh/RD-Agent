@@ -5,6 +5,7 @@
       <span class="brand-text"><small>国新证券</small><strong>MultiAlpha</strong></span>
     </button>
     <div class="topbar-actions">
+      <el-button text @click="$emit('anaAgents')">🧠 智能诊股</el-button>
       <el-button text :loading="healthLoading" @click="checkHealth">🩺 健康检查</el-button>
       <el-button text @click="$emit('settings')">⚙️ 设置</el-button>
       <el-button text :loading="loading" @click="$emit('refresh')">刷新任务</el-button>
@@ -31,7 +32,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { fetchHealth, type HealthCheck } from '../api'
-defineProps<{loading:boolean}>();defineEmits<{home:[];refresh:[];create:[];settings:[]}>()
+defineProps<{loading:boolean}>();defineEmits<{home:[];anaAgents:[];refresh:[];create:[];settings:[]}>()
 const healthVisible=ref(false),healthLoading=ref(false),healthData=ref<HealthCheck|null>(null),healthError=ref('')
 async function checkHealth(){healthLoading.value=true;healthVisible.value=true;healthError.value='';healthData.value=null;try{healthData.value=await fetchHealth()}catch(err){healthError.value=err instanceof Error?err.message:'健康检查失败'}finally{healthLoading.value=false}}
 </script>

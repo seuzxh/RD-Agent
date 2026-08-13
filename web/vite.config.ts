@@ -17,10 +17,10 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        // main: pathResolve('./index.html'),
         multialpha: pathResolve('./multialpha.html'),
         predict: pathResolve('./predict.html'),
         anaAgents: pathResolve('./ana-agents.html'),
+        anaAgentDetail: pathResolve('./ana-agent-detail.html'),
       },
     },
   },
