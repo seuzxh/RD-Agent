@@ -4,7 +4,7 @@ export type AgentStep = 'hypothesis' | 'design' | 'coding' | 'backtest' | 'feedb
 export type TaskMethod = 'text' | 'pdf' | 'optimize' | 'image' | 'trade'
 export type { TraceMessage } from '../services/rdagent-api'
 
-export interface TraceTask { id:string; scenario:string; name:string; status:TraceStatus }
+export interface TraceTask { id:string; scenario:string; name:string; status:TraceStatus; createdAt:string|null }
 export interface CodeFile { name:string; content:string; target?:string; evoId?:string|number }
 export interface MetricItem { label:string; value:string|number; rawValue?:number; tone?:'up'|'down'|'neutral'; percent?:boolean }
 export interface FactorItem { name:string; description?:string; formula?:string; variables?:Record<string,string>; code?:string }
