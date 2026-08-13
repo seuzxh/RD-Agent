@@ -13,7 +13,7 @@ from rdagent.components.runner import CachedRunner
 from rdagent.core.exception import FactorEmptyError
 from rdagent.log import rdagent_logger as logger
 from rdagent.oai.llm_utils import md5_hash
-from rdagent.scenarios.qlib.developer.utils import _build_sota_factor_df
+from rdagent.scenarios.qlib.developer.utils import _build_sota_factor_df, process_factor_data
 from rdagent.scenarios.qlib.domain import FactorMetrics, RawFactor, SignalStatus
 from rdagent.scenarios.qlib.evaluation import QlibBacktestExecutor
 from rdagent.scenarios.qlib.experiment.factor_experiment import QlibFactorExperiment
@@ -95,10 +95,12 @@ class QlibFactorRunner(CachedRunner[QlibFactorExperiment]):
         sota_factor_df = _build_sota_factor_df(self.strategy, exp)
 
         # ── Process new factors ──
-        # If the experiment has no custom sub-tasks (e.g. first-run baseline),
-        # skip custom factor processing and use the baseline config directly.
-        if not exp.sub_tasks or not exp.base_feature_codes:
-            logger.info("No custom factors to process, running baseline ...")
+        # Custom factors (sub_tasks) always drive the merged backtest; the
+        # baseline config is used only when there are no custom factors to
+        # evaluate. base_feature_codes are supplementary (merged via the
+        # combined path), not a gate.
+        if not exp.sub_tasks:
+            logger.info("No custom factors (sub_tasks) to process, running baseline ...")
             # Always use conf_baseline.yaml in this path — conf_combined_factors.yaml
             # requires combined_factors_df.parquet to exist, but save_combined_factors
             # is only called in the new-factor processing path below.
