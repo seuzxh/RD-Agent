@@ -73,7 +73,7 @@ class QlibModelRunner(CachedRunner[QlibModelExperiment]):
         if training_hyperparameters:
             env_to_use.update(
                 {
-                    "n_epochs": "3",   # 临时测试措施:训练太大(7.6M 行),10/5 epoch 都超时(3600s)被 kill,降到 3 使训练在超时前完成
+                    "n_epochs": str(training_hyperparameters.get("n_epochs", "20")),
                     "lr": str(training_hyperparameters.get("lr", "2e-4")),
                     "early_stop": str(training_hyperparameters.get("early_stop", 10)),
                     "batch_size": str(training_hyperparameters.get("batch_size", 256)),
