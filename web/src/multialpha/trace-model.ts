@@ -1,45 +1,69 @@
-import type { ChartRef,CodeFile,FactorItem,FeedbackSummary,MetricItem,TokenByAgent,TraceMessage,TraceStatus,TraceViewModel,UserInput } from './types'
+import type { AgentStep, ChartRef,CodeFile,FactorItem,FeedbackSummary,MetricItem,TokenByAgent,TraceMessage,TraceStatus,TraceViewModel,UserInput } from './types'
 
 function objectValue(value:unknown):Record<string,unknown>|null{if(value&&typeof value==='object'&&!Array.isArray(value))return value as Record<string,unknown>;if(typeof value!=='string')return null;try{return objectValue(JSON.parse(value))}catch{return null}}
 function arrayValue(value:unknown):unknown[]{if(Array.isArray(value))return value;if(typeof value!=='string')return[];try{const parsed=JSON.parse(value);return Array.isArray(parsed)?parsed:[]}catch{return[]}}
 function textValue(value:unknown):string{if(typeof value==='string')return value;if(value==null)return'';try{return JSON.stringify(value,null,2)}catch{return String(value)}}
 
 export function deriveTraceStatus(messages:TraceMessage[]):TraceStatus{
-  let hasEnd=false,hasFinalFeedback=false,hasMetric=false,hasError=false
-  for(let i=messages.length-1;i>=0;i--){const t=messages[i].tag;if(t==='END')hasEnd=true;else if(t==='feedback.hypothesis_feedback')hasFinalFeedback=true;else if(t==='feedback.metric')hasMetric=true;else if(/error/i.test(t||''))hasError=true}
-  if(hasEnd||(hasFinalFeedback&&hasMetric))return 'done'
-  if(hasError)return 'error'
+  for(let i=messages.length-1;i>=0;i--){
+    const message=messages[i]
+    if(message.tag==='END'){
+      const content=objectValue(message.content)
+      const endCode=Number(content?.end_code)
+      return Number.isFinite(endCode)&&endCode===0?'done':'error'
+    }
+  }
   return 'running'
+}
+
+export interface PipelineStage { name:string; state:'done'|'active'|'idle' }
+
+const pipelineStageDefs:[string,string[]][]= [
+  ['假设生成',['research.hypothesis']],
+  ['实验设计',['research.tasks']],
+  ['因子代码',['evolving.codes']],
+  ['收益曲线',['feedback.metric','feedback.return_chart']],
+  ['反馈评审',['evolving.feedbacks','feedback.hypothesis_feedback']],
+]
+
+export function derivePipelineStages(messages:TraceMessage[],status:TraceStatus):PipelineStage[]{
+  const tags=new Set(messages.map(item=>item.tag))
+  let activeFound=false
+  return pipelineStageDefs.map(([name,required])=>{
+    const done=required.some(tag=>tags.has(tag))
+    const active=status==='running'&&!done&&!activeFound
+    if(active)activeFound=true
+    return{name,state:done?'done':active?'active':'idle'}
+  })
 }
 
 function parseFactors(value:unknown):FactorItem[]{return arrayValue(value).map((item,index)=>{const data=objectValue(item)||{};const variables=objectValue(data.variables);return{name:String(data.name||data.factor_name||data.task_name||`Factor ${index+1}`),description:String(data.description||data.factor_description||''),formula:String(data.formulation||data.formula||data.expression||''),variables:variables?Object.fromEntries(Object.entries(variables).map(([key,val])=>[key,textValue(val)])):undefined,code:String(data.code||'')}})}
 function parseCodes(value:unknown):CodeFile[]{const files:CodeFile[]=[];for(const raw of arrayValue(value)){const item=objectValue(raw);const workspace=objectValue(item?.workspace);if(!item||!workspace||!Object.keys(workspace).length)continue;for(const [name,content] of Object.entries(workspace)){if(typeof content==='string'&&content.trim())files.push({name,content,target:String(item.target_task_name||''),evoId:item.evo_id as string|number|undefined})}}if(files.length)return files;const data=objectValue(value);if(typeof data?.code==='string')return[{name:'factor.py',content:data.code}];if(typeof value==='string')return[{name:'factor.py',content:value}];return[]}
 function parseMetricValues(value:unknown):Record<string,number|string>{const data=objectValue(value);if(!data)return{};const nested=objectValue(data.result);const source=nested||objectValue(data.metrics)||data;return Object.fromEntries(Object.entries(source).filter(([,item])=>['string','number'].includes(typeof item)).map(([key,item])=>[key,item as number|string]))}
-const metricLabels:Record<string,string>={IC:'IC',ICIR:'ICIR','Rank IC':'Rank IC','Rank ICIR':'Rank ICIR','1day.excess_return_with_cost.annualized_return':'年化收益','1day.excess_return_with_cost.max_drawdown':'最大回撤','1day.excess_return_with_cost.information_ratio':'信息比率',annualized_return:'年化收益',max_drawdown:'最大回撤',information_ratio:'信息比率'}
-function parseMetrics(value:unknown):{items:MetricItem[];values:Record<string,number|string>}{const values=parseMetricValues(value);const priority=['IC','ICIR','1day.excess_return_with_cost.annualized_return','1day.excess_return_with_cost.max_drawdown','1day.excess_return_with_cost.information_ratio','Rank IC','Rank ICIR'];const keys=[...priority.filter(key=>key in values),...Object.keys(values).filter(key=>!priority.includes(key))].slice(0,16);return{values,items:keys.map(key=>{const raw=values[key],number=Number(raw),percent=/annualized_return|max_drawdown/.test(key);return{label:metricLabels[key]||key,value:Number.isFinite(number)?number:raw,rawValue:Number.isFinite(number)?number:undefined,percent,tone:Number.isFinite(number)?number>0?'up':number<0?'down':'neutral':'neutral'}})}}
+const metricLabels:Record<string,string>={IC:'IC',ICIR:'ICIR','Rank IC':'Rank IC','Rank ICIR':'Rank ICIR','1day.excess_return_without_cost.annualized_return':'年化收益','1day.excess_return_without_cost.max_drawdown':'最大回撤','1day.excess_return_without_cost.information_ratio':'信息比率','1day.excess_return_with_cost.annualized_return':'年化收益(扣费)','1day.excess_return_with_cost.max_drawdown':'最大回撤(扣费)','1day.excess_return_with_cost.information_ratio':'信息比率(扣费)',annualized_return:'年化收益',max_drawdown:'最大回撤',information_ratio:'信息比率'}
+function parseMetrics(value:unknown):{items:MetricItem[];values:Record<string,number|string>}{const values=parseMetricValues(value);const priority=['IC','ICIR','1day.excess_return_without_cost.annualized_return','1day.excess_return_without_cost.max_drawdown','1day.excess_return_without_cost.information_ratio','1day.excess_return_with_cost.annualized_return','1day.excess_return_with_cost.max_drawdown','1day.excess_return_with_cost.information_ratio','Rank IC','Rank ICIR'];const keys=[...priority.filter(key=>key in values),...Object.keys(values).filter(key=>!priority.includes(key))].slice(0,16);return{values,items:keys.map(key=>{const raw=values[key],number=Number(raw),percent=/annualized_return|max_drawdown/.test(key);return{label:metricLabels[key]||key,value:Number.isFinite(number)?number:raw,rawValue:Number.isFinite(number)?number:undefined,percent,tone:Number.isFinite(number)?number>0?'up':number<0?'down':'neutral':'neutral'}})}}
 function parseFeedback(value:unknown):FeedbackSummary{const data=objectValue(value)||{};const decision=data.decision===true||data.decision==='True'||data.decision==='true'?true:data.decision===false||data.decision==='False'||data.decision==='false'?false:null;return{decision,reason:textValue(data.reason),observations:textValue(data.observations),evaluation:textValue(data.hypothesis_evaluation),newHypothesis:textValue(data.new_hypothesis),exception:textValue(data.exception)}}
 function parseConfig(value:unknown){const data=objectValue(value);const raw=textValue(data?.config||value);const lines=raw.split('\n').map(line=>line.trim()).filter(line=>line.startsWith('|')&&line.endsWith('|'));if(lines.length>=3){const keys=lines[0].slice(1,-1).split('|').map(item=>item.trim()),values=lines[2].slice(1,-1).split('|').map(item=>item.trim());return keys.map((key,index)=>({key,value:values[index]||''})).filter(item=>item.value)}return data?Object.entries(data).filter(([,item])=>['string','number'].includes(typeof item)).map(([key,item])=>({key,value:String(item)})):[]}
 
-export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceViewModel{
+export function buildTraceView(messages:TraceMessage[],loop:number|null,status?:'running'|'done'|'error'|'idle'):TraceViewModel{
   // C7: 单遍扫描，合并 latest() 查找 + loop/end/error/config/tasks/metric 收集
   const loopSet=new Set<number>(),loopMetricMap:Record<number,Record<string,number|string>>={}
   let hasEnd=false,hasError=false,firstConfig:unknown,firstTasksLoop0:unknown,userInputObj:Record<string,unknown>|null=null
   // 记录每个 loop 的 feedback.hypothesis_feedback.decision，用于定位 SOTA
   const acceptedLoops=new Set<number>()
-  // token_cost 全量收集（按智能体/步骤聚合），不受 loop 过滤
   const tokenByAgentMap:Record<string,{prompt:number;completion:number;calls:number}>={}
-  // 根据消息流推断当前 token_cost 归属的智能体/步骤
-  let currentAgent = '其他'
-  const agentTagMap:Record<string,string>={
-    'research.hypothesis':'假设生成',
-    'research.tasks':'实验设计',
-    'evolving.codes':'代码实现',
-    'feedback.metric':'回测执行',
-    'feedback.hypothesis_feedback':'反馈评审',
+  const agentLabelMap:Record<string,string>={
+    propose:'假设生成',
+    exp_gen:'实验设计',
+    coding:'代码实现',
+    running:'回测执行',
+    feedback:'反馈评审',
+    report:'报告解析',
+    other:'其他',
   }
   // latest-by-tag（仅限 selectedLoop 范围内）
   let latHypothesis:TraceMessage|undefined,latTasks:TraceMessage|undefined,latCodes:TraceMessage|undefined
-  let latMetric:TraceMessage|undefined,latFeedback:TraceMessage|undefined,latChart:TraceMessage|undefined
+  let latMetric:TraceMessage|undefined,latFeedback:TraceMessage|undefined,latChart:TraceMessage|undefined,latPdfImage:TraceMessage|undefined
   for(let i=0;i<messages.length;i++){
     const m=messages[i],lid=Number(m.loop_id),tag=m.tag
     // loop/end/error/config/tasks 收集（全量 messages，不受 loop 过滤）
@@ -56,17 +80,19 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
     }
     // 用户原始输入：无 loop_id，全局只取首条（不受 loop 过滤）
     else if(tag==='task.user_input'&&userInputObj===null)userInputObj=objectValue(m.content)
-    // 更新当前智能体归属（用于后续 token_cost 归因）
-    if(agentTagMap[tag])currentAgent=agentTagMap[tag]
-    // token_cost 全量收集按智能体聚合（不受 loop 过滤）
-    else if(tag==='token_cost'){
+    // 运行状态标志位（独立判断，不能放入上面的 else-if 链，否则会拦截
+    // feedback.metric / feedback.hypothesis_feedback 的数据收集分支）
+    // token_cost 全量收集按智能体聚合（不受 loop 过滤）；agent 由后端从 tag 上下文直接标注
+    if(tag==='token_cost'){
       const tc=objectValue(m.content)||{}
-      const pt=Number(tc.prompt_tokens||tc.accumulated_prompt_tokens||0)
-      const ct=Number(tc.completion_tokens||tc.accumulated_completion_tokens||0)
-      if(!tokenByAgentMap[currentAgent])tokenByAgentMap[currentAgent]={prompt:0,completion:0,calls:0}
-      tokenByAgentMap[currentAgent].prompt+=pt
-      tokenByAgentMap[currentAgent].completion+=ct
-      tokenByAgentMap[currentAgent].calls++
+      const pt=Number(tc.prompt_tokens||0)
+      const ct=Number(tc.completion_tokens||0)
+      const rawAgent=String(tc.agent||'other')
+      const agent=agentLabelMap[rawAgent]||rawAgent
+      if(!tokenByAgentMap[agent])tokenByAgentMap[agent]={prompt:0,completion:0,calls:0}
+      tokenByAgentMap[agent].prompt+=pt
+      tokenByAgentMap[agent].completion+=ct
+      tokenByAgentMap[agent].calls++
     }
     // latest-by-tag（仅限 loop 范围内）
     if(loop==null||lid==null||lid===loop){
@@ -76,6 +102,7 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
       else if(tag==='feedback.metric')latMetric=m
       else if(tag==='feedback.hypothesis_feedback')latFeedback=m
       else if(tag==='feedback.return_chart')latChart=m
+      else if(tag==='research.pdf_image')latPdfImage=m
     }
   }
   const hypothesis=objectValue(latHypothesis?.content)
@@ -84,6 +111,8 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
   const metricData=parseMetrics(latMetric?.content)
   const feedback=parseFeedback(latFeedback?.content)
   const chartData=objectValue(latChart?.content)
+  const pdfImageData=objectValue(latPdfImage?.content)
+  const pdfImage=typeof pdfImageData?.image==='string'&&pdfImageData.image.trim()?pdfImageData.image as string:null
   const loops=[...loopSet].sort((a,b)=>a-b)
   const loopMetrics:Record<number,string>={}
   for(const loopId of loops){const metric=loopMetricMap[loopId];if(metric&&metric.IC!=null)loopMetrics[loopId]=`IC=${Number(metric.IC).toFixed(3)}`}
@@ -102,5 +131,15 @@ export function buildTraceView(messages:TraceMessage[],loop:number|null):TraceVi
     loops:userInputObj.loops==null?undefined:Number(userInputObj.loops),
     autoMode:typeof userInputObj.auto_mode==='boolean'?userInputObj.auto_mode:userInputObj.auto_mode===undefined?undefined:String(userInputObj.auto_mode)==='true',
   }:null
-  return{hasEnd,hasError,loops,sotaLoop,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:promptTokens+completionTokens,callCount:tokenByAgent.reduce((s,t)=>s+t.calls,0),tokenByAgent,loopMetrics,userInput}
+  let currentStep:AgentStep=null
+  const isRunning=status==='running'||(!status&&!hasEnd&&!hasError)
+  if(isRunning){
+    if(!hypothesis)currentStep='hypothesis'
+    else if(!tasks.length)currentStep='design'
+    else if(!codes.length)currentStep='coding'
+    else if(metricData.values.IC==null)currentStep='backtest'
+    else if(feedback.decision===null)currentStep='feedback'
+  }
+  const latestLoop=loops.length?loops[loops.length-1]:null
+  return{hasEnd,hasError,loops,sotaLoop,latestLoop,hypothesis,initialTasks:parseFactors(firstTasksLoop0),config:parseConfig(firstConfig),factors:tasks,codes,chartRef,chartHtml:textValue(chartData?.chart_html||chartData?.html||chartData?.chart),metrics:metricData.items,metricValues:metricData.values,feedback,promptTokens,completionTokens,totalTokens:promptTokens+completionTokens,callCount:tokenByAgent.reduce((s,t)=>s+t.calls,0),tokenByAgent,loopMetrics,userInput,pdfImage,currentStep}
 }

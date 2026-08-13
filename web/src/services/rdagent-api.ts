@@ -33,17 +33,53 @@ export interface TraceStatusItem {
   created_at: string | null
   updated_at: string | null
   has_chart: boolean
+  end_code?: number | null
+  reason?: string | null
 }
 
 /** C1 catalog: 批量获取所有 trace 状态（替代 N+1 全量拉取） */
-export const fetchTraceStatuses = (signal?: AbortSignal) =>
-  fetch('/traces/status', { signal }).then(response => parseResponse<TraceStatusItem[]>(response))
+export const fetchTraceStatuses = (id?: string, signal?: AbortSignal) => {
+  const query = id ? `?${new URLSearchParams({ id })}` : ''
+  return fetch(`/traces/status${query}`, { signal }).then(response => parseResponse<TraceStatusItem[]>(response))
+}
 export const fetchTrace = (data: TraceRequest, signal?: AbortSignal) => fetch('/trace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal }).then(response => parseResponse<TraceMessage[]>(response))
 export const uploadTask = (data: FormData, signal?: AbortSignal) => fetch('/upload', { method: 'POST', body: data, signal }).then(response => parseResponse<{ id?: string; error?: string }>(response))
 export const pollUploadReady = (id: string, signal?: AbortSignal) => fetch(`/upload/poll?${new URLSearchParams({ id })}`, { signal }).then(response => parseResponse<{ ready: boolean }>(response))
 export const controlTask = (id: string, action: string, signal?: AbortSignal) => fetch('/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action }), signal }).then(response => parseResponse<unknown>(response))
 export const submitUserInteraction = (data: { id: string; payload: unknown }, signal?: AbortSignal) => fetch('/user_interaction/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal }).then(response => parseResponse<unknown>(response))
 export const fetchSota = (traceId: string, signal?: AbortSignal) => fetch(`/traces/${encodeURIComponent(traceId)}/sota`, { signal }).then(response => parseResponse<Record<string, unknown>>(response))
+
+export interface TokenByAgentItem {
+  agent: string
+  prompt_tokens: number
+  completion_tokens: number
+  cost: number
+  calls: number
+}
+
+export interface TokenByLoopItem {
+  loop_id: number
+  prompt_tokens: number
+  completion_tokens: number
+  cost: number
+  calls: number
+}
+
+export interface TokenStats {
+  total: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+    cost: number
+    calls: number
+  }
+  by_agent: TokenByAgentItem[]
+  by_loop: TokenByLoopItem[]
+}
+
+export const fetchTraceToken = (traceId: string, signal?: AbortSignal) =>
+  fetch(`/api/v2/trace/token?id=${encodeURIComponent(traceId)}`, { signal })
+    .then(response => parseResponse<TokenStats>(response))
 export interface HealthCheck { overall: string; checks: Array<{ name: string; icon: string; status: 'pass' | 'warn' | 'fail'; detail: string }> }
 export const fetchHealth = (signal?: AbortSignal) => fetch('/health', { signal }).then(response => parseResponse<HealthCheck>(response))
 export const stdoutUrl = (id: string) => `/stdout?${new URLSearchParams({ id }).toString()}`

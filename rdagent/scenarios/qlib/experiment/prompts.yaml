@@ -161,7 +161,7 @@ qlib_factor_from_report_rich_style_description : |-
 qlib_factor_experiment_setting: |-
   | Dataset 📊 | Model 🤖    | Factors 🌟       | Data Split  🧮                                   |
   |---------|----------|---------------|-------------------------------------------------|
-  | CSI300  | LGBModel | Alpha158 Plus | Train: {{ train_start }} to {{ train_end }} <br> Valid: {{ valid_start }} to {{ valid_end }} <br> Test &nbsp;: {{ test_start }} to {{ test_end }} |
+  | CSI300  | {{ model_name }} | Alpha158 Plus | Train: {{ train_start }} to {{ train_end }} <br> Valid: {{ valid_start }} to {{ valid_end }} <br> Test &nbsp;: {{ test_start }} to {{ test_end }} |
 
 
 qlib_model_background: |-

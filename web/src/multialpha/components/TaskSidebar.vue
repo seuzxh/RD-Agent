@@ -30,7 +30,10 @@
       <template v-else>
       <button v-for="task in filteredTasks" :key="task.id" type="button" class="task-item" :class="{ active: task.id === activeId }" @click="$emit('select', task.id)">
         <span class="task-name"><i v-if="task.status !== 'idle'" class="status-dot" :class="task.status" />{{ task.name || task.id }}</span>
-        <span class="task-meta">{{ scenarioLabel(task.scenario) }} · {{ statusLabel(task.status) }}</span>
+        <span class="task-meta">
+          <span class="task-time" v-if="task.createdAt">{{ formatTime(task.createdAt) }}</span>
+          <span>{{ scenarioLabel(task.scenario) }} · {{ statusLabel(task.status) }}</span>
+        </span>
       </button>
       <div v-if="!filteredTasks.length" class="empty-small">暂无任务</div>
       </template>
@@ -53,4 +56,13 @@ const filteredTasks = computed(() => props.tasks.filter(task => (!scenario.value
 const labels: Record<string, string> = { 'Finance Data Building': '因子挖掘', 'Finance Data Building (Reports)': '研报因子提取', 'Finance Whole Pipeline': '量化全流程', 'Finance Model Implementation': '模型实现' }
 const scenarioLabel = (value: string) => labels[value] || value
 const statusLabel = (value: TraceStatus) => ({ idle: '待查看', running: '运行中', done: '已完成', error: '异常' }[value])
+const formatTime = (iso: string) => {
+  let s = iso
+  const m = s.match(/(\d{2}):(\d{2}):(\d{2}):(\d+)/)
+  if (m) s = s.replace(`${m[1]}:${m[2]}:${m[3]}:${m[4]}`, `${m[1]}:${m[2]}:${m[3]}.${m[4]}`)
+  const d = new Date(s)
+  if (isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
 </script>
