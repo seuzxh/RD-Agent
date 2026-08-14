@@ -30,8 +30,14 @@
     </main>
 
     <!-- Create Strategy Dialog -->
-    <el-dialog v-model="showCreateDialog" title="新建因子挖掘任务" width="500px">
+    <el-dialog v-model="showCreateDialog" :title="`新建${taskTypeLabel}任务`" width="500px">
       <el-form label-position="top">
+        <el-form-item label="任务类型">
+          <el-radio-group v-model="newScenario">
+            <el-radio value="Finance Data Building">因子挖掘</el-radio>
+            <el-radio value="Finance Whole Pipeline">量化全流程（因子 + 模型）</el-radio>
+          </el-radio-group>
+        </el-form-item>
         <el-form-item label="策略描述">
           <el-input v-model="newDescription" type="textarea" :rows="4" placeholder="用自然语言描述你的策略思路，例如：市场情绪冰点，反转信号..."/>
         </el-form-item>
@@ -111,11 +117,13 @@ const reportData = ref<any>(null)
 
 // Create dialog
 const showCreateDialog = ref(false)
+const newScenario = ref('Finance Data Building')
 const newDescription = ref('')
 const modelSelector = ref('lgbm')
 const newLoops = ref(3)
 const autoMode = ref(true)
 const creating = ref(false)
+const taskTypeLabel = computed(() => newScenario.value === 'Finance Whole Pipeline' ? '量化全流程' : '因子挖掘')
 
 // Detail dialog
 const selectedStrategyId = ref('')
@@ -168,7 +176,7 @@ async function createStrategy() {
   creating.value = true
   try {
     const formData = new FormData()
-    formData.append('scenario', 'Finance Data Building')
+    formData.append('scenario', newScenario.value)
     formData.append('description', newDescription.value)
     formData.append('loops', String(newLoops.value))
     formData.append('auto_mode', autoMode.value ? '1' : '0')

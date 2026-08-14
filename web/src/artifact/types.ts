@@ -20,6 +20,25 @@ export interface FactorItem {
   description?: string
   formula?: string
   variables?: Record<string, string>
+  status?: string
+  round_number?: number
+  ic?: number | null
+  icir?: number | null
+}
+
+/** Model row as returned by the SQLite-backed research API (models table). */
+export interface ModelItem {
+  name: string
+  model_type?: string
+  architecture?: string | null
+  hyperparameters?: string | null
+  code_path?: string
+  status?: string
+  round_number?: number
+  annualized_return?: number | null
+  max_drawdown?: number | null
+  information_ratio?: number | null
+  experiment_id?: number | null
 }
 
 export interface FeedbackSummary {

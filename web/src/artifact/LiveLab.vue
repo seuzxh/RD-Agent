@@ -30,8 +30,8 @@
       <div v-if="detailLoading" v-loading="detailLoading" style="height:100px"></div>
       <div v-else-if="detailError" class="error">{{ detailError }}</div>
       <template v-else>
-        <!-- Loop Switcher -->
-        <div class="loop-switcher">
+        <!-- Loop Switcher (factor/model tasks only; fin_quant navigates via the overview cards) -->
+        <div v-if="!isFinQuant" class="loop-switcher">
           <el-tag
             v-for="l in availableLoops"
             :key="l"
@@ -42,6 +42,26 @@
           >第 {{ l+1 }} 轮</el-tag>
         </div>
 
+        <!-- Quant full-pipeline overview (fin_quant only) — cards are the navigation -->
+        <QuantPipelineOverview
+          v-if="isFinQuant"
+          :experiments="experiments"
+          :factors="strategyDetail.value?.factors || []"
+          :selected-loop="selectedLoop"
+          v-model:auto-follow="autoFollow"
+          @select="selectLoop"
+        />
+
+        <!-- Per-round agent flow (fin_quant only): factor/model agents driven by pipeline nodes -->
+        <RoundAgentFlow
+          v-if="isFinQuant"
+          :round-type="roundType"
+          :nodes="pipelineForLoop"
+          :experiment="selectedExperiment ?? null"
+          :codes="codes"
+          :metrics="metrics"
+        />
+
         <!-- Pipeline Stages from ResearchDB -->
         <div class="pipeline">
           <div v-for="(stage, i) in pipelineStages" :key="stage.name" class="pipeline-item" :class="stage.state">
@@ -49,14 +69,17 @@
           </div>
         </div>
 
-        <!-- 5-stage collaboration flow -->
-        <AgentFlow :experiments="filteredExperiments" :codes="codes" :active-step="activeStep" />
+        <!-- 5-stage collaboration flow (factor/model tasks; fin_quant uses the
+             round agent flow above instead) -->
+        <AgentFlow v-if="!isFinQuant" :experiments="filteredExperiments" :codes="codes" :active-step="activeStep" />
 
         <div class="detail-layout">
           <div class="detail-main">
-            <!-- Result workspace: conclusion / factors / chart / code -->
+            <!-- Result workspace: conclusion / results / chart / code (re-labelled by round type) -->
             <ResultWorkspace
               :factors="factors"
+              :models="models"
+              :round-type="roundType"
               :codes="codes"
               :chart-url="chartUrl"
               :metrics="metrics"
@@ -82,6 +105,11 @@
             <div class="token-item"><small>总调用</small><strong>{{ callCount }}</strong></div>
           </div>
         </div>
+
+        <!-- Real-time log panel for running/failed tasks -->
+        <div v-if="showLog" class="detail-section">
+          <LogPanel :strategy-id="selectedId" :running="isRunning" :failed="isFailed" />
+        </div>
       </template>
     </section>
   </div>
@@ -92,8 +120,11 @@ import { fetchStrategyDetail, fetchCode, fetchJson, chartUrl as buildChartUrl } 
 import AgentFlow from './components/AgentFlow.vue'
 import ResultWorkspace from './components/ResultWorkspace.vue'
 import MetricsPanel from './components/MetricsPanel.vue'
-import { buildFactors, buildMetrics, buildFeedback, buildHypothesis } from './livelab-model'
-import type { CodeFile, FactorItem, FeedbackSummary, MetricItem } from './types'
+import LogPanel from './components/LogPanel.vue'
+import QuantPipelineOverview from './components/QuantPipelineOverview.vue'
+import RoundAgentFlow from './components/RoundAgentFlow.vue'
+import { buildFactors, buildMetrics, buildFeedback, buildHypothesis, buildModel, type RoundType } from './livelab-model'
+import type { CodeFile, FactorItem, FeedbackSummary, MetricItem, ModelItem } from './types'
 import './livelab-detail.css'
 
 const props = defineProps<{ strategies: any[] }>()
@@ -102,6 +133,7 @@ const selectedId = ref('')
 const detailLoading = ref(false)
 const detailError = ref('')
 const selectedLoop = ref<number | null>(null)
+const autoFollow = ref(true)
 const strategyDetail = ref<any>(null)
 const pipelineNodes = ref<any[]>([])
 const codes = ref<CodeFile[]>([])
@@ -168,6 +200,26 @@ const factors = computed<FactorItem[]>(() => {
   return buildFactors(raw, selectedLoop.value ?? -1)
 })
 
+// Models read from SQLite, filtered by round_number = selected loop (model rounds).
+const models = computed<ModelItem[]>(() => {
+  const raw = strategyDetail.value?.models || []
+  return raw.filter((m: any) => m.round_number === selectedLoop.value).map(buildModel)
+})
+
+// Pipeline nodes for the selected loop only, fed to RoundAgentFlow for the 4-state agents.
+const pipelineForLoop = computed<any[]>(() => {
+  if (selectedLoop.value == null) return pipelineNodes.value
+  return pipelineNodes.value.filter((n: any) => n.loop_id === selectedLoop.value)
+})
+
+// Round type is known as soon as the loop's experiment is created: 'alpha' → factor round.
+const roundType = computed<RoundType | undefined>(() => {
+  const t = selectedExperiment.value?.type
+  if (t === 'model') return 'model'
+  if (t === 'alpha') return 'factor'
+  return undefined
+})
+
 // Metrics from the selected experiment (SQLite)
 const metrics = computed<MetricItem[]>(() => buildMetrics(selectedExperiment.value))
 
@@ -193,6 +245,17 @@ const promptTokens = computed(() => pipelineNodes.value.reduce((s: number, n: an
 const completionTokens = computed(() => pipelineNodes.value.reduce((s: number, n: any) => s + (n.completion_tokens || 0), 0))
 const callCount = computed(() => pipelineNodes.value.reduce((s: number, n: any) => s + (n.call_count || 0), 0))
 const totalTokens = computed(() => promptTokens.value + completionTokens.value)
+
+// Strategy status gates the real-time log panel (running / failed).
+const isRunning = computed(() => strategyDetail.value?.status === 'running')
+const isFailed = computed(() => strategyDetail.value?.status === 'failed')
+const showLog = computed(() => isRunning.value || isFailed.value)
+
+// Quant full-pipeline overview only for fin_quant (量化全流程) strategies.
+const isFinQuant = computed(() =>
+  strategyDetail.value?.scenario === 'Finance Whole Pipeline'
+  || String(selectedId.value).startsWith('Finance Whole Pipeline')
+)
 
 function formatName(s: string) { return (s || '').split('/').pop() || s || '' }
 
@@ -226,6 +289,28 @@ function downloadResult() {
 // Refetch factor/model code via /code when strategy or loop changes
 async function reloadCodes() {
   if (!selectedId.value) return
+  // fin_quant model rounds: the model is registered under THIS strategy (same trace),
+  // so fetch /api/models for the current id and correlate by experiment_id to pick the
+  // exact model this loop's coding produced. Factor rounds fall through below.
+  if (isFinQuant.value) {
+    const exp = selectedExperiment.value
+    if (exp && exp.type === 'model') {
+      const loopId = selectedLoop.value
+      const codingDone = loopId == null
+        ? pipelineNodes.value.some(n => n.step_name === 'coding' && n.status === 'completed')
+        : pipelineNodes.value.some(n => n.loop_id === loopId && n.step_name === 'coding' && n.status === 'completed')
+      if (!codingDone) { codes.value = []; return }
+      try {
+        const list = await fetchJson<{ name: string; experiment_id?: number }[]>(`/api/models?strategy_id=${encodeURIComponent(selectedId.value)}`)
+        const target = exp.id != null ? list.find(m => m.experiment_id === exp.id) : undefined
+        if (!target) { codes.value = []; return }
+        const res = await fetchCode(selectedId.value, target.name, 'model')
+        codes.value = res.code ? [{ name: res.name, content: res.code }] : []
+      } catch { codes.value = [] }
+      return
+    }
+    // factor round: fall through to the factor-name fetch below.
+  }
   // fin_model tasks route their produced model to the parent factor-pool strategy:
   // read the parent id from the task's user_input_snapshot and fetch the parent's model code.
   if (String(selectedId.value).startsWith('Finance Model Implementation')) {
@@ -280,6 +365,29 @@ async function reloadCodes() {
 }
 
 watch([selectedId, selectedLoop], () => { codes.value = []; reloadCodes() })
+
+// fin_quant round-card navigation: selecting a card locks to it (autoFollow off).
+function selectLoop(loopId: number) {
+  selectedLoop.value = loopId
+  autoFollow.value = false
+}
+
+// Auto-follow the newest round: when a new loop appears (SSE → experiments grows)
+// and autoFollow is on, jump the selection to the latest loop regardless of the
+// previously selected card. Only applies to fin_quant (overview navigation).
+watch(experiments, () => {
+  if (!isFinQuant.value || !autoFollow.value) return
+  const loops = availableLoops.value
+  if (loops.length) selectedLoop.value = loops[loops.length - 1]
+})
+
+// Re-enabling the follow toggle snaps straight to the latest round.
+watch(autoFollow, (on) => {
+  if (on && isFinQuant.value) {
+    const loops = availableLoops.value
+    if (loops.length) selectedLoop.value = loops[loops.length - 1]
+  }
+})
 
 function subscribeSse(strategyId: string) {
   unsubscribeSse()
