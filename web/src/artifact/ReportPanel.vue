@@ -62,7 +62,7 @@ function onExpandChange(_row: any, rows: Array<any>) {
 
 function fmtPct(v: number | undefined | null) {
   if (v == null) return '—'
-  return `${(Math.abs(v) * 100).toFixed(2)}%`
+  return `${(v * 100).toFixed(2)}%`
 }
 function formatName(s: string) { return (s || '').split('/').pop() || s || '' }
 

@@ -61,18 +61,14 @@ const rounds = computed(() => {
     else if (decision === true) { decisionLabel = '✓ SOTA'; decisionTone = 'accepted' }
     else if (decision === false) { decisionLabel = '✕ 拒绝'; decisionTone = 'rejected' }
 
+    // 因子轮与模型轮统一展示同一套指标（年化/回撤/IC/ICIR），避免两轮内容不一致。
     let metricsLabel = '—'
-    if (isModel) {
-      const parts: string[] = []
-      if (e.annualized_return != null) parts.push(`年化 ${(e.annualized_return * 100).toFixed(1)}%`)
-      if (e.max_drawdown != null) parts.push(`回撤 ${(e.max_drawdown * 100).toFixed(1)}%`)
-      metricsLabel = parts.length ? parts.join(' · ') : '—'
-    } else {
-      const parts: string[] = []
-      if (e.ic != null) parts.push(`IC ${e.ic.toFixed(3)}`)
-      if (e.icir != null) parts.push(`ICIR ${e.icir.toFixed(3)}`)
-      metricsLabel = parts.length ? parts.join(' · ') : '—'
-    }
+    const parts: string[] = []
+    if (e.annualized_return != null) parts.push(`年化 ${(e.annualized_return * 100).toFixed(1)}%`)
+    if (e.max_drawdown != null) parts.push(`回撤 ${(e.max_drawdown * 100).toFixed(1)}%`)
+    if (e.ic != null) parts.push(`IC ${e.ic.toFixed(3)}`)
+    if (e.icir != null) parts.push(`ICIR ${e.icir.toFixed(3)}`)
+    metricsLabel = parts.length ? parts.join(' · ') : '—'
 
     return {
       loopId: e.loop_id,

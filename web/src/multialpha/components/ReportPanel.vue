@@ -42,8 +42,8 @@ const summaryMetrics = computed(() => {
   return [
     { label: 'IC', value: latest.ic?.toFixed(4) ?? '—' },
     { label: 'ICIR', value: latest.icir?.toFixed(4) ?? '—' },
-    { label: '年化收益', value: latest.annualized_return != null ? `${(Math.abs(latest.annualized_return) * 100).toFixed(2)}%` : '—' },
-    { label: '最大回撤', value: latest.max_drawdown != null ? `${(Math.abs(latest.max_drawdown) * 100).toFixed(2)}%` : '—' },
+    { label: '年化收益', value: latest.annualized_return != null ? `${(latest.annualized_return * 100).toFixed(2)}%` : '—' },
+    { label: '最大回撤', value: latest.max_drawdown != null ? `${(latest.max_drawdown * 100).toFixed(2)}%` : '—' },
     { label: '信息比率', value: latest.information_ratio?.toFixed(4) ?? '—' },
   ]
 })

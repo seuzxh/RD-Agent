@@ -125,7 +125,7 @@ const feedbackItems = computed(() => [
 
 function formatMetric(item: MetricItem): string {
   if (item.rawValue == null) return String(item.value)
-  if (item.percent) return `${(Math.abs(item.rawValue) * 100).toFixed(2)}%`
+  if (item.percent) return `${(item.rawValue * 100).toFixed(2)}%`
   return item.rawValue.toFixed(4)
 }
 </script>

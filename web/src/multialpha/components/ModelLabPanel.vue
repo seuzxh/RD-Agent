@@ -50,7 +50,7 @@ const models = ref<any[]>([])
 
 function formatPct(v: number | undefined | null) {
   if (v == null) return '—'
-  return `${(Math.abs(v) * 100).toFixed(2)}%`
+  return `${(v * 100).toFixed(2)}%`
 }
 
 async function load() {
