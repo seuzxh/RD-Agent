@@ -46,7 +46,7 @@
         <QuantPipelineOverview
           v-if="isFinQuant"
           :experiments="experiments"
-          :factors="strategyDetail.value?.factors || []"
+          :factors="strategyDetail?.factors || []"
           :selected-loop="selectedLoop"
           v-model:auto-follow="autoFollow"
           @select="selectLoop"
