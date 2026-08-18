@@ -206,14 +206,15 @@ class RDAgentTask:
                     create_time = psutil.Process(worker_pid).create_time()
                 except (psutil.Error, OSError):
                     pass
-                for _ in range(50):
-                    try:
-                        process_group_id = os.getpgid(worker_pid)
-                        if process_group_id == worker_pid:
+                if hasattr(os, "getpgid"):
+                    for _ in range(50):
+                        try:
+                            process_group_id = os.getpgid(worker_pid)
+                            if process_group_id == worker_pid:
+                                break
+                        except OSError:
                             break
-                    except OSError:
-                        break
-                    _perf_time.sleep(0.01)
+                        _perf_time.sleep(0.01)
             update_task_state(
                 trace_dir,
                 status="running",
@@ -242,8 +243,8 @@ class RDAgentTask:
         if self.process is not None and self.process.is_alive():
             pid = self.process.pid
             try:
-                pgid = os.getpgid(pid) if pid is not None else None
-                if pid is not None and pgid == pid:
+                pgid = os.getpgid(pid) if pid is not None and hasattr(os, "getpgid") else None
+                if pid is not None and pgid == pid and hasattr(os, "killpg"):
                     os.killpg(pgid, signal.SIGTERM)
                 else:
                     self.process.terminate()
@@ -252,8 +253,8 @@ class RDAgentTask:
             self.process.join(timeout=5)
             if self.process.is_alive():
                 try:
-                    pgid = os.getpgid(pid) if pid is not None else None
-                    if pid is not None and pgid == pid:
+                    pgid = os.getpgid(pid) if pid is not None and hasattr(os, "getpgid") else None
+                    if pid is not None and pgid == pid and hasattr(os, "killpg"):
                         os.killpg(pgid, signal.SIGKILL)
                     else:
                         self.process.kill()
@@ -274,10 +275,11 @@ class RDAgentTask:
 
     def _run(self) -> None:
         import os as _os
-        try:
-            _os.setsid()
-        except OSError:
-            pass
+        if hasattr(_os, "setsid"):
+            try:
+                _os.setsid()
+            except OSError:
+                pass
         _os.environ["MULTIALPHA_TASK_ID"] = self.task_token
         # GPU 轮转：子进程隔离到分配的物理 GPU
         if self.assigned_gpu is not None:
@@ -414,15 +416,16 @@ def _terminate_persisted_worker(state: dict) -> None:
     except (psutil.Error, OSError):
         return
 
+    can_kill_group = hasattr(os, "getpgid") and hasattr(os, "killpg")
     try:
-        if isinstance(pgid, int) and pgid == pid and os.getpgid(pid) == pgid:
+        if can_kill_group and isinstance(pgid, int) and pgid == pid and os.getpgid(pid) == pgid:
             os.killpg(pgid, signal.SIGTERM)
         else:
             proc.terminate()
         try:
             proc.wait(timeout=5)
         except psutil.TimeoutExpired:
-            if isinstance(pgid, int) and pgid == pid:
+            if can_kill_group and isinstance(pgid, int) and pgid == pid:
                 os.killpg(pgid, signal.SIGKILL)
             else:
                 proc.kill()
