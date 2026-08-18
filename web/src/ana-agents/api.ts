@@ -1,6 +1,7 @@
 import type { AgentAnalysis, AgentDirection, StockOption } from './types'
 
-const API_BASE = (import.meta.env.VITE_ANA_AGENTS_API_BASE || 'https://appt15.crsec.com.cn:3004').replace(/\/$/, '')
+const API_BASE = (import.meta.env.VITE_ANA_AGENTS_API_BASE || 'https://newapp.crsec.com.cn:3004').replace(/\/$/, '')
+const analysisMemoryCache = new Map<string, AgentAnalysis>()
 
 interface AnalysisPayload {
   core_view?: unknown
@@ -91,11 +92,30 @@ function normalizeTextList(value: unknown): string[] {
   return value.map((item) => String(item).trim()).filter(Boolean)
 }
 
+function getAnalysisCacheKey(agentId: number, stockCode: string): string {
+  return `${agentId}:${stockCode}`
+}
+
+function readAnalysisCache(agentId: number, stockCode: string): AgentAnalysis | null {
+  return analysisMemoryCache.get(getAnalysisCacheKey(agentId, stockCode)) || null
+}
+
+function writeAnalysisCache(agentId: number, stockCode: string, analysis: AgentAnalysis): void {
+  analysisMemoryCache.set(getAnalysisCacheKey(agentId, stockCode), analysis)
+}
+
 export async function analyzeStock(
   agentId: number,
   stockCode: string,
   signal?: AbortSignal,
+  forceRefresh = false,
 ): Promise<AgentAnalysis> {
+  if (signal?.aborted) throw new DOMException('请求已取消', 'AbortError')
+  if (!forceRefresh) {
+    const cachedAnalysis = readAnalysisCache(agentId, stockCode)
+    if (cachedAnalysis) return cachedAnalysis
+  }
+
   const url = new URL(`${API_BASE}/reqxml`)
   url.search = new URLSearchParams({
     funcNo: '1500105',
@@ -132,7 +152,7 @@ export async function analyzeStock(
     throw new Error('智能体返回了空分析')
   }
 
-  return {
+  const normalizedAnalysis: AgentAnalysis = {
     coreViews,
     direction: normalizeDirection(analysis.direction),
     risk,
@@ -141,4 +161,6 @@ export async function analyzeStock(
     stockName: String(result.stockName || ''),
     createdAt: String(result.createTime || ''),
   }
+  writeAnalysisCache(agentId, stockCode, normalizedAnalysis)
+  return normalizedAnalysis
 }

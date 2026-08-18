@@ -223,3 +223,19 @@ const classify = (line: string) => /error|exception|traceback/i.test(line)
     ? 'warn'
     : /success|done/i.test(line) ? 'success' : ''
 </script>
+
+<style>
+/* Match the task detail content width instead of the previous narrow floating panel. */
+.log-console {
+  left: calc(var(--ma-sidebar-width) + 20px);
+  right: 20px;
+  width: auto;
+}
+
+@media (max-width: 820px) {
+  .log-console {
+    left: 14px;
+    right: 14px;
+  }
+}
+</style>

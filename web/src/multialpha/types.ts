@@ -1,9 +1,10 @@
 export type TraceStatus = 'idle' | 'running' | 'done' | 'error'
-export type ResultTab = 'conclusion' | 'factors' | 'chart' | 'code'
+export type ResultTab = 'factors' | 'code' | 'chart' | 'conclusion'
+export type AgentStep = 'hypothesis' | 'design' | 'coding' | 'backtest' | 'feedback' | null
 export type TaskMethod = 'text' | 'pdf' | 'optimize' | 'image' | 'trade'
 export type { TraceMessage } from '../services/rdagent-api'
 
-export interface TraceTask { id:string; scenario:string; name:string; status:TraceStatus }
+export interface TraceTask { id:string; scenario:string; name:string; status:TraceStatus; createdAt:string|null }
 export interface CodeFile { name:string; content:string; target?:string; evoId?:string|number }
 export interface MetricItem { label:string; value:string|number; rawValue?:number; tone?:'up'|'down'|'neutral'; percent?:boolean }
 export interface FactorItem { name:string; description?:string; formula?:string; variables?:Record<string,string>; code?:string }
@@ -15,10 +16,12 @@ export interface UserInput { description:string; scenario?:string; loops?:number
 export interface TokenByAgent { agent:string; prompt:number; completion:number; calls:number }
 
 export interface TraceViewModel {
-  hasEnd:boolean; hasError:boolean; loops:number[]; sotaLoop:number|null
+  hasEnd:boolean; hasError:boolean; loops:number[]; sotaLoop:number|null; latestLoop:number|null
   hypothesis:Record<string,unknown>|null
   initialTasks:FactorItem[]; config:Array<{key:string;value:string}>; factors:FactorItem[]; codes:CodeFile[]
   chartRef:ChartRef|null; chartHtml:string; metrics:MetricItem[]; metricValues:Record<string,number|string>; feedback:FeedbackSummary
   promptTokens:number; completionTokens:number; totalTokens:number; callCount:number; tokenByAgent:TokenByAgent[]; loopMetrics:Record<number,string>
   userInput:UserInput|null
+  pdfImage:string|null
+  currentStep:AgentStep
 }

@@ -202,7 +202,8 @@ class RDLoop(LoopBase, metaclass=LoopMeta):
         return modified_feedback
 
     def _propose(self):
-        hypothesis = self.hypothesis_gen.gen(self.trace, self.plan)
+        with logger.tag("hypothesis"):
+            hypothesis = self.hypothesis_gen.gen(self.trace, self.plan)
 
         # user can change the hypothesis here
         hypothesis = self._interact_hypo(hypothesis)

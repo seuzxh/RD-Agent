@@ -1,7 +1,7 @@
 from copy import deepcopy
 from pathlib import Path
 
-from rdagent.app.qlib_rd_loop.conf import FACTOR_PROP_SETTING
+from rdagent.app.qlib_rd_loop.conf import FACTOR_PROP_SETTING, FactorBasePropSetting
 from rdagent.components.coder.factor_coder.config import get_factor_env
 from rdagent.components.coder.factor_coder.factor import (
     FactorExperiment,
@@ -14,6 +14,17 @@ from rdagent.scenarios.qlib.experiment.utils import get_data_folder_intro
 from rdagent.scenarios.qlib.experiment.workspace import QlibFBWorkspace
 from rdagent.scenarios.shared.get_runtime_info import get_runtime_environment_by_env
 from rdagent.utils.agent.tpl import T
+
+MODEL_SELECTOR_TO_NAME = {
+    "lgbm": "LGBModel",
+    "linear": "LinearModel",
+    "xgboost": "XGBModel",
+    "catboost": "CatBoostModel",
+}
+
+
+def get_model_display_name(selector: str) -> str:
+    return MODEL_SELECTOR_TO_NAME.get(selector, "LGBModel")
 
 
 class QlibFactorExperiment(FactorExperiment[FactorTask, QlibFBWorkspace, FactorFBWorkspace]):
@@ -41,6 +52,11 @@ class QlibFactorScenario(Scenario):
         self._strategy = deepcopy(T(".prompts:qlib_factor_strategy").r())
         self._simulator = deepcopy(T(".prompts:qlib_factor_simulator").r())
         self._rich_style_description = deepcopy(T(".prompts:qlib_factor_rich_style_description").r())
+        # Read model_selector from a fresh settings instance so the per-task
+        # QLIB_FACTOR_MODEL_SELECTOR env var (set in the forked child) is honored.
+        # The module-level FACTOR_PROP_SETTING singleton was created at import
+        # time and may hold a stale default.
+        model_selector = FactorBasePropSetting().model_selector
         self._experiment_setting = deepcopy(
             T(".prompts:qlib_factor_experiment_setting").r(
                 train_start=FACTOR_PROP_SETTING.train_start,
@@ -49,6 +65,7 @@ class QlibFactorScenario(Scenario):
                 valid_end=FACTOR_PROP_SETTING.valid_end,
                 test_start=FACTOR_PROP_SETTING.test_start,
                 test_end=FACTOR_PROP_SETTING.test_end,
+                model_name=get_model_display_name(model_selector),
             )
         )
 

@@ -1,7 +1,7 @@
 from copy import deepcopy
 from pathlib import Path
 
-from rdagent.app.qlib_rd_loop.conf import QUANT_PROP_SETTING
+from rdagent.app.qlib_rd_loop.conf import QUANT_PROP_SETTING, FactorBasePropSetting
 
 # Factor
 from rdagent.components.coder.factor_coder.config import get_factor_env
@@ -20,6 +20,7 @@ from rdagent.components.coder.model_coder.model import (
 )
 from rdagent.core.experiment import Task
 from rdagent.core.scenario import Scenario
+from rdagent.scenarios.qlib.experiment.factor_experiment import get_model_display_name
 from rdagent.scenarios.qlib.experiment.utils import get_data_folder_intro
 from rdagent.scenarios.qlib.experiment.workspace import QlibFBWorkspace
 from rdagent.scenarios.shared.get_runtime_info import get_runtime_environment_by_env
@@ -44,6 +45,7 @@ class QlibQuantScenario(Scenario):
         self._source_data = deepcopy(get_data_folder_intro())
 
         self._rich_style_description = deepcopy(T(".prompts:qlib_factor_rich_style_description").r())
+        model_selector = FactorBasePropSetting().model_selector
         self._experiment_setting = deepcopy(
             T(".prompts:qlib_factor_experiment_setting").r(
                 train_start=QUANT_PROP_SETTING.train_start,
@@ -52,6 +54,7 @@ class QlibQuantScenario(Scenario):
                 valid_end=QUANT_PROP_SETTING.valid_end,
                 test_start=QUANT_PROP_SETTING.test_start,
                 test_end=QUANT_PROP_SETTING.test_end,
+                model_name=get_model_display_name(model_selector),
             )
         )
 
