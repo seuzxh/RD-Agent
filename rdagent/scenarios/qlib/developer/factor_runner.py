@@ -13,7 +13,7 @@ from rdagent.components.runner import CachedRunner
 from rdagent.core.exception import FactorEmptyError
 from rdagent.log import rdagent_logger as logger
 from rdagent.oai.llm_utils import md5_hash
-from rdagent.scenarios.qlib.developer.utils import _build_sota_factor_df, process_factor_data
+from rdagent.scenarios.qlib.developer.utils import build_cumulative_factor_df, process_factor_data
 from rdagent.scenarios.qlib.domain import FactorMetrics, RawFactor, SignalStatus
 from rdagent.scenarios.qlib.evaluation import QlibBacktestExecutor
 from rdagent.scenarios.qlib.experiment.factor_experiment import QlibFactorExperiment
@@ -44,6 +44,7 @@ class QlibFactorRunner(CachedRunner[QlibFactorExperiment]):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.strategy = None  # set by the loop; used for SignalPool / ModelRegistry
+        self.strategy_id = None  # set by the loop; used to query research.db
 
     def calculate_information_coefficient(
         self, concat_feature: pd.DataFrame, SOTA_feature_column_size: int, new_feature_columns_size: int
@@ -91,8 +92,8 @@ class QlibFactorRunner(CachedRunner[QlibFactorExperiment]):
             extra={"model_selector": fbps.model_selector},
         )
 
-        # ── SOTA factors: from SignalPool ──
-        sota_factor_df = _build_sota_factor_df(self.strategy, exp)
+        # ── Accumulated session factors: from research.db + persisted parquet ──
+        cumulative_factor_df = build_cumulative_factor_df(self.strategy_id)
 
         # ── Process new factors ──
         # Custom factors (sub_tasks) always drive the merged backtest; the
@@ -120,19 +121,18 @@ class QlibFactorRunner(CachedRunner[QlibFactorExperiment]):
         if new_factors.empty:
             raise FactorEmptyError("Factors failed to run on the full sample, this round of experiment failed.")
 
-        if sota_factor_df is not None and not sota_factor_df.empty:
-            new_factors = self.deduplicate_new_factors(sota_factor_df, new_factors)
+        if cumulative_factor_df is not None and not cumulative_factor_df.empty:
+            new_factors = self.deduplicate_new_factors(cumulative_factor_df, new_factors)
             if new_factors.empty:
                 raise FactorEmptyError(
                     "The factors generated in this round are highly similar to the previous factors. Please change the direction for creating new factors."
                 )
-            combined_factors = pd.concat([sota_factor_df, new_factors], axis=1).dropna()
-        else:
-            combined_factors = new_factors
 
-        executor.save_combined_factors(exp.experiment_workspace, combined_factors)
+        # Each round persists only this round's deduplicated new factors; later
+        # model rounds merge all rounds' parquets via build_cumulative_factor_df.
+        executor.save_combined_factors(exp.experiment_workspace, new_factors)
 
-        num_features = len(exp.base_features) + len(combined_factors.columns) if hasattr(combined_factors, 'columns') else 0
+        num_features = len(exp.base_features) + len(new_factors.columns) if hasattr(new_factors, 'columns') else 0
 
         # ── SOTA model: from ModelRegistry ──
         exist_sota_model_exp = False

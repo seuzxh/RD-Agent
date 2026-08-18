@@ -33,24 +33,30 @@ class QlibModelRunner(CachedRunner[QlibModelExperiment]):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.strategy = None  # set by the loop; used for SignalPool / ModelRegistry
+        self.strategy_id = None  # set by the loop; used to query research.db
 
     @cache_with_pickle(CachedRunner.get_cache_key, CachedRunner.assign_cached_result)
     def develop(self, exp: QlibModelExperiment) -> QlibModelExperiment:
         executor.ensure_baseline_executed(exp, self.develop)
 
         exist_sota_factor_exp = False
-        sota_factor_df = _build_sota_factor_df(self.strategy, exp)
+        sota_factor_df = _build_sota_factor_df(self.strategy_id, exp)
 
         if sota_factor_df is not None and not sota_factor_df.empty:
             exist_sota_factor_exp = True
             combined_factors = sota_factor_df
             executor.save_combined_factors(exp.experiment_workspace, combined_factors)
-            num_features = str(len(exp.base_features) + len(combined_factors.columns))
+            # Model trains only on the session's pooled factors — clear the
+            # ALPHA20 base features so conf_combined_factors_model.yaml uses
+            # the pool as the sole feature source (matches fin_model's
+            # factor-pool-downstream behavior).
+            exp.base_features = {}
+            num_features = str(len(combined_factors.columns))
 
         # Python-code 因子池:base_features 为空,features 全来自 combined_factors_df.parquet。
         # 此时用 conf_combined_factors_model.yaml(label-only QlibDataLoader + StaticDataLoader),
         # 避免 conf_sota_factors_model.yaml 里 Alpha158DL 对空 feature 抛 "fields cannot be empty"。
-        combined_only = exist_sota_factor_exp and not exp.base_features
+        combined_only = exist_sota_factor_exp  # base_features cleared when a pool is present
         sota_config = "conf_combined_factors_model.yaml" if combined_only else "conf_sota_factors_model.yaml"
 
         if exp.sub_workspace_list[0].file_dict.get("model.py") is None:
@@ -73,7 +79,10 @@ class QlibModelRunner(CachedRunner[QlibModelExperiment]):
         if training_hyperparameters:
             env_to_use.update(
                 {
-                    "n_epochs": str(training_hyperparameters.get("n_epochs", "20")),
+                    # 硬编码 n_epochs=3:LLM 常提议 ≥100 epoch,在 474K 样本上每 epoch ~5min,
+                    # 远超 Docker running_timeout_period=3600s 被 kill(见 QLIB_SCENARIOS §7.4)。
+                    # 固定 3 epoch 保证模型轮能在超时内真正跑完产出 SOTA 模型。
+                    "n_epochs": "3",
                     "lr": str(training_hyperparameters.get("lr", "2e-4")),
                     "early_stop": str(training_hyperparameters.get("early_stop", 10)),
                     "batch_size": str(training_hyperparameters.get("batch_size", 256)),

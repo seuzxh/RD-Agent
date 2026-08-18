@@ -147,6 +147,11 @@ class LiteLLMAPIBackend(APIBackend):
             kwargs["response_format"] = response_format
 
         if LITELLM_SETTINGS.log_llm_chat_content:
+            logger.info(
+                f"\n{LogColors.GREEN}[LLM INPUT]{LogColors.END} {len(messages)} messages",
+                raw=True,
+                tag="llm_messages",
+            )
             logger.info(self._build_log_messages(messages), tag="llm_messages")
 
         complete_kwargs = self.get_complete_kwargs()
@@ -191,6 +196,15 @@ class LiteLLMAPIBackend(APIBackend):
                 logger.info(
                     f"{LogColors.BLUE}assistant:{LogColors.END} {finish_reason_str}\n{content}", tag="llm_messages"
                 )
+
+        # Diagnostic: full LLM output for later debugging (stalls / empty responses).
+        if LITELLM_SETTINGS.log_llm_chat_content:
+            logger.info(
+                f"\n{LogColors.GREEN}[LLM OUTPUT]{LogColors.END} model={model} "
+                f"finish_reason={finish_reason} content_len={len(content)}\n{content}",
+                raw=True,
+                tag="llm_messages",
+            )
 
         global ACC_COST
         try:

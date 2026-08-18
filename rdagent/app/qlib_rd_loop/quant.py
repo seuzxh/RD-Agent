@@ -74,6 +74,19 @@ class QuantRDLoop(RDLoop):
         self.trace = QuantTrace(scen=scen)
         super(RDLoop, self).__init__()
 
+        # Inject the current session's strategy_id (string) into the runners so
+        # they can resolve factor definitions/SOTA from research.db without an
+        # in-memory Strategy object. Derivation mirrors the tracker's logic.
+        self.strategy_id: str | None = None
+        try:
+            self.strategy_id = self.tracker._derive_strategy_id()
+        except Exception as e:
+            logger.warning(f"QuantRDLoop: failed to derive strategy_id ({e})")
+        for attr in ("factor_runner", "model_runner"):
+            r = getattr(self, attr, None)
+            if r is not None and hasattr(r, "strategy_id"):
+                r.strategy_id = self.strategy_id
+
     async def direct_exp_gen(self, prev_out: dict[str, Any]):
         while True:
             if self.get_unfinished_loop_cnt(prev_out.get(self.LOOP_IDX_KEY, self.loop_idx)) < RD_AGENT_SETTINGS.get_max_parallel():

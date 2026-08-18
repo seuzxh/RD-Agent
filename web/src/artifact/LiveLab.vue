@@ -106,8 +106,8 @@
           </div>
         </div>
 
-        <!-- Real-time log panel for running/failed tasks -->
-        <div v-if="showLog" class="detail-section">
+        <!-- Real-time log panel (always visible so completed tasks can review logs) -->
+        <div class="detail-section">
           <LogPanel :strategy-id="selectedId" :running="isRunning" :failed="isFailed" />
         </div>
       </template>
@@ -246,10 +246,9 @@ const completionTokens = computed(() => pipelineNodes.value.reduce((s: number, n
 const callCount = computed(() => pipelineNodes.value.reduce((s: number, n: any) => s + (n.call_count || 0), 0))
 const totalTokens = computed(() => promptTokens.value + completionTokens.value)
 
-// Strategy status gates the real-time log panel (running / failed).
+// Status flags drive LogPanel's state tag (running / failed / completed → 已结束).
 const isRunning = computed(() => strategyDetail.value?.status === 'running')
 const isFailed = computed(() => strategyDetail.value?.status === 'failed')
-const showLog = computed(() => isRunning.value || isFailed.value)
 
 // Quant full-pipeline overview only for fin_quant (量化全流程) strategies.
 const isFinQuant = computed(() =>

@@ -213,12 +213,13 @@ class ResearchDB:
         with _lock:
             self.conn.execute(
                 """INSERT INTO strategies (id, description, scenario, source, status, created_at, updated_at, user_input_snapshot)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                   VALUES (?, ?, ?, ?, COALESCE(?, 'running'), ?, ?, ?)
                    ON CONFLICT(id) DO UPDATE SET
                        description = COALESCE(? , description),
                        scenario    = COALESCE(?, scenario),
                        source      = COALESCE(?, source),
-                       status      = COALESCE(?, status),
+                       status      = CASE WHEN status IN ('completed', 'failed') THEN status
+                                          ELSE COALESCE(?, status) END,
                        updated_at  = ?,
                        user_input_snapshot = COALESCE(?, user_input_snapshot)""",
                 (
@@ -654,13 +655,33 @@ class ResearchDB:
             (strategy_id,),
         )
 
-    def query_factors(self, strategy_id: str | None = None) -> list[dict[str, Any]]:
+    def query_factors(self, strategy_id: str | None = None, status: str | None = None) -> list[dict[str, Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
         if strategy_id:
-            return self._query_all(
-                "SELECT * FROM factors WHERE strategy_id = ? ORDER BY created_at DESC",
-                (strategy_id,),
-            )
-        return self._query_all("SELECT * FROM factors ORDER BY created_at DESC")
+            clauses.append("strategy_id = ?")
+            params.append(strategy_id)
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        sql = "SELECT * FROM factors"
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY created_at DESC"
+        return self._query_all(sql, tuple(params))
+
+    def query_factor_experiments(self, strategy_id: str) -> list[dict[str, Any]]:
+        """Return the session's factor (alpha) experiments, including workspace_path.
+
+        Used to locate the persisted ``combined_factors_df.parquet`` files whose
+        values are merged into the session's cumulative factor frame.
+        """
+        return self._query_all(
+            """SELECT * FROM experiments
+               WHERE strategy_id = ? AND type = 'alpha'
+               ORDER BY loop_id ASC""",
+            (strategy_id,),
+        )
 
     def query_models(self, strategy_id: str | None = None) -> list[dict[str, Any]]:
         if strategy_id:

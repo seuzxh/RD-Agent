@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import List
 
 import pandas as pd
@@ -129,48 +130,90 @@ def _process_message_and_df(
     return error_message
 
 
-def _build_sota_factor_df(strategy, exp, factor_names: list[str] | None = None) -> pd.DataFrame | None:
-    """Rebuild factor values for a model/factor runner.
+def build_cumulative_factor_df(strategy_id: str | None) -> pd.DataFrame | None:
+    """Build the session's accumulated factor values.
 
-    ``factor_names`` carries the dialog-picked factors (which may be non-SOTA);
-    it is resolved against the strategy's alpha_pool. When not provided, the
-    strategy's own ``factor_pool_names`` attribute is used, else the SOTA
-    factors. Factors already covered by ``exp.base_features`` are excluded to
-    avoid duplication. Falls back to the same trace's ``based_experiments``
-    when the alpha_pool path yields nothing. Returns ``None`` when no factor
-    data is available (runners then use their baseline config).
+    Resolves the session's historical factor (alpha) experiment workspaces via
+    research.db, reads each ``combined_factors_df.parquet``, and merges them
+    into a single factor-value frame (columns are a MultiIndex
+    ``('feature', <factor_name>)``; duplicate columns keep the last). Returns
+    ``None`` when no factor experiment has produced a parquet.
     """
-    if strategy is None:
+    if not strategy_id:
         return None
-    pool = strategy.alpha_pool
-    if factor_names is None:
-        factor_names = getattr(strategy, "factor_pool_names", None)
+    try:
+        from rdagent.log.research_db import ResearchDB
 
-    factors: list[RawFactor] = []
-    if factor_names:
-        factors = [
-            f for n in factor_names if (f := pool.get(n)) is not None and f.name not in exp.base_features
-        ]
-        if not factors:
-            logger.warning(f"Selected factors {factor_names} resolve to nothing usable; falling back to SOTA.")
-    if not factors:
-        if pool.sota_count <= 0:
-            return None
-        factors = [f for f in pool.get_sota_factors() if f.name not in exp.base_features]
+        exps = ResearchDB().query_factor_experiments(strategy_id)
+    except Exception as e:
+        logger.warning(f"build_cumulative_factor_df: query factor experiments failed ({e})")
+        return None
 
-    logger.info(f"Factor pool processing ({len(factors)} factors) ...")
-    factor_df = None
-    if factors:
+    factor_dfs = []
+    for exp in exps:
+        ws_path = exp.get("workspace_path")
+        if not ws_path:
+            continue
+        parquet_path = Path(ws_path) / "combined_factors_df.parquet"
+        if not parquet_path.exists():
+            continue
         try:
-            factor_df = process_factor_pool(factors)
-        except FactorEmptyError as e:
-            logger.warning(f"Factor pool rebuild failed: {e}. Falling back to based_experiments.")
-    if factor_df is None and len(exp.based_experiments) > 0:
-        sota_exps = [
-            be for be in exp.based_experiments if isinstance(be, QlibFactorExperiment) and be.result is not None
+            df = pd.read_parquet(parquet_path)
+        except Exception as e:
+            logger.warning(f"build_cumulative_factor_df: failed to read {parquet_path} ({e})")
+            continue
+        if df is None or df.empty:
+            continue
+        factor_dfs.append(df)
+
+    if not factor_dfs:
+        return None
+
+    cumulative = pd.concat(factor_dfs, axis=1)
+    cumulative = cumulative.loc[:, ~cumulative.columns.duplicated(keep="last")]
+    return cumulative.sort_index()
+
+
+def _build_sota_factor_df(strategy_id: str | None, exp) -> pd.DataFrame | None:
+    """Return the session's effective accumulated factor values for a runner.
+
+    Values come from ``build_cumulative_factor_df`` (merging the persisted
+    ``combined_factors_df.parquet`` files); effective status is resolved from
+    the research.db ``factors`` table (rows marked ``deprecated`` are excluded,
+    so rejected rounds' factors are not trained on). Factors already covered by
+    ``exp.base_features`` are excluded to avoid duplication. Returns ``None``
+    when no effective factor data is available (runners then use their
+    baseline config).
+    """
+    factor_df = build_cumulative_factor_df(strategy_id)
+    if factor_df is None or factor_df.empty:
+        return None
+
+    # Resolve effective factor names from research.db (exclude deprecated).
+    effective_names: set[str] | None = None
+    try:
+        from rdagent.log.research_db import ResearchDB
+
+        rows = ResearchDB().query_factors(strategy_id)
+        effective_names = {r["name"] for r in rows if r.get("status") != "deprecated"}
+    except Exception as e:
+        logger.warning(f"_build_sota_factor_df: query factors failed ({e}); using all cumulative factors")
+
+    # Columns are a MultiIndex ('feature', <factor_name>).
+    if effective_names and factor_df.columns.nlevels > 1:
+        keep = [col for col in factor_df.columns if col[1] in effective_names]
+        if not keep:
+            return None
+        factor_df = factor_df.loc[:, keep]
+
+    base_features = getattr(exp, "base_features", None) or {}
+    if factor_df.columns.nlevels > 1:
+        factor_df = factor_df.loc[
+            :, [col for col in factor_df.columns if col[1] not in base_features]
         ]
-        if sota_exps:
-            factor_df = process_factor_data(sota_exps)
+    if factor_df.empty:
+        return None
+    logger.info(f"Building model factor pool ({len(factor_df.columns)} factors) ...")
     return factor_df
 
 
