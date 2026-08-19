@@ -7,7 +7,7 @@
         "test": "vitest run",
         "dev": "vite",
         "build": "vue-tsc && vite build",
-        "build:flask": "vue-tsc && vite build --outDir ../git_ignore_folder/static",
+        "build:flask": "vite build --outDir ../git_ignore_folder/static",
         "preview": "vite preview"
     },
     "dependencies": {
