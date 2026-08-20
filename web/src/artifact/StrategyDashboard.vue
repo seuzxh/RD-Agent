@@ -55,8 +55,8 @@ function formatTime(t: string) {
   if (!t) return '—'
   return t.slice(0, 19).replace('T', ' ')
 }
-function statusType(s: string) { return s === 'running' ? 'warning' : s === 'completed' ? 'success' : 'info' }
-function statusLabel(s: string) { return s === 'running' ? '运行中' : s === 'completed' ? '已完成' : '待处理' }
+function statusType(s: string) { return s === 'running' ? 'warning' : s === 'completed' ? 'success' : s === 'failed' ? 'danger' : 'info' }
+function statusLabel(s: string) { return s === 'running' ? '运行中' : s === 'completed' ? '已完成' : s === 'failed' ? '已失败' : '待处理' }
 function rowClass() { return 'clickable' }
 function onRowClick(row: any) { emit('select', row.id) }
 </script>

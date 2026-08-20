@@ -278,8 +278,8 @@ function scenarioOf(row: any): string {
 function scenarioLabel(row: any): string { return SCENARIO_LABELS[scenarioOf(row)] || '其他' }
 function scenarioType(row: any): string { return SCENARIO_TYPES[scenarioOf(row)] || 'info' }
 function formatTime(ts: string) { return ts ? ts.slice(0, 19) : '' }
-function statusType(s: string) { return s === 'running' ? 'warning' : s === 'completed' ? 'success' : 'info' }
-function statusLabel(s: string) { return s === 'running' ? '运行中' : s === 'completed' ? '已完成' : '待处理' }
+function statusType(s: string) { return s === 'running' ? 'warning' : s === 'completed' ? 'success' : s === 'failed' ? 'danger' : 'info' }
+function statusLabel(s: string) { return s === 'running' ? '运行中' : s === 'completed' ? '已完成' : s === 'failed' ? '已失败' : '待处理' }
 
 function downloadResult() {
   // Leave the download handling to the parent in ticket 04; no-op for ticket 03.
