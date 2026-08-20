@@ -15,12 +15,12 @@ data_handler_config: &data_handler_config
                 - class: qlib.contrib.data.loader.Alpha158DL
                   kwargs:
                     config:
-                        label: 
+                        label:
                             - ["Ref($close, -2)/Ref($close, -1) - 1"]
-                            - ["LABEL0"]
+                            - ["LABEL0"]{% if feature_expressions != '[]' or feature_names != '[]' %}
                         feature:
                             - {{ feature_expressions }}
-                            - {{ feature_names }}
+                            - {{ feature_names }}{% endif %}
     
     infer_processors:
         - class: RobustZScoreNorm

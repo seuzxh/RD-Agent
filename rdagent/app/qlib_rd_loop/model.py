@@ -92,6 +92,12 @@ def main(
             # of only SOTA. set_strategy propagates the same object to runner.
             parent.factor_pool_names = names
             model_loop._set_strategy(parent)
+            # Also inject strategy_id so model_runner._build_sota_factor_df can
+            # query the parent strategy's factor experiments from research.db.
+            for attr in ("runner", "model_runner"):
+                r = getattr(model_loop, attr, None)
+                if r is not None and hasattr(r, "strategy_id"):
+                    r.strategy_id = factor_pool_source
             # Record the parent association so the tracker routes the produced
             # model into the parent's Model Lab (strategy_id = 父策略).
             model_loop.parent_strategy_id = factor_pool_source
